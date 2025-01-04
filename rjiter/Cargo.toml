@@ -10,5 +10,8 @@ repository = "https://github.com/olpa/streaming_json"
 keywords = ["json"]
 categories = ["json", "parsing"]
 
+[lib]
+crate-type = ["lib"]
+
 [dependencies]
 jiter = "0.8.2"

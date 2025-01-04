@@ -1,7 +1,7 @@
 use std::io::Cursor;
 use std::sync::Arc;
 
-use gpt::rjiter::RJiter;
+use rjiter::RJiter;
 use jiter::JsonValue;
 use jiter::LazyIndexMap;
 use jiter::Peek;
