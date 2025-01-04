@@ -1,0 +1,14 @@
+[package]
+name = "rjiter"
+version = "1.0.0"
+edition = "2021"
+authors = ["Oleg Parashchenko <olpa@uucode.com>"]
+description = "Streaming JSON parser on top of Jiter"
+license = "MIT"
+homepage = "https://github.com/olpa/streaming_json"
+repository = "https://github.com/olpa/streaming_json"
+keywords = ["json"]
+categories = ["json", "parsing"]
+
+[dependencies]
+jiter = "0.8.2"
