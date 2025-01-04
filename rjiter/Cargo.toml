@@ -8,7 +8,7 @@ license = "MIT"
 homepage = "https://github.com/olpa/streaming_json"
 repository = "https://github.com/olpa/streaming_json"
 keywords = ["json"]
-categories = ["json", "parsing"]
+categories = ["parser-implementations", "parsing"]
 
 [lib]
 crate-type = ["lib"]
