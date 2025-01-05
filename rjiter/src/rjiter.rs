@@ -220,10 +220,19 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     #[allow(clippy::missing_panics_doc)]
-    fn write_long(&mut self, writer: &mut dyn Write) -> JiterResult<()> {
+    fn write_long(&mut self, is_string: bool, writer: &mut dyn Write) -> JiterResult<()> {
         loop {
             self.on_before_call_jiter();
-            let result = self.jiter.known_bytes();
+            let result = if is_string {
+                let result = self.jiter.known_str();
+                if let Ok(chunk) = result {
+                    Ok(chunk.as_bytes())
+                } else {
+                    Err(result.unwrap_err())
+                }
+            } else {
+                self.jiter.known_bytes()
+            };
             if let Ok(bytes) = result {
                 writer.write_all(bytes).unwrap();
                 if self.jiter.current_index() <= self.bytes_in_buffer {
@@ -241,12 +250,12 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn write_long_bytes(&mut self, writer: &mut dyn Write) -> JiterResult<()> {
-        self.write_long(writer)
+        self.write_long(false, writer)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn write_long_str(&mut self, writer: &mut dyn Write) -> JiterResult<()> {
-        self.write_long(writer)
+        self.write_long(true, writer)
     }
 
     fn on_before_call_jiter(&mut self) {
