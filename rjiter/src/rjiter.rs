@@ -220,7 +220,7 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     #[allow(clippy::missing_panics_doc)]
-    pub fn write_long_bytes(&mut self, writer: &mut dyn Write) -> JiterResult<()> {
+    fn write_long(&mut self, writer: &mut dyn Write) -> JiterResult<()> {
         loop {
             self.on_before_call_jiter();
             let result = self.jiter.known_bytes();
@@ -240,8 +240,13 @@ impl<'rj> RJiter<'rj> {
     }
 
     #[allow(clippy::missing_errors_doc)]
+    pub fn write_long_bytes(&mut self, writer: &mut dyn Write) -> JiterResult<()> {
+        self.write_long(writer)
+    }
+
+    #[allow(clippy::missing_errors_doc)]
     pub fn write_long_str(&mut self, writer: &mut dyn Write) -> JiterResult<()> {
-        self.write_long_bytes(writer)
+        self.write_long(writer)
     }
 
     fn on_before_call_jiter(&mut self) {
