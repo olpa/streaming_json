@@ -1,2 +1,4 @@
-# streaming_json
-Process json while it's being generated
+# Streaming JSON
+
+- `RJiter`: streaming JSON parser for Rust
+- `scan_json`: do actions while parsing JSON
