@@ -239,6 +239,11 @@ impl<'rj> RJiter<'rj> {
         }
     }
 
+    #[allow(clippy::missing_errors_doc)]
+    pub fn write_long_str(&mut self, writer: &mut dyn Write) -> JiterResult<()> {
+        self.write_long_bytes(writer)
+    }
+
     fn on_before_call_jiter(&mut self) {
         self.pos_before_call_jiter = self.jiter.current_index();
     }
