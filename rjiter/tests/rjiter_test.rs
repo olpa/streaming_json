@@ -1,10 +1,10 @@
 use std::io::Cursor;
 use std::sync::Arc;
 
-use rjiter::RJiter;
 use jiter::JsonValue;
 use jiter::LazyIndexMap;
 use jiter::Peek;
+use rjiter::RJiter;
 
 #[test]
 fn sanity_check() {
@@ -39,7 +39,7 @@ fn skip_spaces() {
 }
 
 #[test]
-fn pass_through_long_string() {
+fn pass_through_long_bytes() {
     let input = r#"{ "text": "very very very long string" }"#;
     let mut buffer = [0u8; 10]; // Small buffer to force multiple reads
     let mut reader = Cursor::new(input.as_bytes());
@@ -53,14 +53,14 @@ fn pass_through_long_string() {
     assert_eq!(rjiter.peek().unwrap(), Peek::String);
 
     // Consume the string value
-    let wb = rjiter.write_bytes(&mut writer);
+    let wb = rjiter.write_long_bytes(&mut writer);
     wb.unwrap();
 
     assert_eq!(writer, "very very very long string".as_bytes());
 }
 
 #[test]
-fn pass_through_small_string() {
+fn pass_through_small_bytes() {
     let input = r#"{ "text": "small" }"#;
     let mut buffer = [0u8; 100];
     let mut reader = Cursor::new(input.as_bytes());
@@ -74,7 +74,7 @@ fn pass_through_small_string() {
     assert_eq!(rjiter.peek().unwrap(), Peek::String);
 
     // Consume the string value
-    let wb = rjiter.write_bytes(&mut writer);
+    let wb = rjiter.write_long_bytes(&mut writer);
     wb.unwrap();
 
     assert_eq!(writer, "small".as_bytes());
