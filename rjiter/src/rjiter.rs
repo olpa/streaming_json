@@ -21,6 +21,12 @@ impl<'rj> std::fmt::Debug for RJiter<'rj> {
     }
 }
 
+ fn make_new_jiter<'rj>(buffer: &'rj mut [u8], bytes_in_buffer: usize) -> Jiter<'rj> {
+     let jiter_buffer_2 = &buffer[..bytes_in_buffer];
+     let jiter_buffer = unsafe { std::mem::transmute::<&[u8], &'rj [u8]>(jiter_buffer_2) };
+     Jiter::new(jiter_buffer).with_allow_partial_strings()
+ }
+
 impl<'rj> RJiter<'rj> {
     #[allow(clippy::missing_errors_doc)]
     #[allow(clippy::missing_panics_doc)]
@@ -146,8 +152,17 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_key(&mut self) -> JiterResult<Option<&str>> {
-        self.maybe_feed();
-        self.jiter.next_key()
+         let result = self.jiter.next_key();
+         if result.is_ok() {
+            let key = result.unwrap();
+            if !key.is_some() {
+                return Ok(None);
+            }
+            let key = key.unwrap();
+            let key_2 = unsafe { std::mem::transmute::<&str, &'rj str>(key) };
+            return Ok(Some(key_2));
+         }
+         self.jiter.next_key()
     }
 
     #[allow(clippy::missing_errors_doc)]
