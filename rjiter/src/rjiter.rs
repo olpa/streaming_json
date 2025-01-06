@@ -150,19 +150,23 @@ impl<'rj> RJiter<'rj> {
         self.jiter.next_int()
     }
 
+    fn shutup_borrow_checker(result: Option<&str>) -> Option<&'rj str> {
+        match result {
+            Some(key) => {
+                let key_2 = unsafe { std::mem::transmute::<&str, &'rj str>(key) };
+                Some(key_2)
+            }
+            None => None
+        }
+    }
+
     #[allow(clippy::missing_errors_doc)]
     pub fn next_key(&mut self) -> JiterResult<Option<&str>> {
-         let result = self.jiter.next_key();
-         if result.is_ok() {
-            let key = result.unwrap();
-            if !key.is_some() {
-                return Ok(None);
-            }
-            let key = key.unwrap();
-            let key_2 = unsafe { std::mem::transmute::<&str, &'rj str>(key) };
-            return Ok(Some(key_2));
-         }
-         self.jiter.next_key()
+        let result = self.jiter.next_key();
+        if result.is_ok() {
+            return Ok(Self::shutup_borrow_checker(result.unwrap()));
+        }
+        self.jiter.next_key()
     }
 
     #[allow(clippy::missing_errors_doc)]
