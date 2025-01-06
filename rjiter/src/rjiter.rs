@@ -25,19 +25,19 @@ impl<'rj> std::fmt::Debug for RJiter<'rj> {
 impl<'rj> RJiter<'rj> {
     #[allow(clippy::missing_errors_doc)]
     #[allow(clippy::missing_panics_doc)]
-    pub fn new(reader: &'rj mut dyn Read, buffer: &'rj mut [u8]) -> Self {
-        let bytes_in_buffer = reader.read(buffer).unwrap();
-        let jiter_buffer = &buffer[..bytes_in_buffer];
-        let rjiter_buffer = unsafe {
+    pub fn new(reader: &'rj mut dyn Read, buf: &'rj mut [u8]) -> Self {
+        let buf_alias = unsafe {
             #[allow(mutable_transmutes)]
             #[allow(clippy::transmute_ptr_to_ptr)]
-            std::mem::transmute::<&[u8], &'rj mut [u8]>(buffer)
+            std::mem::transmute::<&[u8], &'rj mut [u8]>(buf)
         };
+        let buffer = Buffer::new(reader, buf_alias);
+        let jiter = Jiter::new(&buf[..buffer.n_bytes]).with_allow_partial_strings();
 
         RJiter {
-            jiter: Jiter::new(jiter_buffer).with_allow_partial_strings(),
+            jiter,
             pos_before_call_jiter: 0,
-            buffer: Buffer::new(reader, rjiter_buffer),
+            buffer,
         }
     }
 
