@@ -142,3 +142,24 @@ fn skip_token() {
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), jiter::NumberInt::Int(42));
 }
+
+#[test]
+fn next_key() {
+    let input = r#","foo": "bar""#;
+    let mut buffer = [0u8; 16];
+    let mut reader = Cursor::new(input.as_bytes());
+
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    // act
+    let result = rjiter.next_key();
+
+    // assert
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), Some("foo"));
+
+    // bonus assert: key value
+    let result = rjiter.next_str();
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), "bar");
+}
