@@ -164,8 +164,11 @@ impl<'rj> RJiter<'rj> {
     pub fn next_key(&mut self) -> JiterResult<Option<&str>> {
         let result = self.jiter.next_key();
         if result.is_ok() {
-            return Ok(Self::shutup_borrow_checker(result.unwrap()));
+            return unsafe {
+                std::mem::transmute::<JiterResult<Option<&str>>, JiterResult<Option<&'rj str>>>(result)
+            };
         }
+        self.skip_spaces_feeding(b',');
         self.jiter.next_key()
     }
 
@@ -285,6 +288,10 @@ impl<'rj> RJiter<'rj> {
     pub fn feed(&mut self) -> bool {
         self.on_before_call_jiter();
         self.feed_inner(false)
+    }
+
+    fn skip_spaces_feeding(&mut self, _transparent_token: u8) -> bool {
+        self.feed()
     }
 
     fn feed_inner(&mut self, is_partial_string: bool) -> bool {
