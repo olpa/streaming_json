@@ -45,8 +45,8 @@ impl<'buf> Buffer<'buf> {
             i += 1;
         }
         if i > pos {
-            self.buf.copy_within(i..self.n_bytes, 0);
-            self.n_bytes -= i;
+            self.buf.copy_within(i..self.n_bytes, pos);
+            self.n_bytes -= i - pos;
         }
     }
 }
