@@ -21,12 +21,6 @@ impl<'rj> std::fmt::Debug for RJiter<'rj> {
     }
 }
 
- fn make_new_jiter<'rj>(buffer: &'rj mut [u8], bytes_in_buffer: usize) -> Jiter<'rj> {
-     let jiter_buffer_2 = &buffer[..bytes_in_buffer];
-     let jiter_buffer = unsafe { std::mem::transmute::<&[u8], &'rj [u8]>(jiter_buffer_2) };
-     Jiter::new(jiter_buffer).with_allow_partial_strings()
- }
-
 impl<'rj> RJiter<'rj> {
     #[allow(clippy::missing_errors_doc)]
     #[allow(clippy::missing_panics_doc)]
@@ -150,22 +144,14 @@ impl<'rj> RJiter<'rj> {
         self.jiter.next_int()
     }
 
-    fn shutup_borrow_checker(result: Option<&str>) -> Option<&'rj str> {
-        match result {
-            Some(key) => {
-                let key_2 = unsafe { std::mem::transmute::<&str, &'rj str>(key) };
-                Some(key_2)
-            }
-            None => None
-        }
-    }
-
     #[allow(clippy::missing_errors_doc)]
     pub fn next_key(&mut self) -> JiterResult<Option<&str>> {
         let result = self.jiter.next_key();
         if result.is_ok() {
             return unsafe {
-                std::mem::transmute::<JiterResult<Option<&str>>, JiterResult<Option<&'rj str>>>(result)
+                std::mem::transmute::<JiterResult<Option<&str>>, JiterResult<Option<&'rj str>>>(
+                    result,
+                )
             };
         }
         self.skip_spaces_feeding(b',');
