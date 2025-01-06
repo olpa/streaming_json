@@ -19,7 +19,7 @@ impl<'buf> Buffer<'buf> {
 
     pub fn read_more(&mut self, start_index: usize) -> usize {
         let n_new_bytes = self.reader.read(&mut self.buf[start_index..]).unwrap();
-        self.n_bytes = start_index + n_new_bytes;
+        self.n_bytes += n_new_bytes;
         n_new_bytes
     }
 
