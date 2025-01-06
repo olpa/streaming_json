@@ -40,8 +40,14 @@ impl<'buf> Buffer<'buf> {
     }
 
     pub fn skip_spaces(&mut self, pos: usize) {
-
-        println!("Buffer::skip_spaces: pos: {:?}", pos); // FIXME
+        let mut i = pos;
+        while i < self.n_bytes && self.buf[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        if i > pos {
+            self.buf.copy_within(i..self.n_bytes, 0);
+            self.n_bytes -= i;
+        }
     }
 }
 
