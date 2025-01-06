@@ -7,6 +7,7 @@ pub struct Buffer<'buf> {
 }
 
 impl<'buf> Buffer<'buf> {
+    #[allow(clippy::missing_panics_doc)]
     pub fn new(reader: &'buf mut dyn Read, buf: &'buf mut [u8]) -> Self {
         let n_bytes = reader.read(buf).unwrap();
 
@@ -17,12 +18,14 @@ impl<'buf> Buffer<'buf> {
         }
     }
 
+    #[allow(clippy::missing_panics_doc)]
     pub fn read_more(&mut self, start_index: usize) -> usize {
         let n_new_bytes = self.reader.read(&mut self.buf[start_index..]).unwrap();
         self.n_bytes += n_new_bytes;
         n_new_bytes
     }
 
+    #[allow(clippy::missing_panics_doc)]
     pub fn shift_buffer(&mut self, pos: usize, is_partial_string: bool) {
         if pos > 0 {
             if pos < self.n_bytes {
