@@ -1,4 +1,4 @@
-mod buffer;
+pub mod buffer;
 pub mod rjiter;
 
 pub use jiter::*;

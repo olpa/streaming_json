@@ -1,6 +1,6 @@
 use std::io::Read;
 
-pub(crate) struct Buffer<'buf> {
+pub struct Buffer<'buf> {
     reader: &'buf mut dyn Read,
     pub buf: &'buf mut [u8],
     pub n_bytes: usize,
@@ -38,7 +38,13 @@ impl<'buf> Buffer<'buf> {
             }
         }
     }
+
+    pub fn skip_spaces(&mut self, pos: usize) {
+
+        println!("Buffer::skip_spaces: pos: {:?}", pos); // FIXME
+    }
 }
+
 impl<'buf> std::fmt::Debug for Buffer<'buf> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
