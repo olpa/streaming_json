@@ -144,15 +144,17 @@ fn skip_token() {
 }
 
 #[test]
-fn next_key() {
-    let input = r#","foo": "bar""#;
-    let mut buffer = [0u8; 16];
+fn multi_read_next_key() {
+    let lot_of_spaces = " ".repeat(32);
+    let input = format!(r#"{lot_of_spaces},{lot_of_spaces}foo": "bar""#);
+    let mut buffer = [0u8; 10];
     let mut reader = Cursor::new(input.as_bytes());
 
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
     // act
     let result = rjiter.next_key();
+    println!("multi_read_next_key result: {:?}", result);
 
     // assert
     assert!(result.is_ok());
