@@ -2,49 +2,49 @@ use std::io::Read;
 
 pub(crate) struct Buffer<'buf> {
     reader: &'buf mut dyn Read,
-    pub buffer: &'buf mut [u8],
-    pub bytes_in_buffer: usize,
+    pub buf: &'buf mut [u8],
+    pub n_bytes: usize,
 }
 
 impl<'buf> Buffer<'buf> {
-    pub fn new(reader: &'buf mut dyn Read, buffer: &'buf mut [u8]) -> Self {
-        let bytes_in_buffer = reader.read(buffer).unwrap();
-        
+    pub fn new(reader: &'buf mut dyn Read, buf: &'buf mut [u8]) -> Self {
+        let n_bytes = reader.read(buf).unwrap();
+
         Buffer {
             reader,
-            buffer,
-            bytes_in_buffer,
+            buf,
+            n_bytes,
         }
     }
 
     pub fn read_more(&mut self, start_index: usize) -> usize {
-        let n_new_bytes = self.reader.read(&mut self.buffer[start_index..]).unwrap();
-        self.bytes_in_buffer = start_index + n_new_bytes;
+        let n_new_bytes = self.reader.read(&mut self.buf[start_index..]).unwrap();
+        self.n_bytes = start_index + n_new_bytes;
         n_new_bytes
     }
 
     pub fn shift_buffer(&mut self, pos: usize, is_partial_string: bool) {
         if pos > 0 {
-            if pos < self.bytes_in_buffer {
+            if pos < self.n_bytes {
                 assert!(
                     !is_partial_string,
                     "Buffer should be completely consumed in partial string case"
                 );
 
-                self.buffer.copy_within(pos..self.bytes_in_buffer, 0);
-                self.bytes_in_buffer -= pos;
+                self.buf.copy_within(pos..self.n_bytes, 0);
+                self.n_bytes -= pos;
             } else {
-                self.bytes_in_buffer = 0;
+                self.n_bytes = 0;
             }
         }
     }
 }
 impl<'buf> std::fmt::Debug for Buffer<'buf> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f,
-            "Buffer {{ bytes_in_buffer: {:?}, buffer: {:?} }}",
-            self.bytes_in_buffer,
-            self.buffer
+        write!(
+            f,
+            "Buffer {{ n_bytes: {:?}, buf: {:?} }}",
+            self.n_bytes, self.buf
         )
     }
 }

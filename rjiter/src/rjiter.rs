@@ -1,8 +1,8 @@
 use std::io::Read;
 use std::io::Write;
 
-use jiter::{Jiter, JiterResult, JsonValue, NumberAny, NumberInt};
 use crate::buffer::Buffer;
+use jiter::{Jiter, JiterResult, JsonValue, NumberAny, NumberInt};
 
 pub type Peek = jiter::Peek;
 
@@ -14,9 +14,11 @@ pub struct RJiter<'rj> {
 
 impl<'rj> std::fmt::Debug for RJiter<'rj> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f,
+        write!(
+            f,
             "RJiter {{ jiter: {:?}, pos_before_call_jiter: {:?}, buffer: {:?} }}",
-            self.jiter, self.pos_before_call_jiter, self.buffer)
+            self.jiter, self.pos_before_call_jiter, self.buffer
+        )
     }
 }
 
@@ -240,7 +242,7 @@ impl<'rj> RJiter<'rj> {
             };
             if let Ok(bytes) = result {
                 writer.write_all(bytes).unwrap();
-                if self.jiter.current_index() <= self.buffer.bytes_in_buffer {
+                if self.jiter.current_index() <= self.buffer.n_bytes {
                     return Ok(());
                 }
                 self.on_before_call_jiter();
@@ -283,8 +285,8 @@ impl<'rj> RJiter<'rj> {
         //
         // Skip whitespaces
         //
-        if !is_partial_string && pos < self.buffer.bytes_in_buffer {
-            let mut skip_ws_parser = Jiter::new(&self.buffer.buffer[pos..self.buffer.bytes_in_buffer]);
+        if !is_partial_string && pos < self.buffer.n_bytes {
+            let mut skip_ws_parser = Jiter::new(&self.buffer.buf[pos..self.buffer.n_bytes]);
             let _ = skip_ws_parser.finish();
             pos += skip_ws_parser.current_index();
         }
@@ -297,18 +299,22 @@ impl<'rj> RJiter<'rj> {
         //
         // Read new bytes
         //
-        let start_index = if is_partial_string { 1 } else { self.buffer.bytes_in_buffer };
+        let start_index = if is_partial_string {
+            1
+        } else {
+            self.buffer.n_bytes
+        };
         let n_new_bytes = self.buffer.read_more(start_index);
 
         if is_partial_string {
-            self.buffer.buffer[0] = 34; // Quote character
-            self.buffer.bytes_in_buffer += 1;
+            self.buffer.buf[0] = 34; // Quote character
+            self.buffer.n_bytes += 1;
         }
 
         //
         // Create new Jiter and inform caller if any new bytes were read
         //
-        let jiter_buffer_2 = &self.buffer.buffer[..self.buffer.bytes_in_buffer];
+        let jiter_buffer_2 = &self.buffer.buf[..self.buffer.n_bytes];
         let jiter_buffer = unsafe { std::mem::transmute::<&[u8], &'rj [u8]>(jiter_buffer_2) };
         self.jiter = Jiter::new(jiter_buffer).with_allow_partial_strings();
 
@@ -316,7 +322,7 @@ impl<'rj> RJiter<'rj> {
     }
 
     fn maybe_feed(&mut self) {
-        if self.jiter.current_index() > self.buffer.bytes_in_buffer / 2 {
+        if self.jiter.current_index() > self.buffer.n_bytes / 2 {
             self.feed();
         }
     }
@@ -324,7 +330,7 @@ impl<'rj> RJiter<'rj> {
     pub fn skip_token(&mut self, token: &[u8]) -> bool {
         self.maybe_feed();
 
-        let buf_view = &mut self.buffer.buffer[self.jiter.current_index()..self.buffer.bytes_in_buffer];
+        let buf_view = &mut self.buffer.buf[self.jiter.current_index()..self.buffer.n_bytes];
         if !buf_view.starts_with(token) {
             return false;
         }
