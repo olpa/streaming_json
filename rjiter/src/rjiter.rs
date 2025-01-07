@@ -275,8 +275,27 @@ impl<'rj> RJiter<'rj> {
         self.feed_inner(false)
     }
 
-    fn skip_spaces_feeding(&mut self, _transparent_token: u8) -> bool {
-        self.feed()
+    fn skip_spaces_feeding(&mut self, transparent_token: u8) -> bool {
+        let pos = self.jiter.current_index();
+        let n_shifted_before = self.buffer.n_shifted_out;
+
+        self.buffer.skip_spaces(pos);
+        if pos < self.buffer.n_bytes && self.buffer.buf[pos] == transparent_token {
+            self.buffer.skip_spaces(pos + 1);
+        }
+
+        let is_shifted = self.buffer.n_shifted_out > n_shifted_before;
+        if is_shifted {
+            self.create_new_jiter();
+        }
+
+        is_shifted
+    }
+
+    fn create_new_jiter(&mut self) {
+        let jiter_buffer_2 = &self.buffer.buf[..self.buffer.n_bytes];
+        let jiter_buffer = unsafe { std::mem::transmute::<&[u8], &'rj [u8]>(jiter_buffer_2) };
+        self.jiter = Jiter::new(jiter_buffer).with_allow_partial_strings();
     }
 
     fn feed_inner(&mut self, is_partial_string: bool) -> bool {
@@ -314,9 +333,7 @@ impl<'rj> RJiter<'rj> {
         //
         // Create new Jiter and inform caller if any new bytes were read
         //
-        let jiter_buffer_2 = &self.buffer.buf[..self.buffer.n_bytes];
-        let jiter_buffer = unsafe { std::mem::transmute::<&[u8], &'rj [u8]>(jiter_buffer_2) };
-        self.jiter = Jiter::new(jiter_buffer).with_allow_partial_strings();
+        self.create_new_jiter();
 
         n_new_bytes > 0
     }

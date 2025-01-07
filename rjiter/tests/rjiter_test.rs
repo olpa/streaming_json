@@ -144,7 +144,7 @@ fn skip_token() {
 }
 
 #[test]
-fn multi_read_next_key() {
+fn skip_spaces_for_next_key() {
     let lot_of_spaces = " ".repeat(32);
     let input = format!(r#"{lot_of_spaces},{lot_of_spaces}foo": "bar""#);
     let mut buffer = [0u8; 10];
