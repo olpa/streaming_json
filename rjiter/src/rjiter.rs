@@ -294,7 +294,7 @@ impl<'rj> RJiter<'rj> {
         //
         // Copy remaining bytes to the beginning of the buffer
         //
-        self.buffer.shift_buffer(pos, is_partial_string);
+        self.buffer.shift_buffer(0, pos);
 
         //
         // Read new bytes
