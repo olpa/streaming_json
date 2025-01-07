@@ -2,7 +2,7 @@ use std::io::Read;
 use std::io::Write;
 
 use crate::buffer::Buffer;
-use jiter::{Jiter, JiterResult, JsonValue, NumberAny, NumberInt};
+use jiter::{Jiter, JiterError, JiterErrorType, JiterResult, JsonError, JsonErrorType, JsonValue, NumberAny, NumberInt};
 
 pub type Peek = jiter::Peek;
 
@@ -154,7 +154,26 @@ impl<'rj> RJiter<'rj> {
             };
         }
         self.skip_spaces_feeding(b',');
-        self.jiter.next_key()
+        loop {
+            let result = self.jiter.next_key();
+            if result.is_ok() {
+                return unsafe {
+                    std::mem::transmute::<JiterResult<Option<&str>>, JiterResult<Option<&'rj str>>>(
+                        result,
+                    )
+                };
+            }
+            let error = result.unwrap_err();
+            if let JiterError {
+                error_type: JiterErrorType::JsonError(JsonErrorType::EofWhileParsingString),
+                ..
+            } = error {
+                if self.feed() {
+                    continue;
+                }
+            }
+            return Err(error);
+        }
     }
 
     #[allow(clippy::missing_errors_doc)]
