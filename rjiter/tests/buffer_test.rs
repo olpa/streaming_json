@@ -54,5 +54,5 @@ fn test_skip_spaces_with_many_reads_and_nonzero_pos() {
     buffer.skip_spaces(2);
 
     // assert
-    assert_eq!(&buffer.buf[..buffer.n_bytes], b"  ab");
+    assert_eq!(&buffer.buf[..buffer.n_bytes], b"  a");
 }

@@ -20,9 +20,7 @@ impl<'buf> Buffer<'buf> {
 
     #[allow(clippy::missing_panics_doc)]
     pub fn read_more(&mut self, start_index: usize) -> usize {
-        println!("Buffer::read_more before read: reading to the buffer: {:?}", &self.buf[start_index..]); // FIXME
         let n_new_bytes = self.reader.read(&mut self.buf[start_index..]).unwrap();
-        println!("Buffer::read_more after read: n_new_bytes: {:?}", n_new_bytes); // FIXME
         self.n_bytes += n_new_bytes;
         n_new_bytes
     }
@@ -43,7 +41,7 @@ impl<'buf> Buffer<'buf> {
             while i < self.n_bytes && self.buf[i].is_ascii_whitespace() {
                 i += 1;
             }
-            
+
             if i < self.n_bytes {
                 // Found non-whitespace
                 if i > pos {
@@ -51,14 +49,10 @@ impl<'buf> Buffer<'buf> {
                 }
                 break;
             }
-            
-            println!("Buffer::skip_space before shift: pos: {:?}, i: {:?}, n_bytes: {:?}", pos, i, self.n_bytes); // FIXME
 
             // Reached end of buffer, shift and read more
             self.shift_buffer(pos, self.n_bytes);
-            println!("Buffer::skip_space after shift: pos: {:?}, i: {:?}, n_bytes: {:?}", pos, i, self.n_bytes); // FIXME
             let n_new = self.read_more(self.n_bytes);
-            println!("Buffer::skip_space after read: pos: {:?}, i: {:?}, n_bytes: {:?}, n_new: {:?}", pos, i, self.n_bytes, n_new); // FIXME
             if n_new == 0 {
                 // EOF reached
                 break;
