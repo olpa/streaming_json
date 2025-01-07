@@ -4,6 +4,7 @@ pub struct Buffer<'buf> {
     reader: &'buf mut dyn Read,
     pub buf: &'buf mut [u8],
     pub n_bytes: usize,
+    pub n_shifted_out: usize,
 }
 
 impl<'buf> Buffer<'buf> {
@@ -15,6 +16,7 @@ impl<'buf> Buffer<'buf> {
             reader,
             buf,
             n_bytes,
+            n_shifted_out: 0,
         }
     }
 
@@ -29,8 +31,13 @@ impl<'buf> Buffer<'buf> {
     pub fn shift_buffer(&mut self, to_pos: usize, from_pos: usize) {
         if from_pos > to_pos && from_pos < self.n_bytes {
             self.buf.copy_within(from_pos..self.n_bytes, to_pos);
-            self.n_bytes -= from_pos - to_pos;
+            let n_shifted_out = from_pos - to_pos;
+            self.n_bytes -= n_shifted_out;
+            self.n_shifted_out += n_shifted_out;
         } else {
+            if from_pos > to_pos {
+                self.n_shifted_out += from_pos - to_pos;
+            }
             self.n_bytes = to_pos;
         }
     }
