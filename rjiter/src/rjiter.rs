@@ -155,6 +155,7 @@ impl<'rj> RJiter<'rj> {
         }
         self.skip_spaces_feeding(b',');
         loop {
+            println!("next_key, buf: {:?}", self.buffer); // FIXME
             let result = self.jiter.next_key();
             if result.is_ok() {
                 return unsafe {
@@ -165,12 +166,16 @@ impl<'rj> RJiter<'rj> {
             }
             let error = result.unwrap_err();
             if let JiterError {
-                error_type: JiterErrorType::JsonError(JsonErrorType::EofWhileParsingString),
+                error_type: JiterErrorType::JsonError(ref error_type @ (JsonErrorType::EofWhileParsingString | JsonErrorType::ExpectedObjectCommaOrEnd)),
                 ..
             } = error {
-                if self.feed() {
+                println!("next_key, before feed"); // FIXME
+                if self.buffer.read_more() > 0 {
+                    println!("next_key, after feed (true)"); // FIXME
+                    self.create_new_jiter();
                     continue;
                 }
+                println!("next_key, after feed (false)"); // FIXME
             }
             return Err(error);
         }
@@ -298,13 +303,10 @@ impl<'rj> RJiter<'rj> {
         let to_pos = 0;
         let n_shifted_before = self.buffer.n_shifted_out;
 
-        println!("skip_spaces_feeding, buf before skip spaces: {:?}, pos: {:?}", self.buffer, to_pos); // FIXME
         self.buffer.skip_spaces(to_pos);
         if to_pos < self.buffer.n_bytes && self.buffer.buf[to_pos] == transparent_token {
-            println!("skip_spaces_feeding, buf before skip spaces 2: {:?}, pos: {:?}", self.buffer, to_pos); // FIXME
             self.buffer.skip_spaces(to_pos + 1);
         }
-        println!("skip_spaces_feeding, buf after skip spaces 2: {:?}, pos: {:?}", self.buffer, to_pos); // FIXME
 
         let is_shifted = self.buffer.n_shifted_out > n_shifted_before;
         if is_shifted {
@@ -345,7 +347,7 @@ impl<'rj> RJiter<'rj> {
         } else {
             self.buffer.n_bytes
         };
-        let n_new_bytes = self.buffer.read_more(start_index);
+        let n_new_bytes = self.buffer.read_more_to_pos(start_index);
 
         if is_partial_string {
             self.buffer.buf[0] = 34; // Quote character
