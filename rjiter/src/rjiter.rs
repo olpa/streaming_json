@@ -276,13 +276,16 @@ impl<'rj> RJiter<'rj> {
     }
 
     fn skip_spaces_feeding(&mut self, transparent_token: u8) -> bool {
-        let pos = self.jiter.current_index();
+        let to_pos = 0;
         let n_shifted_before = self.buffer.n_shifted_out;
 
-        self.buffer.skip_spaces(pos);
-        if pos < self.buffer.n_bytes && self.buffer.buf[pos] == transparent_token {
-            self.buffer.skip_spaces(pos + 1);
+        println!("skip_spaces_feeding, buf before skip spaces: {:?}, pos: {:?}", self.buffer, to_pos); // FIXME
+        self.buffer.skip_spaces(to_pos);
+        if to_pos < self.buffer.n_bytes && self.buffer.buf[to_pos] == transparent_token {
+            println!("skip_spaces_feeding, buf before skip spaces 2: {:?}, pos: {:?}", self.buffer, to_pos); // FIXME
+            self.buffer.skip_spaces(to_pos + 1);
         }
+        println!("skip_spaces_feeding, buf after skip spaces 2: {:?}, pos: {:?}", self.buffer, to_pos); // FIXME
 
         let is_shifted = self.buffer.n_shifted_out > n_shifted_before;
         if is_shifted {

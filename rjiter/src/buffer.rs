@@ -73,8 +73,8 @@ impl<'buf> std::fmt::Debug for Buffer<'buf> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Buffer {{ n_bytes: {:?}, buf: {:?} }}",
-            self.n_bytes, self.buf
+            "Buffer {{ n_bytes: {:?}, n_shifted_out: {:?}, buf: {:?} }}",
+            self.n_bytes, self.n_shifted_out, self.buf
         )
     }
 }
