@@ -21,7 +21,13 @@ impl<'buf> Buffer<'buf> {
     }
 
     #[allow(clippy::missing_panics_doc)]
-    pub fn read_more(&mut self, start_index: usize) -> usize {
+    pub fn read_more(&mut self) -> usize {
+        let n_new_bytes = self.reader.read(&mut self.buf[self.n_bytes..]).unwrap();
+        self.n_bytes += n_new_bytes;
+        n_new_bytes
+    }
+
+    pub fn read_more_to_pos(&mut self, start_index: usize) -> usize {
         let n_new_bytes = self.reader.read(&mut self.buf[start_index..]).unwrap();
         self.n_bytes += n_new_bytes;
         n_new_bytes
@@ -59,7 +65,7 @@ impl<'buf> Buffer<'buf> {
 
             // Reached end of buffer, shift and read more
             self.shift_buffer(pos, self.n_bytes);
-            let n_new = self.read_more(self.n_bytes);
+            let n_new = self.read_more();
             if n_new == 0 {
                 // EOF reached
                 break;
