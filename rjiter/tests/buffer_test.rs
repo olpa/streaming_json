@@ -56,3 +56,31 @@ fn test_skip_spaces_with_many_reads_and_nonzero_pos() {
     // assert
     assert_eq!(&buffer.buf[..buffer.n_bytes], b"  a");
 }
+
+#[test]
+fn test_skip_spaces_eof_without_non_space() {
+    let input = "     ".as_bytes();
+    let mut reader = Cursor::new(input);
+    let mut buf = [0u8; 4];
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+
+    // act
+    buffer.skip_spaces(0);
+
+    // assert
+    assert_eq!(&buffer.buf[..buffer.n_bytes], b"");
+}
+
+#[test]
+fn test_skip_spaces_eof_without_non_space_and_nonzero_pos() {
+    let input = "     ".as_bytes();
+    let mut reader = Cursor::new(input);
+    let mut buf = [0u8; 4];
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+
+    // act
+    buffer.skip_spaces(2);
+
+    // assert
+    assert_eq!(&buffer.buf[..buffer.n_bytes], b"  ");
+}
