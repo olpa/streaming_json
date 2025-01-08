@@ -6,6 +6,9 @@ use jiter::LazyIndexMap;
 use jiter::Peek;
 use rjiter::RJiter;
 
+mod one_byte_reader;
+use crate::one_byte_reader::OneByteReader;
+
 #[test]
 fn sanity_check() {
     let input = r#"{}}"#;

@@ -1,6 +1,6 @@
 use std::io::Read;
 
-struct OneByteReader<I>
+pub struct OneByteReader<I>
 where
     I: Iterator<Item = u8>,
 {
@@ -11,7 +11,7 @@ impl<I> OneByteReader<I>
 where
     I: Iterator<Item = u8>,
 {
-    fn new(iter: I) -> Self {
+    pub fn new(iter: I) -> Self {
         OneByteReader { iter }
     }
 }

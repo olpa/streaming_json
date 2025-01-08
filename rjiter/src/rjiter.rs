@@ -2,7 +2,10 @@ use std::io::Read;
 use std::io::Write;
 
 use crate::buffer::Buffer;
-use jiter::{Jiter, JiterError, JiterErrorType, JiterResult, JsonError, JsonErrorType, JsonValue, NumberAny, NumberInt};
+use jiter::{
+    Jiter, JiterError, JiterErrorType, JiterResult, JsonError, JsonErrorType, JsonValue, NumberAny,
+    NumberInt,
+};
 
 pub type Peek = jiter::Peek;
 
@@ -166,9 +169,14 @@ impl<'rj> RJiter<'rj> {
             }
             let error = result.unwrap_err();
             if let JiterError {
-                error_type: JiterErrorType::JsonError(ref error_type @ (JsonErrorType::EofWhileParsingString | JsonErrorType::ExpectedObjectCommaOrEnd)),
+                error_type:
+                    JiterErrorType::JsonError(
+                        ref error_type @ (JsonErrorType::EofWhileParsingString
+                        | JsonErrorType::ExpectedObjectCommaOrEnd),
+                    ),
                 ..
-            } = error {
+            } = error
+            {
                 println!("next_key, before feed"); // FIXME
                 if self.buffer.read_more() > 0 {
                     println!("next_key, after feed (true)"); // FIXME
