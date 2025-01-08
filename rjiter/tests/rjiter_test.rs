@@ -6,6 +6,9 @@ use jiter::LazyIndexMap;
 use jiter::Peek;
 use rjiter::RJiter;
 
+mod one_byte_reader;
+use crate::one_byte_reader::OneByteReader;
+
 #[test]
 fn sanity_check() {
     let input = r#"{}}"#;
@@ -15,6 +18,7 @@ fn sanity_check() {
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
     let result = rjiter.next_value();
+    println!("sanity_check result: {:?}", result);
     assert!(result.is_ok());
 
     let empty_object = JsonValue::Object(Arc::new(LazyIndexMap::new()));
@@ -141,4 +145,49 @@ fn skip_token() {
     let result = rjiter.next_int();
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), jiter::NumberInt::Int(42));
+}
+
+#[test]
+fn skip_spaces_for_next_key() {
+    let lot_of_spaces = " ".repeat(32);
+    let input = format!(r#"{lot_of_spaces},{lot_of_spaces}"foo": "bar""#);
+    let mut buffer = [0u8; 10];
+    let mut reader = Cursor::new(input.as_bytes());
+
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    // act
+    let result = rjiter.next_key();
+    println!("skip_spaces_for_next_key result: {:?}", result);
+
+    // assert
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), Some("foo"));
+
+    // bonus assert: key value
+    let result = rjiter.next_str();
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), "bar");
+}
+
+#[test]
+fn next_key_from_one_byte_reader() {
+    let input = r#" , "foo": "bar"}"#.bytes();
+    let mut reader = OneByteReader::new(input);
+    let mut buffer = [0u8; 10];
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    // act
+    let result = rjiter.next_key();
+    println!("next_key_from_one_byte_reader result: {:?}", result);
+
+    // assert
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), Some("foo"));
+
+    // FIXME: uncommend when ready
+    // bonus assert: key value
+    // let result = rjiter.next_str();
+    // assert!(result.is_ok());
+    // assert_eq!(result.unwrap(), "bar");
 }
