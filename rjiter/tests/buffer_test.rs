@@ -96,7 +96,21 @@ fn test_skip_spaces_eof_without_non_space_and_nonzero_pos() {
 }
 
 #[test]
-fn test_noop_on_no_shift() {
+fn sanity_test_shift() {
+    let input = "abcd12345";
+    let mut reader = Cursor::new(input.as_bytes());
+    let mut buf = [0u8; 10];
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+
+    buffer.shift_buffer(3, 7);
+
+    assert_eq!(&buffer.buf[..buffer.n_bytes], b"abc345");
+    assert_eq!(buffer.n_shifted_out, 4);
+}
+
+
+#[test]
+fn test_noop_shift_at_pos0() {
     let input = "abc";
     let mut reader = Cursor::new(input.as_bytes());
     let mut buf = [0u8; 4];

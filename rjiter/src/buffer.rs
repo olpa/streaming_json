@@ -1,5 +1,5 @@
-use std::io::Read;
 use std::cmp::min;
+use std::io::Read;
 
 pub struct Buffer<'buf> {
     reader: &'buf mut dyn Read,
