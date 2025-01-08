@@ -163,3 +163,42 @@ fn test_noop_shift_at_end() {
     assert_eq!(&buffer.buf[..buffer.n_bytes], b"abc");
     assert_eq!(buffer.n_shifted_out, 0);
 }
+
+#[test]
+fn test_shift_pos1_to_pos0() {
+    let input = "abcd12345";
+    let mut reader = Cursor::new(input.as_bytes());
+    let mut buf = [0u8; 10];
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+
+    buffer.shift_buffer(0, 1);
+
+    assert_eq!(&buffer.buf[..buffer.n_bytes], b"bcd12345");
+    assert_eq!(buffer.n_shifted_out, 1);
+}
+
+#[test]
+fn test_shift_preend_to_pos0() {
+    let input = "abcd12345";
+    let mut reader = Cursor::new(input.as_bytes());
+    let mut buf = [0u8; 10];
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+
+    buffer.shift_buffer(0, input.len() - 1);
+
+    assert_eq!(&buffer.buf[..buffer.n_bytes], b"5");
+    assert_eq!(buffer.n_shifted_out, input.len() - 1);
+}
+
+#[test]
+fn test_shift_preend_to_pos1() {
+    let input = "abcd12345";
+    let mut reader = Cursor::new(input.as_bytes());
+    let mut buf = [0u8; 10];
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+
+    buffer.shift_buffer(1, input.len() - 1);
+
+    assert_eq!(&buffer.buf[..buffer.n_bytes], b"a5");
+    assert_eq!(buffer.n_shifted_out, input.len() - 2);
+}
