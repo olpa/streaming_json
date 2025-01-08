@@ -104,10 +104,9 @@ fn sanity_test_shift() {
 
     buffer.shift_buffer(3, 7);
 
-    assert_eq!(&buffer.buf[..buffer.n_bytes], b"abc345");
+    assert_eq!(&buffer.buf[..buffer.n_bytes], b"abc45");
     assert_eq!(buffer.n_shifted_out, 4);
 }
-
 
 #[test]
 fn test_noop_shift_at_pos0() {
@@ -117,6 +116,48 @@ fn test_noop_shift_at_pos0() {
     let mut buffer = Buffer::new(&mut reader, &mut buf);
 
     buffer.shift_buffer(0, 0);
+
+    assert_eq!(buffer.n_bytes, 3);
+    assert_eq!(&buffer.buf[..buffer.n_bytes], b"abc");
+    assert_eq!(buffer.n_shifted_out, 0);
+}
+
+#[test]
+fn test_noop_shift_at_pos1() {
+    let input = "abc";
+    let mut reader = Cursor::new(input.as_bytes());
+    let mut buf = [0u8; 4];
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+
+    buffer.shift_buffer(1, 1);
+
+    assert_eq!(buffer.n_bytes, 3);
+    assert_eq!(&buffer.buf[..buffer.n_bytes], b"abc");
+    assert_eq!(buffer.n_shifted_out, 0);
+}
+
+#[test]
+fn test_noop_shift_at_end_minus1() {
+    let input = "abc";
+    let mut reader = Cursor::new(input.as_bytes());
+    let mut buf = [0u8; 4];
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+
+    buffer.shift_buffer(2, 2);
+
+    assert_eq!(buffer.n_bytes, 3);
+    assert_eq!(&buffer.buf[..buffer.n_bytes], b"abc");
+    assert_eq!(buffer.n_shifted_out, 0);
+}
+
+#[test]
+fn test_noop_shift_at_end() {
+    let input = "abc";
+    let mut reader = Cursor::new(input.as_bytes());
+    let mut buf = [0u8; 4];
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+
+    buffer.shift_buffer(3, 3);
 
     assert_eq!(buffer.n_bytes, 3);
     assert_eq!(&buffer.buf[..buffer.n_bytes], b"abc");
