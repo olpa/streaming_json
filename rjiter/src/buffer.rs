@@ -1,4 +1,5 @@
 use std::io::Read;
+use std::cmp::min;
 
 pub struct Buffer<'buf> {
     reader: &'buf mut dyn Read,
@@ -35,16 +36,13 @@ impl<'buf> Buffer<'buf> {
 
     #[allow(clippy::missing_panics_doc)]
     pub fn shift_buffer(&mut self, to_pos: usize, from_pos: usize) {
-        if from_pos > to_pos && from_pos < self.n_bytes {
-            self.buf.copy_within(from_pos..self.n_bytes, to_pos);
-            let n_shifted_out = from_pos - to_pos;
+        if from_pos > to_pos {
+            if from_pos < self.n_bytes {
+                self.buf.copy_within(from_pos..self.n_bytes, to_pos);
+            }
+            let n_shifted_out = min(from_pos - to_pos, self.n_bytes);
             self.n_bytes -= n_shifted_out;
             self.n_shifted_out += n_shifted_out;
-        } else {
-            if from_pos > to_pos {
-                self.n_shifted_out += from_pos - to_pos;
-            }
-            self.n_bytes = to_pos;
         }
     }
 
