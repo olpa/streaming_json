@@ -3,7 +3,7 @@ use std::io::Write;
 
 use crate::buffer::Buffer;
 use jiter::{
-    Jiter, JiterError, JiterErrorType, JiterResult, JsonError, JsonErrorType, JsonValue, NumberAny,
+    Jiter, JiterError, JiterErrorType, JiterResult, JsonErrorType, JsonValue, NumberAny,
     NumberInt,
 };
 
@@ -158,7 +158,6 @@ impl<'rj> RJiter<'rj> {
         }
         self.skip_spaces_feeding(b',');
         loop {
-            println!("next_key, buf: {:?}", self.buffer); // FIXME
             let result = self.jiter.next_key();
             if result.is_ok() {
                 return unsafe {
@@ -171,21 +170,17 @@ impl<'rj> RJiter<'rj> {
             if let JiterError {
                 error_type:
                     JiterErrorType::JsonError(
-                        ref error_type @ (JsonErrorType::EofWhileParsingString
+                        ref _error_type @ (JsonErrorType::EofWhileParsingString
                         | JsonErrorType::ExpectedObjectCommaOrEnd
-                        | JsonErrorType::EofWhileParsingObject)
-                        ,
+                        | JsonErrorType::EofWhileParsingObject),
                     ),
                 ..
             } = error
             {
-                println!("next_key, before feed"); // FIXME
                 if self.buffer.read_more() > 0 {
-                    println!("next_key, after feed (true)"); // FIXME
                     self.create_new_jiter();
                     continue;
                 }
-                println!("next_key, after feed (false)"); // FIXME
             }
             return Err(error);
         }

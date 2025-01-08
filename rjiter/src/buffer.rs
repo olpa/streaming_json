@@ -28,6 +28,7 @@ impl<'buf> Buffer<'buf> {
         n_new_bytes
     }
 
+    #[allow(clippy::missing_panics_doc)]
     pub fn read_more_to_pos(&mut self, start_index: usize) -> usize {
         let n_new_bytes = self.reader.read(&mut self.buf[start_index..]).unwrap();
         self.n_bytes += n_new_bytes;

@@ -18,6 +18,7 @@ fn sanity_check() {
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
     let result = rjiter.next_value();
+    println!("sanity_check result: {:?}", result);
     assert!(result.is_ok());
 
     let empty_object = JsonValue::Object(Arc::new(LazyIndexMap::new()));
