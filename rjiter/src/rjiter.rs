@@ -172,7 +172,9 @@ impl<'rj> RJiter<'rj> {
                 error_type:
                     JiterErrorType::JsonError(
                         ref error_type @ (JsonErrorType::EofWhileParsingString
-                        | JsonErrorType::ExpectedObjectCommaOrEnd),
+                        | JsonErrorType::ExpectedObjectCommaOrEnd
+                        | JsonErrorType::EofWhileParsingObject)
+                        ,
                     ),
                 ..
             } = error
