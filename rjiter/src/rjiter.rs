@@ -146,7 +146,13 @@ impl<'rj> RJiter<'rj> {
         self.jiter.next_int()
     }
 
-    #[allow(clippy::missing_errors_doc)]
+    /// See `Jiter::next_key`
+    ///
+    /// The chunk from the key name to colon (:) should fit to the buffer.
+    ///
+    /// # Errors
+    ///
+    /// See `Jiter::next_key`
     pub fn next_key(&mut self) -> JiterResult<Option<&str>> {
         let result = self.jiter.next_key();
         if result.is_ok() {
