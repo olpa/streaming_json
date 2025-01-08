@@ -165,3 +165,23 @@ fn skip_spaces_for_next_key() {
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), "bar");
 }
+
+#[test]
+fn next_key_from_one_byte_reader() {
+    let input = r#" , "foo": "bar"}"#.bytes();
+    let mut reader = OneByteReader::new(input);
+    let mut buffer = [0u8; 10];
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    // act
+    let result = rjiter.next_key();
+
+    // assert
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), Some("foo"));
+
+    // bonus assert: key value
+    let result = rjiter.next_str();
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), "bar");
+}
