@@ -334,12 +334,23 @@ impl<'rj> RJiter<'rj> {
         self.feed_inner(false)
     }
 
+    // If the transparent is found after skipping spaces, skip also spaces after the transparent token
+    // If any space is skipped, feed the buffer content to the position 0
+    // This function should be called only in a retry handler, otherwise it worsens performance
     fn skip_spaces_feeding(&mut self, transparent_token: Option<u8>) -> bool {
         let to_pos = 0;
+        let jiter_pos = self.jiter.current_index();
         let n_shifted_before = self.buffer.n_shifted_out;
 
+        if jiter_pos > to_pos {
+            self.buffer.shift_buffer(to_pos, jiter_pos);
+        }
         self.buffer.skip_spaces(to_pos);
+
         if let Some(transparent_token) = transparent_token {
+            if to_pos >= self.buffer.n_bytes {
+                self.buffer.read_more();
+            }
             if to_pos < self.buffer.n_bytes && self.buffer.buf[to_pos] == transparent_token {
                 self.buffer.skip_spaces(to_pos + 1);
             }
