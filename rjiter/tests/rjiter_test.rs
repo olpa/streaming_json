@@ -185,11 +185,11 @@ fn next_key_from_one_byte_reader() {
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some("foo"));
 
-    // FIXME: uncommend when ready
     // bonus assert: key value
-    // let result = rjiter.next_str();
-    // assert!(result.is_ok());
-    // assert_eq!(result.unwrap(), "bar");
+    let result = rjiter.next_str();
+    println!("next_key_from_one_byte_reader result 2: {:?}", result);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), "bar");
 }
 
 #[test]
