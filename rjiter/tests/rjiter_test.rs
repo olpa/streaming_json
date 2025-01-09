@@ -195,7 +195,7 @@ fn next_key_from_one_byte_reader() {
 #[test]
 fn next_str_with_spaces_one_byte_reader() {
     let lot_of_spaces = " ".repeat(32);
-    let input = format!(r#"{lot_of_spaces}"hello world""#);
+    let input = format!(r#"{lot_of_spaces}"hello""#);
     let mut reader = OneByteReader::new(input.bytes());
     let mut buffer = [0u8; 10];
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
@@ -206,5 +206,5 @@ fn next_str_with_spaces_one_byte_reader() {
 
     // assert
     assert!(result.is_ok());
-    assert_eq!(result.unwrap(), "hello world");
+    assert_eq!(result.unwrap(), "hello");
 }

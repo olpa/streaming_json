@@ -251,11 +251,7 @@ impl<'rj> RJiter<'rj> {
             }
             let error = result.unwrap_err();
             if let JiterError {
-                error_type:
-                    JiterErrorType::JsonError(
-                        ref _error_type @ (JsonErrorType::EofWhileParsingString
-                        ),
-                    ),
+                error_type: JiterErrorType::JsonError(JsonErrorType::EofWhileParsingString),
                 ..
             } = error
             {
