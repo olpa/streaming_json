@@ -34,7 +34,7 @@ impl<'rj> RJiter<'rj> {
             std::mem::transmute::<&[u8], &'rj mut [u8]>(buf)
         };
         let buffer = Buffer::new(reader, buf_alias);
-        let jiter = Jiter::new(&buf[..buffer.n_bytes]).with_allow_partial_strings();
+        let jiter = Jiter::new(&buf[..buffer.n_bytes]);
 
         RJiter {
             jiter,
@@ -329,7 +329,7 @@ impl<'rj> RJiter<'rj> {
     fn create_new_jiter(&mut self) {
         let jiter_buffer_2 = &self.buffer.buf[..self.buffer.n_bytes];
         let jiter_buffer = unsafe { std::mem::transmute::<&[u8], &'rj [u8]>(jiter_buffer_2) };
-        self.jiter = Jiter::new(jiter_buffer).with_allow_partial_strings();
+        self.jiter = Jiter::new(jiter_buffer);
     }
 
     fn feed_inner(&mut self, is_partial_string: bool) -> bool {
