@@ -161,7 +161,7 @@ impl<'rj> RJiter<'rj> {
                 )
             };
         }
-        self.skip_spaces_feeding(b',');
+        self.skip_spaces_feeding(Some(b','));
         loop {
             let result = self.jiter.next_key();
             if result.is_ok() {
@@ -235,8 +235,37 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_str(&mut self) -> JiterResult<&str> {
-        self.maybe_feed();
-        self.jiter.next_str()
+        let result = self.jiter.next_str();
+        if result.is_ok() {
+            return unsafe {
+                std::mem::transmute::<JiterResult<&str>, JiterResult<&'rj str>>(result)
+            };
+        }
+        self.skip_spaces_feeding(None);
+        loop {
+            let result = self.jiter.next_str();
+            if result.is_ok() {
+                return unsafe {
+                    std::mem::transmute::<JiterResult<&str>, JiterResult<&'rj str>>(result)
+                };
+            }
+            let error = result.unwrap_err();
+            if let JiterError {
+                error_type:
+                    JiterErrorType::JsonError(
+                        ref _error_type @ (JsonErrorType::EofWhileParsingString
+                        ),
+                    ),
+                ..
+            } = error
+            {
+                if self.buffer.read_more() > 0 {
+                    self.create_new_jiter();
+                    continue;
+                }
+            }
+            return Err(error);
+        }
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -309,13 +338,15 @@ impl<'rj> RJiter<'rj> {
         self.feed_inner(false)
     }
 
-    fn skip_spaces_feeding(&mut self, transparent_token: u8) -> bool {
+    fn skip_spaces_feeding(&mut self, transparent_token: Option<u8>) -> bool {
         let to_pos = 0;
         let n_shifted_before = self.buffer.n_shifted_out;
 
         self.buffer.skip_spaces(to_pos);
-        if to_pos < self.buffer.n_bytes && self.buffer.buf[to_pos] == transparent_token {
-            self.buffer.skip_spaces(to_pos + 1);
+        if let Some(transparent_token) = transparent_token {
+            if to_pos < self.buffer.n_bytes && self.buffer.buf[to_pos] == transparent_token {
+                self.buffer.skip_spaces(to_pos + 1);
+            }
         }
 
         let is_shifted = self.buffer.n_shifted_out > n_shifted_before;
