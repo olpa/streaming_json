@@ -3,8 +3,7 @@ use std::io::Write;
 
 use crate::buffer::Buffer;
 use jiter::{
-    Jiter, JiterError, JiterErrorType, JiterResult, JsonErrorType, JsonValue, NumberAny,
-    NumberInt,
+    Jiter, JiterError, JiterErrorType, JiterResult, JsonErrorType, JsonValue, NumberAny, NumberInt,
 };
 
 pub type Peek = jiter::Peek;
