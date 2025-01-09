@@ -153,7 +153,7 @@ impl<'rj> RJiter<'rj> {
     ///
     /// See `Jiter::next_key`
     pub fn next_key(&mut self) -> JiterResult<Option<&str>> {
-        let f = |j| unsafe {
+        let f = |j: &mut Jiter<'rj>| unsafe {
             std::mem::transmute::<JiterResult<Option<&str>>, JiterResult<Option<&'rj str>>>(
                 j.next_key(),
             )
@@ -205,10 +205,8 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_str(&mut self) -> JiterResult<&str> {
-        let f = |j| unsafe {
-            std::mem::transmute::<JiterResult<Option<&str>>, JiterResult<Option<&'rj str>>>(
-                j.next_str(),
-            )
+        let f = |j: &mut Jiter<'rj>| unsafe {
+            std::mem::transmute::<JiterResult<&str>, JiterResult<&'rj str>>(j.next_str())
         };
         self.loop_until_success(f, None)
     }
@@ -382,13 +380,14 @@ impl<'rj> RJiter<'rj> {
         true
     }
 
-    fn loop_until_success<T, U, F>(
+    fn loop_until_success<T, F>(
         &mut self,
         mut f: F,
         skip_spaces_token: Option<u8>,
-    ) -> JiterResult<U>
+    ) -> JiterResult<T>
     where
         F: FnMut(&mut Jiter<'rj>) -> JiterResult<T>,
+        T: std::fmt::Debug,
     {
         let result = f(&mut self.jiter);
         if result.is_ok() {
