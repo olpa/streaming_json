@@ -153,42 +153,7 @@ impl<'rj> RJiter<'rj> {
     ///
     /// See `Jiter::next_key`
     pub fn next_key(&mut self) -> JiterResult<Option<&str>> {
-        let result = self.jiter.next_key();
-        if result.is_ok() {
-            return unsafe {
-                std::mem::transmute::<JiterResult<Option<&str>>, JiterResult<Option<&'rj str>>>(
-                    result,
-                )
-            };
-        }
-        self.skip_spaces_feeding(Some(b','));
-        loop {
-            let result = self.jiter.next_key();
-            if result.is_ok() {
-                return unsafe {
-                    std::mem::transmute::<JiterResult<Option<&str>>, JiterResult<Option<&'rj str>>>(
-                        result,
-                    )
-                };
-            }
-            let error = result.unwrap_err();
-            if let JiterError {
-                error_type:
-                    JiterErrorType::JsonError(
-                        ref _error_type @ (JsonErrorType::EofWhileParsingString
-                        | JsonErrorType::ExpectedObjectCommaOrEnd
-                        | JsonErrorType::EofWhileParsingObject),
-                    ),
-                ..
-            } = error
-            {
-                if self.buffer.read_more() > 0 {
-                    self.create_new_jiter();
-                    continue;
-                }
-            }
-            return Err(error);
-        }
+        self.loop_until_success(|j| j.next_key(), Some(b','))
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -235,33 +200,7 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_str(&mut self) -> JiterResult<&str> {
-        let result = self.jiter.next_str();
-        if result.is_ok() {
-            return unsafe {
-                std::mem::transmute::<JiterResult<&str>, JiterResult<&'rj str>>(result)
-            };
-        }
-        self.skip_spaces_feeding(None);
-        loop {
-            let result = self.jiter.next_str();
-            if result.is_ok() {
-                return unsafe {
-                    std::mem::transmute::<JiterResult<&str>, JiterResult<&'rj str>>(result)
-                };
-            }
-            let error = result.unwrap_err();
-            if let JiterError {
-                error_type: JiterErrorType::JsonError(JsonErrorType::EofWhileParsingString),
-                ..
-            } = error
-            {
-                if self.buffer.read_more() > 0 {
-                    self.create_new_jiter();
-                    continue;
-                }
-            }
-            return Err(error);
-        }
+        self.loop_until_success(|j| j.next_str(), None)
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -431,5 +370,44 @@ impl<'rj> RJiter<'rj> {
         buf_view[..token.len()].copy_from_slice(token);
 
         true
+    }
+
+    fn loop_until_success<T, U, F>(
+        &mut self,
+        mut f: F,
+        skip_spaces_token: Option<u8>,
+    ) -> JiterResult<U>
+    where
+        F: FnMut(&mut Jiter<'rj>) -> JiterResult<T>,
+    {
+        let result = f(&mut self.jiter);
+        if result.is_ok() {
+            return unsafe { std::mem::transmute(result) };
+        }
+        
+        self.skip_spaces_feeding(skip_spaces_token);
+        loop {
+            let result = f(&mut self.jiter);
+            if result.is_ok() {
+                return unsafe { std::mem::transmute(result) };
+            }
+            let error = result.unwrap_err();
+            if let JiterError {
+                error_type:
+                    JiterErrorType::JsonError(
+                        ref _error_type @ (JsonErrorType::EofWhileParsingString
+                        | JsonErrorType::ExpectedObjectCommaOrEnd
+                        | JsonErrorType::EofWhileParsingObject),
+                    ),
+                ..
+            } = error
+            {
+                if self.buffer.read_more() > 0 {
+                    self.create_new_jiter();
+                    continue;
+                }
+            }
+            return Err(error);
+        }
     }
 }
