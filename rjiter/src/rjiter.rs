@@ -158,7 +158,15 @@ impl<'rj> RJiter<'rj> {
                 j.next_key(),
             )
         };
-        self.loop_until_success(f, Some(b','))
+        self.loop_until_success(
+            f,
+            Some(b','),
+            &[
+                JsonErrorType::EofWhileParsingString,
+                JsonErrorType::ExpectedObjectCommaOrEnd,
+                JsonErrorType::EofWhileParsingObject,
+            ],
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -208,7 +216,7 @@ impl<'rj> RJiter<'rj> {
         let f = |j: &mut Jiter<'rj>| unsafe {
             std::mem::transmute::<JiterResult<&str>, JiterResult<&'rj str>>(j.next_str())
         };
-        self.loop_until_success(f, None)
+        self.loop_until_success(f, None, &[JsonErrorType::EofWhileParsingString])
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -384,6 +392,7 @@ impl<'rj> RJiter<'rj> {
         &mut self,
         mut f: F,
         skip_spaces_token: Option<u8>,
+        retry_error_types: &[JsonErrorType],
     ) -> JiterResult<T>
     where
         F: FnMut(&mut Jiter<'rj>) -> JiterResult<T>,
@@ -402,16 +411,11 @@ impl<'rj> RJiter<'rj> {
             }
             let error = result.unwrap_err();
             if let JiterError {
-                error_type:
-                    JiterErrorType::JsonError(
-                        ref _error_type @ (JsonErrorType::EofWhileParsingString
-                        | JsonErrorType::ExpectedObjectCommaOrEnd
-                        | JsonErrorType::EofWhileParsingObject),
-                    ),
+                error_type: JiterErrorType::JsonError(error_type),
                 ..
-            } = error
+            } = &error
             {
-                if self.buffer.read_more() > 0 {
+                if retry_error_types.contains(error_type) && self.buffer.read_more() > 0 {
                     self.create_new_jiter();
                     continue;
                 }
