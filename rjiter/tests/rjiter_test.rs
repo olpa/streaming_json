@@ -72,6 +72,24 @@ fn pass_through_long_bytes() {
 }
 
 #[test]
+fn escapes_in_pass_through_long_bytes() {
+    let input = r#""escapes X\n\\\"""#;
+    let pos = input.find("X").unwrap();
+    for buf_len in pos..input.len() {
+        let mut buffer = [0u8; buf_len];
+        let mut reader = OneByteReader::new(input.bytes());
+        let mut writer = Vec::new();
+        let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+        let wb = rjiter.write_long_bytes(&mut writer);
+        wb.unwrap();
+
+        assert_eq!(writer, "escapes X\n\\\"".as_bytes());
+    }
+}
+
+
+#[test]
 fn pass_through_small_string() {
     let input = r#"{ "text": "nl\ntab\tu\u0410" }"#;
     let mut buffer = [0u8; 100];
