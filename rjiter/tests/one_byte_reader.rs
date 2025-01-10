@@ -21,6 +21,9 @@ where
     I: Iterator<Item = u8>,
 {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        if buf.len() == 0 {
+            return Ok(0);
+        }
         if let Some(next_byte) = self.iter.next() {
             buf[0] = next_byte;
             Ok(1)

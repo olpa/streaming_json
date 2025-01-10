@@ -3,8 +3,7 @@ use std::io::Write;
 
 use crate::buffer::Buffer;
 use jiter::{
-    Jiter, JiterError, JiterErrorType, JiterResult, JsonErrorType, JsonValue, NumberAny,
-    NumberInt,
+    Jiter, JiterError, JiterErrorType, JiterResult, JsonErrorType, JsonValue, NumberAny, NumberInt,
 };
 
 pub type Peek = jiter::Peek;
@@ -35,7 +34,7 @@ impl<'rj> RJiter<'rj> {
             std::mem::transmute::<&[u8], &'rj mut [u8]>(buf)
         };
         let buffer = Buffer::new(reader, buf_alias);
-        let jiter = Jiter::new(&buf[..buffer.n_bytes]).with_allow_partial_strings();
+        let jiter = Jiter::new(&buf[..buffer.n_bytes]);
 
         RJiter {
             jiter,
@@ -154,42 +153,20 @@ impl<'rj> RJiter<'rj> {
     ///
     /// See `Jiter::next_key`
     pub fn next_key(&mut self) -> JiterResult<Option<&str>> {
-        let result = self.jiter.next_key();
-        if result.is_ok() {
-            return unsafe {
-                std::mem::transmute::<JiterResult<Option<&str>>, JiterResult<Option<&'rj str>>>(
-                    result,
-                )
-            };
-        }
-        self.skip_spaces_feeding(b',');
-        loop {
-            let result = self.jiter.next_key();
-            if result.is_ok() {
-                return unsafe {
-                    std::mem::transmute::<JiterResult<Option<&str>>, JiterResult<Option<&'rj str>>>(
-                        result,
-                    )
-                };
-            }
-            let error = result.unwrap_err();
-            if let JiterError {
-                error_type:
-                    JiterErrorType::JsonError(
-                        ref _error_type @ (JsonErrorType::EofWhileParsingString
-                        | JsonErrorType::ExpectedObjectCommaOrEnd
-                        | JsonErrorType::EofWhileParsingObject),
-                    ),
-                ..
-            } = error
-            {
-                if self.buffer.read_more() > 0 {
-                    self.create_new_jiter();
-                    continue;
-                }
-            }
-            return Err(error);
-        }
+        let f = |j: &mut Jiter<'rj>| unsafe {
+            std::mem::transmute::<JiterResult<Option<&str>>, JiterResult<Option<&'rj str>>>(
+                j.next_key(),
+            )
+        };
+        self.loop_until_success(
+            f,
+            Some(b','),
+            &[
+                JsonErrorType::EofWhileParsingString,
+                JsonErrorType::ExpectedObjectCommaOrEnd,
+                JsonErrorType::EofWhileParsingObject,
+            ],
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -236,8 +213,10 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_str(&mut self) -> JiterResult<&str> {
-        self.maybe_feed();
-        self.jiter.next_str()
+        let f = |j: &mut Jiter<'rj>| unsafe {
+            std::mem::transmute::<JiterResult<&str>, JiterResult<&'rj str>>(j.next_str())
+        };
+        self.loop_until_success(f, None, &[JsonErrorType::EofWhileParsingString])
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -310,13 +289,26 @@ impl<'rj> RJiter<'rj> {
         self.feed_inner(false)
     }
 
-    fn skip_spaces_feeding(&mut self, transparent_token: u8) -> bool {
+    // If the transparent is found after skipping spaces, skip also spaces after the transparent token
+    // If any space is skipped, feed the buffer content to the position 0
+    // This function should be called only in a retry handler, otherwise it worsens performance
+    fn skip_spaces_feeding(&mut self, transparent_token: Option<u8>) -> bool {
         let to_pos = 0;
+        let jiter_pos = self.jiter.current_index();
         let n_shifted_before = self.buffer.n_shifted_out;
 
+        if jiter_pos > to_pos {
+            self.buffer.shift_buffer(to_pos, jiter_pos);
+        }
         self.buffer.skip_spaces(to_pos);
-        if to_pos < self.buffer.n_bytes && self.buffer.buf[to_pos] == transparent_token {
-            self.buffer.skip_spaces(to_pos + 1);
+
+        if let Some(transparent_token) = transparent_token {
+            if to_pos >= self.buffer.n_bytes {
+                self.buffer.read_more();
+            }
+            if to_pos < self.buffer.n_bytes && self.buffer.buf[to_pos] == transparent_token {
+                self.buffer.skip_spaces(to_pos + 1);
+            }
         }
 
         let is_shifted = self.buffer.n_shifted_out > n_shifted_before;
@@ -330,7 +322,7 @@ impl<'rj> RJiter<'rj> {
     fn create_new_jiter(&mut self) {
         let jiter_buffer_2 = &self.buffer.buf[..self.buffer.n_bytes];
         let jiter_buffer = unsafe { std::mem::transmute::<&[u8], &'rj [u8]>(jiter_buffer_2) };
-        self.jiter = Jiter::new(jiter_buffer).with_allow_partial_strings();
+        self.jiter = Jiter::new(jiter_buffer);
     }
 
     fn feed_inner(&mut self, is_partial_string: bool) -> bool {
@@ -394,5 +386,41 @@ impl<'rj> RJiter<'rj> {
         buf_view[..token.len()].copy_from_slice(token);
 
         true
+    }
+
+    fn loop_until_success<T, F>(
+        &mut self,
+        mut f: F,
+        skip_spaces_token: Option<u8>,
+        retry_error_types: &[JsonErrorType],
+    ) -> JiterResult<T>
+    where
+        F: FnMut(&mut Jiter<'rj>) -> JiterResult<T>,
+        T: std::fmt::Debug,
+    {
+        let result = f(&mut self.jiter);
+        if result.is_ok() {
+            return result;
+        }
+
+        self.skip_spaces_feeding(skip_spaces_token);
+        loop {
+            let result = f(&mut self.jiter);
+            if result.is_ok() {
+                return result;
+            }
+            let error = result.unwrap_err();
+            if let JiterError {
+                error_type: JiterErrorType::JsonError(error_type),
+                ..
+            } = &error
+            {
+                if retry_error_types.contains(error_type) && self.buffer.read_more() > 0 {
+                    self.create_new_jiter();
+                    continue;
+                }
+            }
+            return Err(error);
+        }
     }
 }
