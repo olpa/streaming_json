@@ -76,7 +76,7 @@ fn escapes_in_pass_through_long_bytes() {
     let input = r#""escapes X\n\\\"""#;
     let pos = input.find("X").unwrap();
     for buf_len in pos..input.len() {
-        let mut buffer = [0u8; buf_len];
+        let mut buffer = vec![0u8; buf_len];
         let mut reader = OneByteReader::new(input.bytes());
         let mut writer = Vec::new();
         let mut rjiter = RJiter::new(&mut reader, &mut buffer);
@@ -84,7 +84,7 @@ fn escapes_in_pass_through_long_bytes() {
         let wb = rjiter.write_long_bytes(&mut writer);
         wb.unwrap();
 
-        assert_eq!(writer, "escapes X\n\\\"".as_bytes());
+        assert_eq!(writer, r#"escapes X\n\\\""#.as_bytes());
     }
 }
 

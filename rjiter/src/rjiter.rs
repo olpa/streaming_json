@@ -283,10 +283,24 @@ impl<'rj> RJiter<'rj> {
             if error.error_type != JiterErrorType::JsonError(JsonErrorType::EofWhileParsingString) {
                 return Err(error);
             }
-            writer
-                .write_all(&self.buffer.buf[start_pos + 1..self.buffer.n_bytes])
-                .unwrap();
-            self.buffer.shift_buffer(1, self.buffer.n_bytes);
+
+            let mut escaping_bs_pos: usize = self.buffer.n_bytes;
+            let mut i: usize = 1; // skip the quote character
+            while i < self.buffer.n_bytes {
+                if self.buffer.buf[i] == b'\\' {
+                    escaping_bs_pos = i;
+                    i += 1;
+                }
+                i += 1;
+            }
+
+            if escaping_bs_pos > 1 { // position 1 is the beginning of the string
+                writer
+                    .write_all(&self.buffer.buf[start_pos + 1..escaping_bs_pos])
+                    .unwrap();
+                self.buffer.shift_buffer(1, escaping_bs_pos);
+            }
+
             self.buffer.buf[0] = b'"';
             if self.buffer.read_more() == 0 {
                 return Err(error);
