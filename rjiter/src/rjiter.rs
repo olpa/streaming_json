@@ -270,6 +270,7 @@ impl<'rj> RJiter<'rj> {
     }
 
     #[allow(clippy::missing_errors_doc)]
+    #[allow(clippy::missing_panics_doc)]
     pub fn write_long_bytes(&mut self, writer: &mut dyn Write) -> JiterResult<()> {
         loop {
             let start_pos = self.jiter.current_index();
@@ -282,12 +283,15 @@ impl<'rj> RJiter<'rj> {
             if error.error_type != JiterErrorType::JsonError(JsonErrorType::EofWhileParsingString) {
                 return Err(error);
             }
-            writer.write_all(&self.buffer.buf[start_pos+1..]).unwrap();
+            writer
+                .write_all(&self.buffer.buf[start_pos + 1..self.buffer.n_bytes])
+                .unwrap();
             self.buffer.shift_buffer(1, self.buffer.n_bytes);
             self.buffer.buf[0] = b'"';
             if self.buffer.read_more() == 0 {
                 return Err(error);
             }
+            self.create_new_jiter();
         }
     }
 

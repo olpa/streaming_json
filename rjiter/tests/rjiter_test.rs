@@ -44,7 +44,7 @@ fn skip_spaces() {
 
 #[test]
 fn pass_through_long_bytes() {
-    let input = r#""very very very long string"#;
+    let input = r#""very very very long string""#;
     let mut buffer = [0u8; 5];
     let mut reader = OneByteReader::new(input.bytes());
     let mut writer = Vec::new();
