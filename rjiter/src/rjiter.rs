@@ -294,7 +294,8 @@ impl<'rj> RJiter<'rj> {
                 i += 1;
             }
 
-            if escaping_bs_pos > 1 { // position 1 is the beginning of the string
+            if escaping_bs_pos > 1 {
+                // position 1 is the beginning of the string
                 writer
                     .write_all(&self.buffer.buf[start_pos + 1..escaping_bs_pos])
                     .unwrap();

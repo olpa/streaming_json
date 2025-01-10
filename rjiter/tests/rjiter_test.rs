@@ -73,7 +73,7 @@ fn pass_through_long_bytes() {
 
 #[test]
 fn escapes_in_pass_through_long_bytes() {
-    let input = r#""escapes X\n\\\"""#;
+    let input = r#""escapes X\n\\\"\u0410""#;
     let pos = input.find("X").unwrap();
     for buf_len in pos..input.len() {
         let mut buffer = vec![0u8; buf_len];
@@ -84,10 +84,9 @@ fn escapes_in_pass_through_long_bytes() {
         let wb = rjiter.write_long_bytes(&mut writer);
         wb.unwrap();
 
-        assert_eq!(writer, r#"escapes X\n\\\""#.as_bytes());
+        assert_eq!(writer, r#"escapes X\n\\\"\u0410"#.as_bytes());
     }
 }
-
 
 #[test]
 fn pass_through_small_string() {
