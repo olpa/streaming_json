@@ -44,19 +44,13 @@ fn skip_spaces() {
 
 #[test]
 fn pass_through_long_bytes() {
-    let input = r#"{ "text": "very very very long string" }"#;
-    let mut buffer = [0u8; 10]; // Small buffer to force multiple reads
-    let mut reader = Cursor::new(input.as_bytes());
+    let input = r#""very very very long string"#;
+    let mut buffer = [0u8; 5];
+    let mut reader = OneByteReader::new(input.bytes());
     let mut writer = Vec::new();
 
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
-    // Consume object start
-    assert_eq!(rjiter.next_object().unwrap(), Some("text"));
-    rjiter.feed();
-    assert_eq!(rjiter.peek().unwrap(), Peek::String);
-
-    // Consume the string value
     let wb = rjiter.write_long_bytes(&mut writer);
     wb.unwrap();
 
