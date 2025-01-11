@@ -8,6 +8,26 @@ use jiter::{
 
 pub type Peek = jiter::Peek;
 
+pub type RJiterResult<T> = Result<T, RJiterError>;
+
+#[derive(Debug)]
+pub enum RJiterError {
+    JiterError(JiterError),
+    IoError(std::io::Error),
+}
+
+impl From<JiterError> for RJiterError {
+    fn from(err: JiterError) -> Self {
+        RJiterError::JiterError(err)
+    }
+}
+
+impl From<std::io::Error> for RJiterError {
+    fn from(err: std::io::Error) -> Self {
+        RJiterError::IoError(err)
+    }
+}
+
 pub struct RJiter<'rj> {
     jiter: Jiter<'rj>,
     pos_before_call_jiter: usize,
@@ -244,8 +264,8 @@ impl<'rj> RJiter<'rj> {
         parser: F,
         writer: &mut dyn Write,
         write_completed: impl Fn(T, &mut dyn Write),
-        write_segment: impl Fn(&mut [u8], usize, &mut dyn Write) -> JiterResult<()>,
-    ) -> JiterResult<()>
+        write_segment: impl Fn(&mut [u8], usize, &mut dyn Write) -> RJiterResult<()>,
+    ) -> RJiterResult<()>
     where
         F: Fn(&mut Jiter<'rj>) -> JiterResult<T>,
         T: std::fmt::Debug,
@@ -258,7 +278,7 @@ impl<'rj> RJiter<'rj> {
             }
             let error = result.unwrap_err();
             if error.error_type != JiterErrorType::JsonError(JsonErrorType::EofWhileParsingString) {
-                return Err(error);
+                return Err(RJiterError::JiterError(error));
             }
 
             let mut escaping_bs_pos: usize = self.buffer.n_bytes;
@@ -278,7 +298,7 @@ impl<'rj> RJiter<'rj> {
 
             self.buffer.buf[0] = b'"';
             if self.buffer.read_more() == 0 {
-                return Err(error);
+                return Err(RJiterError::JiterError(error));
             }
             self.create_new_jiter();
         }
@@ -286,31 +306,35 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     #[allow(clippy::missing_panics_doc)]
-    pub fn write_long_bytes(&mut self, writer: &mut dyn Write) -> JiterResult<()> {
-        let parser = |j: &mut Jiter<'rj>| unsafe {
-            std::mem::transmute::<JiterResult<&[u8]>, JiterResult<&'rj [u8]>>(j.known_bytes())
-        };
+    pub fn write_long_bytes(&mut self, writer: &mut dyn Write) -> RJiterResult<()> {
         fn write_completed(bytes: &[u8], writer: &mut dyn Write) {
             writer.write_all(bytes).unwrap();
         }
-
-        fn write_segment(bytes: &mut [u8], escaping_bs_pos: usize, writer: &mut dyn Write) -> JiterResult<()> {
-            writer.write_all(&bytes[1..escaping_bs_pos]).unwrap();
+        fn write_segment(
+            bytes: &mut [u8],
+            escaping_bs_pos: usize,
+            writer: &mut dyn Write,
+        ) -> RJiterResult<()> {
+            writer.write_all(&bytes[1..escaping_bs_pos])?;
             Ok(())
         }
+        let parser = |j: &mut Jiter<'rj>| unsafe {
+            std::mem::transmute::<JiterResult<&[u8]>, JiterResult<&'rj [u8]>>(j.known_bytes())
+        };
         self.handle_long(parser, writer, write_completed, write_segment)
     }
 
     #[allow(clippy::missing_errors_doc)]
     #[allow(clippy::missing_panics_doc)]
-    pub fn write_long_str(&mut self, writer: &mut dyn Write) -> JiterResult<()> {
-        let parser = |j: &mut Jiter<'rj>| unsafe {
-            std::mem::transmute::<JiterResult<&str>, JiterResult<&'rj str>>(j.next_str())
-        };
+    pub fn write_long_str(&mut self, writer: &mut dyn Write) -> RJiterResult<()> {
         fn write_completed(string: &str, writer: &mut dyn Write) {
             writer.write_all(string.as_bytes()).unwrap()
         }
-        fn write_segment(bytes: &mut [u8], escaping_bs_pos: usize, writer: &mut dyn Write) -> JiterResult<()> {
+        fn write_segment(
+            bytes: &mut [u8],
+            escaping_bs_pos: usize,
+            writer: &mut dyn Write,
+        ) -> RJiterResult<()> {
             bytes[escaping_bs_pos] = b'"';
             let sub_jiter_buf = &bytes[..escaping_bs_pos + 1];
             let sub_jiter_buf = unsafe { std::mem::transmute::<&[u8], &[u8]>(sub_jiter_buf) };
@@ -324,10 +348,13 @@ impl<'rj> RJiter<'rj> {
                     return Ok(());
                 }
                 Err(e) => {
-                    return Err(e);
+                    return Err(RJiterError::JiterError(e));
                 }
             }
         }
+        let parser = |j: &mut Jiter<'rj>| unsafe {
+            std::mem::transmute::<JiterResult<&str>, JiterResult<&'rj str>>(j.next_str())
+        };
         self.handle_long(parser, writer, write_completed, write_segment)
     }
 
