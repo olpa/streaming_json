@@ -3,7 +3,6 @@ use std::sync::Arc;
 
 use jiter::JsonValue;
 use jiter::LazyIndexMap;
-use jiter::Peek;
 use rjiter::RJiter;
 
 mod one_byte_reader;
@@ -43,20 +42,28 @@ fn skip_spaces() {
 }
 
 #[test]
-fn pass_through_long_bytes() {
-    let input = r#"{ "text": "very very very long string" }"#;
-    let mut buffer = [0u8; 10]; // Small buffer to force multiple reads
+fn pass_through_small_bytes() {
+    let input = r#""small text""#;
+    let mut buffer = [0u8; 100];
     let mut reader = Cursor::new(input.as_bytes());
+    let mut writer = Vec::new();
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    let wb = rjiter.write_long_bytes(&mut writer);
+    wb.unwrap();
+
+    assert_eq!(writer, "small text".as_bytes());
+}
+
+#[test]
+fn pass_through_long_bytes() {
+    let input = r#""very very very long string""#;
+    let mut buffer = [0u8; 5];
+    let mut reader = OneByteReader::new(input.bytes());
     let mut writer = Vec::new();
 
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
-    // Consume object start
-    assert_eq!(rjiter.next_object().unwrap(), Some("text"));
-    rjiter.feed();
-    assert_eq!(rjiter.peek().unwrap(), Peek::String);
-
-    // Consume the string value
     let wb = rjiter.write_long_bytes(&mut writer);
     wb.unwrap();
 
@@ -64,69 +71,40 @@ fn pass_through_long_bytes() {
 }
 
 #[test]
-fn pass_through_small_bytes() {
-    let input = r#"{ "text": "small" }"#;
-    let mut buffer = [0u8; 100];
-    let mut reader = Cursor::new(input.as_bytes());
-    let mut writer = Vec::new();
+fn escapes_in_pass_through_long_bytes() {
+    let input = r#""escapes X\n\\\"\u0410""#;
+    let pos = input.find("X").unwrap();
+    for buf_len in pos..input.len() {
+        let mut buffer = vec![0u8; buf_len];
+        let mut reader = OneByteReader::new(input.bytes());
+        let mut writer = Vec::new();
+        let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
-    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+        let wb = rjiter.write_long_bytes(&mut writer);
+        wb.unwrap();
 
-    // Consume object start
-    assert_eq!(rjiter.next_object().unwrap(), Some("text"));
-    rjiter.feed();
-    assert_eq!(rjiter.peek().unwrap(), Peek::String);
-
-    // Consume the string value
-    let wb = rjiter.write_long_bytes(&mut writer);
-    wb.unwrap();
-
-    assert_eq!(writer, "small".as_bytes());
+        assert_eq!(writer, r#"escapes X\n\\\"\u0410"#.as_bytes());
+    }
 }
 
 #[test]
-fn pass_through_small_string() {
-    let input = r#"{ "text": "nl\ntab\tu\u0410" }"#;
-    let mut buffer = [0u8; 100];
-    let mut reader = Cursor::new(input.as_bytes());
-    let mut writer = Vec::new();
+fn pass_through_long_string_with_escapes() {
+    let input = r#""I'm a very long string with escapes X\n\\\"\u0410""#;
+    let pos = input.find("X").unwrap();
+    for buf_len in pos..input.len() {
+        let mut buffer = vec![0u8; buf_len];
+        let mut reader = OneByteReader::new(input.bytes());
+        let mut writer = Vec::new();
+        let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
-    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+        let wb = rjiter.write_long_str(&mut writer);
+        wb.unwrap();
 
-    // Consume object start
-    assert_eq!(rjiter.next_object().unwrap(), Some("text"));
-    rjiter.feed();
-    assert_eq!(rjiter.peek().unwrap(), Peek::String);
-
-    // Consume the string value
-    let wb = rjiter.write_long_str(&mut writer);
-    wb.unwrap();
-
-    assert_eq!(writer, "nl\ntab\tu\u{0410}".as_bytes());
-}
-
-#[test]
-fn pass_through_long_string() {
-    let input = r#"{ "text": "very\" very\n very\u0410 long\t string\"" }"#;
-    let mut buffer = [0u8; 10]; // Small buffer to force multiple reads
-    let mut reader = Cursor::new(input.as_bytes());
-    let mut writer = Vec::new();
-
-    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
-
-    // Consume object start
-    assert_eq!(rjiter.next_object().unwrap(), Some("text"));
-    rjiter.feed();
-    assert_eq!(rjiter.peek().unwrap(), Peek::String);
-
-    // Consume the string value
-    let wb = rjiter.write_long_str(&mut writer);
-    wb.unwrap();
-
-    assert_eq!(
-        writer,
-        "very\" very\n very\u{0410} long\t string\"".as_bytes()
-    );
+        assert_eq!(
+            writer,
+            "I'm a very long string with escapes X\n\\\"\u{0410}".as_bytes()
+        );
+    }
 }
 
 #[test]
