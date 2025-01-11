@@ -263,7 +263,7 @@ impl<'rj> RJiter<'rj> {
         &mut self,
         parser: F,
         writer: &mut dyn Write,
-        write_completed: impl Fn(T, &mut dyn Write),
+        write_completed: impl Fn(T, &mut dyn Write) -> RJiterResult<()>,
         write_segment: impl Fn(&mut [u8], usize, &mut dyn Write) -> RJiterResult<()>,
     ) -> RJiterResult<()>
     where
@@ -273,7 +273,7 @@ impl<'rj> RJiter<'rj> {
         loop {
             let result = parser(&mut self.jiter);
             if let Ok(value) = result {
-                write_completed(value, writer);
+                write_completed(value, writer)?;
                 return Ok(());
             }
             let error = result.unwrap_err();
@@ -292,7 +292,7 @@ impl<'rj> RJiter<'rj> {
             }
 
             if escaping_bs_pos > 1 {
-                write_segment(self.buffer.buf, escaping_bs_pos, writer).unwrap();
+                write_segment(self.buffer.buf, escaping_bs_pos, writer)?;
                 self.buffer.shift_buffer(1, escaping_bs_pos);
             }
 
@@ -307,8 +307,9 @@ impl<'rj> RJiter<'rj> {
     #[allow(clippy::missing_errors_doc)]
     #[allow(clippy::missing_panics_doc)]
     pub fn write_long_bytes(&mut self, writer: &mut dyn Write) -> RJiterResult<()> {
-        fn write_completed(bytes: &[u8], writer: &mut dyn Write) {
-            writer.write_all(bytes).unwrap();
+        fn write_completed(bytes: &[u8], writer: &mut dyn Write) -> RJiterResult<()> {
+            writer.write_all(bytes)?;
+            Ok(())
         }
         fn write_segment(
             bytes: &mut [u8],
@@ -327,8 +328,9 @@ impl<'rj> RJiter<'rj> {
     #[allow(clippy::missing_errors_doc)]
     #[allow(clippy::missing_panics_doc)]
     pub fn write_long_str(&mut self, writer: &mut dyn Write) -> RJiterResult<()> {
-        fn write_completed(string: &str, writer: &mut dyn Write) {
-            writer.write_all(string.as_bytes()).unwrap()
+        fn write_completed(string: &str, writer: &mut dyn Write) -> RJiterResult<()> {
+            writer.write_all(string.as_bytes())?;
+            Ok(())
         }
         fn write_segment(
             bytes: &mut [u8],
@@ -336,7 +338,7 @@ impl<'rj> RJiter<'rj> {
             writer: &mut dyn Write,
         ) -> RJiterResult<()> {
             bytes[escaping_bs_pos] = b'"';
-            let sub_jiter_buf = &bytes[..escaping_bs_pos + 1];
+            let sub_jiter_buf = &bytes[..=escaping_bs_pos];
             let sub_jiter_buf = unsafe { std::mem::transmute::<&[u8], &[u8]>(sub_jiter_buf) };
             let mut sub_jiter = Jiter::new(sub_jiter_buf);
             let sub_result = sub_jiter.known_str();
@@ -344,11 +346,11 @@ impl<'rj> RJiter<'rj> {
 
             match sub_result {
                 Ok(string) => {
-                    writer.write_all(string.as_bytes()).unwrap();
-                    return Ok(());
+                    writer.write_all(string.as_bytes())?;
+                    Ok(())
                 }
                 Err(e) => {
-                    return Err(RJiterError::JiterError(e));
+                    Err(RJiterError::JiterError(e))
                 }
             }
         }
