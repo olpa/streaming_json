@@ -241,36 +241,6 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     #[allow(clippy::missing_panics_doc)]
-    fn write_long(&mut self, is_string: bool, writer: &mut dyn Write) -> JiterResult<()> {
-        loop {
-            self.on_before_call_jiter();
-            let result = if is_string {
-                let result = self.jiter.known_str();
-                if let Ok(chunk) = result {
-                    Ok(chunk.as_bytes())
-                } else {
-                    Err(result.unwrap_err())
-                }
-            } else {
-                self.jiter.known_bytes()
-            };
-            if let Ok(bytes) = result {
-                writer.write_all(bytes).unwrap();
-                if self.jiter.current_index() <= self.buffer.n_bytes {
-                    return Ok(());
-                }
-                self.on_before_call_jiter();
-                if !self.feed_inner(true) {
-                    return Ok(());
-                }
-            } else {
-                return Err(result.unwrap_err());
-            }
-        }
-    }
-
-    #[allow(clippy::missing_errors_doc)]
-    #[allow(clippy::missing_panics_doc)]
     pub fn write_long_bytes(&mut self, writer: &mut dyn Write) -> JiterResult<()> {
         loop {
             let start_pos = self.jiter.current_index();
@@ -311,8 +281,57 @@ impl<'rj> RJiter<'rj> {
     }
 
     #[allow(clippy::missing_errors_doc)]
+    #[allow(clippy::missing_panics_doc)]
     pub fn write_long_str(&mut self, writer: &mut dyn Write) -> JiterResult<()> {
-        self.write_long(true, writer)
+        loop {
+            let result = self.jiter.known_str();
+            if let Ok(string) = result {
+                writer.write_all(string.as_bytes()).unwrap();
+                return Ok(());
+            }
+            let error = result.unwrap_err();
+            if error.error_type != JiterErrorType::JsonError(JsonErrorType::EofWhileParsingString) {
+                return Err(error);
+            }
+
+            let mut escaping_bs_pos: usize = self.buffer.n_bytes;
+            let mut i: usize = 1; // skip the quote character
+            while i < self.buffer.n_bytes {
+                if self.buffer.buf[i] == b'\\' {
+                    escaping_bs_pos = i;
+                    i += 1;
+                }
+                i += 1;
+            }
+
+            // position 1 is the beginning of the string
+            if escaping_bs_pos > 1 {
+                self.buffer.buf[escaping_bs_pos] = b'"';
+                let sub_jiter_buf = &self.buffer.buf[..escaping_bs_pos + 1];
+                let sub_jiter_buf =
+                    unsafe { std::mem::transmute::<&[u8], &'rj [u8]>(sub_jiter_buf) };
+                let mut sub_jiter = Jiter::new(sub_jiter_buf);
+                let sub_result = sub_jiter.known_str();
+                self.buffer.buf[escaping_bs_pos] = b'\\';
+
+                match sub_result {
+                    Ok(string) => {
+                        writer.write_all(string.as_bytes()).unwrap();
+                    }
+                    Err(e) => {
+                        return Err(e);
+                    }
+                }
+
+                self.buffer.shift_buffer(1, escaping_bs_pos);
+            }
+
+            self.buffer.buf[0] = b'"';
+            if self.buffer.read_more() == 0 {
+                return Err(error);
+            }
+            self.create_new_jiter();
+        }
     }
 
     fn on_before_call_jiter(&mut self) {

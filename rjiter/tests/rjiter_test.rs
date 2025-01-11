@@ -3,7 +3,6 @@ use std::sync::Arc;
 
 use jiter::JsonValue;
 use jiter::LazyIndexMap;
-use jiter::Peek;
 use rjiter::RJiter;
 
 mod one_byte_reader;
@@ -101,7 +100,10 @@ fn pass_through_long_string_with_escapes() {
         let wb = rjiter.write_long_str(&mut writer);
         wb.unwrap();
 
-        assert_eq!(writer, "I'm a very long string with escapes X\n\\\"\u{0410}".as_bytes());
+        assert_eq!(
+            writer,
+            "I'm a very long string with escapes X\n\\\"\u{0410}".as_bytes()
+        );
     }
 }
 
