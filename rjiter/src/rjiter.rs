@@ -291,12 +291,13 @@ impl<'rj> RJiter<'rj> {
                 i += 1;
             }
 
+            self.buffer.buf[0] = b'"';
+
             if escaping_bs_pos > 1 {
                 write_segment(self.buffer.buf, escaping_bs_pos, writer)?;
                 self.buffer.shift_buffer(1, escaping_bs_pos);
             }
 
-            self.buffer.buf[0] = b'"';
             if self.buffer.read_more() == 0 {
                 return Err(RJiterError::JiterError(error));
             }
@@ -349,9 +350,7 @@ impl<'rj> RJiter<'rj> {
                     writer.write_all(string.as_bytes())?;
                     Ok(())
                 }
-                Err(e) => {
-                    Err(RJiterError::JiterError(e))
-                }
+                Err(e) => Err(RJiterError::JiterError(e)),
             }
         }
         let parser = |j: &mut Jiter<'rj>| unsafe {
