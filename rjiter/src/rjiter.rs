@@ -115,7 +115,12 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn known_number(&mut self, peek: Peek) -> JiterResult<NumberAny> {
-        self.jiter.known_number(peek)
+        self.loop_until_success(
+            |j| j.known_number(peek),
+            None,
+            &[JsonErrorType::EofWhileParsingValue],
+            true,
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
