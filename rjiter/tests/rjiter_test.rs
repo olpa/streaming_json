@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use jiter::JsonValue;
 use jiter::LazyIndexMap;
+use rjiter::Peek;
 use rjiter::RJiter;
 
 mod one_byte_reader;
@@ -193,7 +194,7 @@ fn finish_yes_in_buffer() {
     let mut buffer = [0u8; 10];
     let mut reader = Cursor::new(input);
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
-    
+
     let result = rjiter.finish();
     assert!(result.is_ok());
 }
@@ -296,7 +297,7 @@ fn known_bool() {
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
     let peek = rjiter.peek().unwrap();
-    assert_eq!(peek, Peek::Bool);
+    assert_eq!(peek, Peek::False);
     let result = rjiter.known_bool(peek);
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), false);
@@ -322,8 +323,9 @@ fn known_number() {
     let mut buffer = [0u8; 10];
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
-    rjiter.finish();
-    let result = rjiter.known_number();
+    let peek = rjiter.peek().unwrap();
+    assert!(peek.is_num());
+    let result = rjiter.known_number(peek);
     assert!(result.is_ok());
 }
 
@@ -347,8 +349,9 @@ fn known_int() {
     let mut buffer = [0u8; 10];
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
-    rjiter.finish();
-    let result = rjiter.known_int();
+    let peek = rjiter.peek().unwrap();
+    assert!(peek.is_num());
+    let result = rjiter.known_int(peek);
     assert!(result.is_ok());
 }
 
@@ -373,8 +376,9 @@ fn known_float() {
     let mut buffer = [0u8; 10];
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
-    rjiter.finish();
-    let result = rjiter.known_float();
+    let peek = rjiter.peek().unwrap();
+    assert!(peek.is_num());
+    let result = rjiter.known_float(peek);
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), 3.14);
 }
@@ -413,7 +417,7 @@ fn known_str() {
     let mut buffer = [0u8; 10];
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
-    rjiter.finish();
+    let _ = rjiter.finish();
     let result = rjiter.known_str();
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), "hello");
@@ -440,7 +444,7 @@ fn known_bytes() {
     let mut buffer = [0u8; 10];
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
-    rjiter.finish();
+    let _ = rjiter.finish();
     let result = rjiter.known_bytes();
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), b"hello");
@@ -456,7 +460,10 @@ fn next_value() {
 
     let result = rjiter.next_value();
     assert!(result.is_ok());
-    assert_eq!(result.unwrap(), JsonValue::String("hello"));
+    assert_eq!(
+        result.unwrap(),
+        JsonValue::Str(std::borrow::Cow::Borrowed("hello"))
+    );
 }
 
 #[test]
@@ -467,10 +474,14 @@ fn known_value() {
     let mut buffer = [0u8; 10];
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
-    rjiter.finish();
-    let result = rjiter.known_value();
+    let peek = rjiter.peek().unwrap();
+    assert_eq!(peek, Peek::String);
+    let result = rjiter.known_value(peek);
     assert!(result.is_ok());
-    assert_eq!(result.unwrap(), JsonValue::String("hello"));
+    assert_eq!(
+        result.unwrap(),
+        JsonValue::Str(std::borrow::Cow::Borrowed("hello"))
+    );
 }
 
 #[test]
@@ -493,8 +504,9 @@ fn known_skip() {
     let mut buffer = [0u8; 10];
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
-    rjiter.finish();
-    let result = rjiter.known_skip();
+    let peek = rjiter.peek().unwrap();
+    assert_eq!(peek, Peek::String);
+    let result = rjiter.known_skip(peek);
     assert!(result.is_ok());
 }
 
@@ -508,7 +520,10 @@ fn next_value_owned() {
 
     let result = rjiter.next_value_owned();
     assert!(result.is_ok());
-    assert_eq!(result.unwrap(), JsonValue::String("hello".to_string()));
+    assert_eq!(
+        result.unwrap(),
+        JsonValue::Str(std::borrow::Cow::Borrowed("hello"))
+    );
 }
 
 #[test]
@@ -519,43 +534,47 @@ fn known_value_owned() {
     let mut buffer = [0u8; 10];
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
-    rjiter.finish();
-    let result = rjiter.known_value_owned();
+    let peek = rjiter.peek().unwrap();
+    assert_eq!(peek, Peek::String);
+    let result = rjiter.known_value_owned(peek);
     assert!(result.is_ok());
-    assert_eq!(result.unwrap(), JsonValue::String("hello".to_string()));
+    assert_eq!(
+        result.unwrap(),
+        JsonValue::Str(std::borrow::Cow::Borrowed("hello"))
+    );
 }
 
 #[test]
 fn next_array() {
     let lot_of_spaces = " ".repeat(32);
-    let input = format!(r#"{lot_of_spaces}[{lot_of_spaces}1{lot_of_spaces}, 2, 3]"#);
+    let input = format!(r#"{lot_of_spaces}[{lot_of_spaces}false{lot_of_spaces}, 2, 3]"#);
     let mut reader = OneByteReader::new(input.bytes());
     let mut buffer = [0u8; 10];
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
     let result = rjiter.next_array();
     assert!(result.is_ok());
-    assert_eq!(result.unwrap(), Some(Peek::Number));
+    assert_eq!(result.unwrap(), Some(Peek::False));
 }
 
 #[test]
 fn known_array() {
     let lot_of_spaces = " ".repeat(32);
-    let input = format!(r#"{lot_of_spaces}[{lot_of_spaces}1{lot_of_spaces}, 2, 3]"#);
+    let input = format!(r#"{lot_of_spaces}[{lot_of_spaces}false{lot_of_spaces}, 2, 3]"#);
     let mut reader = OneByteReader::new(input.bytes());
     let mut buffer = [0u8; 10];
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
-    rjiter.finish();
+    let _ = rjiter.finish();
     let result = rjiter.known_array();
     assert!(result.is_ok());
-    assert_eq!(result.unwrap(), Some(Peek::Number));
+    assert_eq!(result.unwrap(), Some(Peek::False));
 }
 
 #[test]
 fn array_step() {
     let lot_of_spaces = " ".repeat(32);
-    let input = format!(r#"{lot_of_spaces},{lot_of_spaces} 2{lot_of_spaces}, 3]"#);
+    let input = format!(r#"{lot_of_spaces},{lot_of_spaces} true{lot_of_spaces}, 3]"#);
     let mut reader = OneByteReader::new(input.bytes());
     let mut buffer = [0u8; 10];
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
@@ -564,7 +583,7 @@ fn array_step() {
     rjiter.next_number().unwrap();
     let result = rjiter.array_step();
     assert!(result.is_ok());
-    assert_eq!(result.unwrap(), Some(Peek::Number));
+    assert_eq!(result.unwrap(), Some(Peek::True));
 }
 
 #[test]
@@ -588,7 +607,7 @@ fn known_object() {
     let mut buffer = [0u8; 10];
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
-    rjiter.finish();
+    let _ = rjiter.finish();
     let result = rjiter.known_object();
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some("key"));
@@ -604,7 +623,7 @@ fn next_object_bytes() {
 
     let result = rjiter.next_object_bytes();
     assert!(result.is_ok());
-    assert_eq!(result.unwrap(), Some(b"key"));
+    assert_eq!(result.unwrap(), Some(&b"key"[..]));
 }
 
 #[test]
