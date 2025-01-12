@@ -277,9 +277,8 @@ fn known_number() {
     let mut buffer = [0u8; 10];
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
-    let peek = rjiter.peek().unwrap();
-    assert_eq!(peek, Peek::Number);
-    let result = rjiter.known_number(peek);
+    rjiter.finish();
+    let result = rjiter.known_number();
     assert!(result.is_ok());
 }
 
@@ -303,9 +302,8 @@ fn known_int() {
     let mut buffer = [0u8; 10];
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
-    let peek = rjiter.peek().unwrap();
-    assert_eq!(peek, Peek::Number);
-    let result = rjiter.known_int(peek);
+    rjiter.finish();
+    let result = rjiter.known_int();
     assert!(result.is_ok());
 }
 
@@ -330,9 +328,8 @@ fn known_float() {
     let mut buffer = [0u8; 10];
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
-    let peek = rjiter.peek().unwrap();
-    assert_eq!(peek, Peek::Number);
-    let result = rjiter.known_float(peek);
+    rjiter.finish();
+    let result = rjiter.known_float();
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), 3.14);
 }
@@ -371,8 +368,7 @@ fn known_str() {
     let mut buffer = [0u8; 10];
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
-    let peek = rjiter.peek().unwrap();
-    assert_eq!(peek, Peek::String);
+    rjiter.finish();
     let result = rjiter.known_str();
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), "hello");
@@ -399,8 +395,7 @@ fn known_bytes() {
     let mut buffer = [0u8; 10];
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
-    let peek = rjiter.peek().unwrap();
-    assert_eq!(peek, Peek::String);
+    rjiter.finish();
     let result = rjiter.known_bytes();
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), b"hello");
@@ -427,9 +422,8 @@ fn known_value() {
     let mut buffer = [0u8; 10];
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
-    let peek = rjiter.peek().unwrap();
-    assert_eq!(peek, Peek::String);
-    let result = rjiter.known_value(peek);
+    rjiter.finish();
+    let result = rjiter.known_value();
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), JsonValue::String("hello"));
 }
@@ -454,9 +448,8 @@ fn known_skip() {
     let mut buffer = [0u8; 10];
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
-    let peek = rjiter.peek().unwrap();
-    assert_eq!(peek, Peek::String);
-    let result = rjiter.known_skip(peek);
+    rjiter.finish();
+    let result = rjiter.known_skip();
     assert!(result.is_ok());
 }
 
@@ -481,9 +474,8 @@ fn known_value_owned() {
     let mut buffer = [0u8; 10];
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
-    let peek = rjiter.peek().unwrap();
-    assert_eq!(peek, Peek::String);
-    let result = rjiter.known_value_owned(peek);
+    rjiter.finish();
+    let result = rjiter.known_value_owned();
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), JsonValue::String("hello".to_string()));
 }
@@ -491,7 +483,7 @@ fn known_value_owned() {
 #[test]
 fn next_array() {
     let lot_of_spaces = " ".repeat(32);
-    let input = format!(r#"{lot_of_spaces}[1, 2, 3]"#);
+    let input = format!(r#"{lot_of_spaces}[{lot_of_spaces}1{lot_of_spaces}, 2, 3]"#);
     let mut reader = OneByteReader::new(input.bytes());
     let mut buffer = [0u8; 10];
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
@@ -504,13 +496,12 @@ fn next_array() {
 #[test]
 fn known_array() {
     let lot_of_spaces = " ".repeat(32);
-    let input = format!(r#"{lot_of_spaces}[1, 2, 3]"#);
+    let input = format!(r#"{lot_of_spaces}[{lot_of_spaces}1{lot_of_spaces}, 2, 3]"#);
     let mut reader = OneByteReader::new(input.bytes());
     let mut buffer = [0u8; 10];
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
-    let peek = rjiter.peek().unwrap();
-    assert_eq!(peek, Peek::Array);
+    rjiter.finish();
     let result = rjiter.known_array();
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some(Peek::Number));
@@ -519,7 +510,7 @@ fn known_array() {
 #[test]
 fn array_step() {
     let lot_of_spaces = " ".repeat(32);
-    let input = format!(r#"{lot_of_spaces}[1, 2, 3]"#);
+    let input = format!(r#"{lot_of_spaces},{lot_of_spaces} 2{lot_of_spaces}, 3]"#);
     let mut reader = OneByteReader::new(input.bytes());
     let mut buffer = [0u8; 10];
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
@@ -534,7 +525,7 @@ fn array_step() {
 #[test]
 fn next_object() {
     let lot_of_spaces = " ".repeat(32);
-    let input = format!(r#"{lot_of_spaces}{{"key": "value"}}"#);
+    let input = format!(r#"{lot_of_spaces}{{{lot_of_spaces}"key": "value"}}"#);
     let mut reader = OneByteReader::new(input.bytes());
     let mut buffer = [0u8; 10];
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
@@ -547,13 +538,12 @@ fn next_object() {
 #[test]
 fn known_object() {
     let lot_of_spaces = " ".repeat(32);
-    let input = format!(r#"{lot_of_spaces}{{"key": "value"}}"#);
+    let input = format!(r#"{lot_of_spaces}{{{lot_of_spaces}"key": "value"}}"#);
     let mut reader = OneByteReader::new(input.bytes());
     let mut buffer = [0u8; 10];
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
-    let peek = rjiter.peek().unwrap();
-    assert_eq!(peek, Peek::Object);
+    rjiter.finish();
     let result = rjiter.known_object();
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some("key"));
@@ -562,7 +552,7 @@ fn known_object() {
 #[test]
 fn next_object_bytes() {
     let lot_of_spaces = " ".repeat(32);
-    let input = format!(r#"{lot_of_spaces}{{"key": "value"}}"#);
+    let input = format!(r#"{lot_of_spaces}{{{lot_of_spaces}"key": "value"}}"#);
     let mut reader = OneByteReader::new(input.bytes());
     let mut buffer = [0u8; 10];
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
@@ -575,7 +565,7 @@ fn next_object_bytes() {
 #[test]
 fn next_key_bytes() {
     let lot_of_spaces = " ".repeat(32);
-    let input = format!(r#"{lot_of_spaces}{{"key": "value"}}"#);
+    let input = format!(r#"{lot_of_spaces}{{{lot_of_spaces}"key": "value"}}"#);
     let mut reader = OneByteReader::new(input.bytes());
     let mut buffer = [0u8; 10];
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
@@ -584,17 +574,4 @@ fn next_key_bytes() {
     let result = rjiter.next_key_bytes();
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), None);
-}
-
-#[test]
-fn finish() {
-    let lot_of_spaces = " ".repeat(32);
-    let input = format!(r#"{lot_of_spaces}"hello"{lot_of_spaces}"#);
-    let mut reader = OneByteReader::new(input.bytes());
-    let mut buffer = [0u8; 10];
-    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
-
-    rjiter.next_str().unwrap();
-    let result = rjiter.finish();
-    assert!(result.is_ok());
 }
