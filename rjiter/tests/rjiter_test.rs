@@ -189,7 +189,7 @@ fn next_str_with_spaces_one_byte_reader() {
 }
 
 #[test]
-fn finish_yes_in_buffer() {
+fn finish_yes_when_in_buffer() {
     let input = "  \n\t  ".as_bytes();
     let mut buffer = [0u8; 10];
     let mut reader = Cursor::new(input);
@@ -200,7 +200,7 @@ fn finish_yes_in_buffer() {
 }
 
 #[test]
-fn finish_no_in_buffer() {
+fn finish_no_when_in_buffer() {
     let input = "    x".as_bytes();
     let mut buffer = [0u8; 10];
     let mut reader = Cursor::new(input);
@@ -211,7 +211,7 @@ fn finish_no_in_buffer() {
 }
 
 #[test]
-fn finish_yes_need_feed() {
+fn finish_yes_when_need_feed() {
     let input = " ".repeat(32);
     let mut buffer = [0u8; 10];
     let mut reader = OneByteReader::new(input.bytes());
@@ -222,7 +222,7 @@ fn finish_yes_need_feed() {
 }
 
 #[test]
-fn finish_no_need_feed() {
+fn finish_no_when_need_feed() {
     let lot_of_spaces = " ".repeat(32);
     let input = format!("{lot_of_spaces}42");
     let mut buffer = [0u8; 10];

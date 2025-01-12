@@ -251,10 +251,18 @@ impl<'rj> RJiter<'rj> {
         self.jiter.next_value_owned()
     }
 
+    // ----------------
+
     #[allow(clippy::missing_errors_doc)]
     pub fn finish(&mut self) -> JiterResult<()> {
-        self.maybe_feed();
-        self.jiter.finish()
+        loop {
+            self.jiter.finish()?;
+            if self.buffer.read_more() == 0 {
+                return Ok(());
+            }
+            self.buffer.shift_buffer(0, self.jiter.current_index());
+            self.create_new_jiter();
+        }
     }
 
     // ----------------
