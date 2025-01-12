@@ -313,6 +313,7 @@ fn next_number() {
 
     let result = rjiter.next_number();
     assert!(result.is_ok());
+    assert_eq!(result.unwrap(), jiter::NumberAny::Float(123.45));
 }
 
 #[test]
@@ -327,6 +328,7 @@ fn known_number() {
     assert!(peek.is_num());
     let result = rjiter.known_number(peek);
     assert!(result.is_ok());
+    assert_eq!(result.unwrap(), jiter::NumberAny::Float(123.45));
 }
 
 #[test]
@@ -339,6 +341,7 @@ fn next_int() {
 
     let result = rjiter.next_int();
     assert!(result.is_ok());
+    assert_eq!(result.unwrap(), jiter::NumberInt::Int(42));
 }
 
 #[test]
@@ -353,6 +356,7 @@ fn known_int() {
     assert!(peek.is_num());
     let result = rjiter.known_int(peek);
     assert!(result.is_ok());
+    assert_eq!(result.unwrap(), jiter::NumberInt::Int(42));
 }
 
 #[test]
