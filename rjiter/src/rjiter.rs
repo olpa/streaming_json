@@ -75,7 +75,7 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn known_bool(&mut self, peek: Peek) -> JiterResult<bool> {
-        self.jiter.known_bool(peek)
+        self.loop_until_success(|j| j.known_bool(peek), None, &[JsonErrorType::EofWhileParsingValue])
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -142,8 +142,7 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_bool(&mut self) -> JiterResult<bool> {
-        self.maybe_feed();
-        self.jiter.next_bool()
+        self.loop_until_success(|j| j.next_bool(), None, &[JsonErrorType::EofWhileParsingValue])
     }
 
     #[allow(clippy::missing_errors_doc)]
