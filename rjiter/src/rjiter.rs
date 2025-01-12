@@ -65,8 +65,7 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn peek(&mut self) -> JiterResult<Peek> {
-        self.maybe_feed();
-        self.jiter.peek()
+        self.loop_until_success(|j| j.peek(), None, &[JsonErrorType::EofWhileParsingValue])
     }
 
     #[allow(clippy::missing_errors_doc)]
