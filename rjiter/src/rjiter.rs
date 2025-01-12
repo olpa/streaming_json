@@ -5,8 +5,6 @@ use crate::buffer::Buffer;
 use jiter::{
     Jiter, JiterError, JiterErrorType, JiterResult, JsonErrorType, JsonValue, NumberAny, NumberInt,
 };
-use jiter::JiterErrorType::JsonError;
-use jiter::JsonErrorType::EofWhileParsingValue;
 
 pub type Peek = jiter::Peek;
 
@@ -67,7 +65,12 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn peek(&mut self) -> JiterResult<Peek> {
-        self.loop_until_success(|j| j.peek(), None, &[JsonErrorType::EofWhileParsingValue], false)
+        self.loop_until_success(
+            |j| j.peek(),
+            None,
+            &[JsonErrorType::EofWhileParsingValue],
+            false,
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -260,12 +263,7 @@ impl<'rj> RJiter<'rj> {
         let f = |j: &mut Jiter<'rj>| unsafe {
             std::mem::transmute::<JiterResult<&str>, JiterResult<&'rj str>>(j.next_str())
         };
-        self.loop_until_success(
-            f,
-            None,
-            &[JsonErrorType::EofWhileParsingString],
-            true,
-        )
+        self.loop_until_success(f, None, &[JsonErrorType::EofWhileParsingString], true)
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -516,30 +514,32 @@ impl<'rj> RJiter<'rj> {
         T: std::fmt::Debug,
     {
         fn downgrade_ok_if_eof<T>(
-            result: JiterResult<T>,
+            result: &JiterResult<T>,
             should_eager_consume: bool,
             jiter: &Jiter,
             n_bytes: usize,
-        ) -> JiterResult<T> {
+        ) -> bool {
             if !result.is_ok() {
-                return result;
+                return false;
             }
             if !should_eager_consume {
-                return result;
+                return true;
             }
             if jiter.current_index() < n_bytes {
-                return result;
+                return true;
             }
-            Err(JiterError {
-                error_type: JsonError(EofWhileParsingValue),
-                index: jiter.current_index(),
-            })
+            false
         }
         let jiter_pos = self.jiter.current_index();
 
         let result = f(&mut self.jiter);
-        let result = downgrade_ok_if_eof(result, should_eager_consume, &self.jiter, self.buffer.n_bytes);
-        if result.is_ok() {
+        let is_ok = downgrade_ok_if_eof(
+            &result,
+            should_eager_consume,
+            &self.jiter,
+            self.buffer.n_bytes,
+        );
+        if is_ok {
             return result;
         }
 
@@ -547,22 +547,38 @@ impl<'rj> RJiter<'rj> {
 
         loop {
             let result = f(&mut self.jiter);
-            let result = downgrade_ok_if_eof(result, should_eager_consume, &self.jiter, self.buffer.n_bytes);
-            if result.is_ok() {
-                return result;
-            }
-            let error = result.unwrap_err();
-            if let JiterError {
-                error_type: JiterErrorType::JsonError(error_type),
-                ..
-            } = &error
-            {
-                if retry_error_types.contains(error_type) && self.buffer.read_more() > 0 {
-                    self.create_new_jiter();
-                    continue;
+
+            let result = if result.is_ok() {
+                let really_ok = downgrade_ok_if_eof(
+                    &result,
+                    should_eager_consume,
+                    &self.jiter,
+                    self.buffer.n_bytes,
+                );
+                if really_ok {
+                    return result;
                 }
+                result
+            } else {
+                let error = result.unwrap_err();
+                if let JiterError {
+                    error_type: JiterErrorType::JsonError(error_type),
+                    ..
+                } = &error
+                {
+                    if !retry_error_types.contains(error_type) {
+                        return Err(error);
+                    }
+                }
+                Err(error)
+            };
+
+            if self.buffer.read_more() > 0 {
+                self.create_new_jiter();
+                continue;
             }
-            return Err(error);
+
+            return result;
         }
     }
 }
