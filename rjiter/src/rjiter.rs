@@ -95,7 +95,7 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn known_null(&mut self) -> JiterResult<()> {
-        self.jiter.known_null()
+        self.loop_until_success(|j| j.known_null(), None, &[JsonErrorType::EofWhileParsingValue])
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -196,8 +196,7 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_null(&mut self) -> JiterResult<()> {
-        self.maybe_feed();
-        self.jiter.next_null()
+        self.loop_until_success(|j| j.next_null(), None, &[JsonErrorType::EofWhileParsingValue])
     }
 
     #[allow(clippy::missing_errors_doc)]
