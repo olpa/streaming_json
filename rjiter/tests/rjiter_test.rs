@@ -304,7 +304,7 @@ fn known_bool() {
 }
 
 #[test]
-fn next_number() {
+fn next_number1() {
     let lot_of_spaces = " ".repeat(32);
     let input = format!(r#"{lot_of_spaces}123.45"#);
     let mut reader = OneByteReader::new(input.bytes());
@@ -312,6 +312,7 @@ fn next_number() {
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
     let result = rjiter.next_number();
+    println!("next_number1 result: {:?}", result);
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), jiter::NumberAny::Float(123.45));
 }

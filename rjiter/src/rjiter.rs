@@ -5,6 +5,8 @@ use crate::buffer::Buffer;
 use jiter::{
     Jiter, JiterError, JiterErrorType, JiterResult, JsonErrorType, JsonValue, NumberAny, NumberInt,
 };
+use jiter::JiterErrorType::JsonError;
+use jiter::JsonErrorType::EofWhileParsingValue;
 
 pub type Peek = jiter::Peek;
 
@@ -65,7 +67,7 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn peek(&mut self) -> JiterResult<Peek> {
-        self.loop_until_success(|j| j.peek(), None, &[JsonErrorType::EofWhileParsingValue])
+        self.loop_until_success(|j| j.peek(), None, &[JsonErrorType::EofWhileParsingValue], false)
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -75,7 +77,12 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn known_bool(&mut self, peek: Peek) -> JiterResult<bool> {
-        self.loop_until_success(|j| j.known_bool(peek), None, &[JsonErrorType::EofWhileParsingValue])
+        self.loop_until_success(
+            |j| j.known_bool(peek),
+            None,
+            &[JsonErrorType::EofWhileParsingValue],
+            false,
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -95,7 +102,12 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn known_null(&mut self) -> JiterResult<()> {
-        self.loop_until_success(|j| j.known_null(), None, &[JsonErrorType::EofWhileParsingValue])
+        self.loop_until_success(
+            |j| j.known_null(),
+            None,
+            &[JsonErrorType::EofWhileParsingValue],
+            false,
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -142,7 +154,12 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_bool(&mut self) -> JiterResult<bool> {
-        self.loop_until_success(|j| j.next_bool(), None, &[JsonErrorType::EofWhileParsingValue])
+        self.loop_until_success(
+            |j| j.next_bool(),
+            None,
+            &[JsonErrorType::EofWhileParsingValue],
+            false,
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -184,6 +201,7 @@ impl<'rj> RJiter<'rj> {
                 JsonErrorType::ExpectedObjectCommaOrEnd,
                 JsonErrorType::EofWhileParsingObject,
             ],
+            false,
         )
     }
 
@@ -195,13 +213,22 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_null(&mut self) -> JiterResult<()> {
-        self.loop_until_success(|j| j.next_null(), None, &[JsonErrorType::EofWhileParsingValue])
+        self.loop_until_success(
+            |j| j.next_null(),
+            None,
+            &[JsonErrorType::EofWhileParsingValue],
+            false,
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_number(&mut self) -> JiterResult<NumberAny> {
-        self.maybe_feed();
-        self.jiter.next_number()
+        self.loop_until_success(
+            |j| j.next_number(),
+            None,
+            &[JsonErrorType::EofWhileParsingValue],
+            true,
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -233,7 +260,12 @@ impl<'rj> RJiter<'rj> {
         let f = |j: &mut Jiter<'rj>| unsafe {
             std::mem::transmute::<JiterResult<&str>, JiterResult<&'rj str>>(j.next_str())
         };
-        self.loop_until_success(f, None, &[JsonErrorType::EofWhileParsingString])
+        self.loop_until_success(
+            f,
+            None,
+            &[JsonErrorType::EofWhileParsingString],
+            true,
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -377,9 +409,8 @@ impl<'rj> RJiter<'rj> {
     // If the transparent is found after skipping spaces, skip also spaces after the transparent token
     // If any space is skipped, feed the buffer content to the position 0
     // This function should be called only in a retry handler, otherwise it worsens performance
-    fn skip_spaces_feeding(&mut self, transparent_token: Option<u8>) -> bool {
+    fn skip_spaces_feeding(&mut self, jiter_pos: usize, transparent_token: Option<u8>) -> bool {
         let to_pos = 0;
-        let jiter_pos = self.jiter.current_index();
         let n_shifted_before = self.buffer.n_shifted_out;
 
         if jiter_pos > to_pos {
@@ -478,19 +509,45 @@ impl<'rj> RJiter<'rj> {
         mut f: F,
         skip_spaces_token: Option<u8>,
         retry_error_types: &[JsonErrorType],
+        should_eager_consume: bool,
     ) -> JiterResult<T>
     where
         F: FnMut(&mut Jiter<'rj>) -> JiterResult<T>,
         T: std::fmt::Debug,
     {
+        fn downgrade_ok_if_eof<T>(
+            result: JiterResult<T>,
+            should_eager_consume: bool,
+            jiter: &Jiter,
+            n_bytes: usize,
+        ) -> JiterResult<T> {
+            if !result.is_ok() {
+                return result;
+            }
+            if !should_eager_consume {
+                return result;
+            }
+            if jiter.current_index() < n_bytes {
+                return result;
+            }
+            Err(JiterError {
+                error_type: JsonError(EofWhileParsingValue),
+                index: jiter.current_index(),
+            })
+        }
+        let jiter_pos = self.jiter.current_index();
+
         let result = f(&mut self.jiter);
+        let result = downgrade_ok_if_eof(result, should_eager_consume, &self.jiter, self.buffer.n_bytes);
         if result.is_ok() {
             return result;
         }
 
-        self.skip_spaces_feeding(skip_spaces_token);
+        self.skip_spaces_feeding(jiter_pos, skip_spaces_token);
+
         loop {
             let result = f(&mut self.jiter);
+            let result = downgrade_ok_if_eof(result, should_eager_consume, &self.jiter, self.buffer.n_bytes);
             if result.is_ok() {
                 return result;
             }
