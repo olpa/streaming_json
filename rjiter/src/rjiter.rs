@@ -66,7 +66,7 @@ impl<'rj> RJiter<'rj> {
     #[allow(clippy::missing_errors_doc)]
     pub fn peek(&mut self) -> JiterResult<Peek> {
         self.loop_until_success(
-            |j| j.peek(),
+            jiter::Jiter::peek,
             None,
             &[JsonErrorType::EofWhileParsingValue],
             false,
@@ -76,11 +76,9 @@ impl<'rj> RJiter<'rj> {
     #[allow(clippy::missing_errors_doc)]
     pub fn known_array(&mut self) -> JiterResult<Option<Peek>> {
         self.loop_until_success(
-            |j| j.known_array(),
+            jiter::Jiter::known_array,
             Some(b'['),
-            &[
-                JsonErrorType::EofWhileParsingList,
-            ],
+            &[JsonErrorType::EofWhileParsingList],
             false,
         )
     }
@@ -126,7 +124,7 @@ impl<'rj> RJiter<'rj> {
     #[allow(clippy::missing_errors_doc)]
     pub fn known_null(&mut self) -> JiterResult<()> {
         self.loop_until_success(
-            |j| j.known_null(),
+            jiter::Jiter::known_null,
             None,
             &[JsonErrorType::EofWhileParsingValue],
             false,
@@ -214,11 +212,9 @@ impl<'rj> RJiter<'rj> {
     #[allow(clippy::missing_errors_doc)]
     pub fn next_array(&mut self) -> JiterResult<Option<Peek>> {
         self.loop_until_success(
-            |j| j.next_array(),
+            jiter::Jiter::next_array,
             Some(b'['),
-            &[
-                JsonErrorType::EofWhileParsingList,
-            ],
+            &[JsonErrorType::EofWhileParsingList],
             false,
         )
     }
@@ -226,11 +222,9 @@ impl<'rj> RJiter<'rj> {
     #[allow(clippy::missing_errors_doc)]
     pub fn array_step(&mut self) -> JiterResult<Option<Peek>> {
         self.loop_until_success(
-            |j| j.array_step(),
+            jiter::Jiter::array_step,
             Some(b','),
-            &[
-                JsonErrorType::EofWhileParsingList,
-            ],
+            &[JsonErrorType::EofWhileParsingList],
             false,
         )
     }
@@ -238,7 +232,7 @@ impl<'rj> RJiter<'rj> {
     #[allow(clippy::missing_errors_doc)]
     pub fn next_bool(&mut self) -> JiterResult<bool> {
         self.loop_until_success(
-            |j| j.next_bool(),
+            jiter::Jiter::next_bool,
             None,
             &[JsonErrorType::EofWhileParsingValue],
             false,
@@ -256,7 +250,7 @@ impl<'rj> RJiter<'rj> {
     #[allow(clippy::missing_errors_doc)]
     pub fn next_float(&mut self) -> JiterResult<f64> {
         self.loop_until_success(
-            |j| j.next_float(),
+            jiter::Jiter::next_float,
             None,
             &[JsonErrorType::EofWhileParsingValue],
             true,
@@ -266,7 +260,7 @@ impl<'rj> RJiter<'rj> {
     #[allow(clippy::missing_errors_doc)]
     pub fn next_int(&mut self) -> JiterResult<NumberInt> {
         self.loop_until_success(
-            |j| j.next_int(),
+            jiter::Jiter::next_int,
             None,
             &[JsonErrorType::EofWhileParsingValue],
             true,
@@ -320,7 +314,7 @@ impl<'rj> RJiter<'rj> {
     #[allow(clippy::missing_errors_doc)]
     pub fn next_null(&mut self) -> JiterResult<()> {
         self.loop_until_success(
-            |j| j.next_null(),
+            jiter::Jiter::next_null,
             None,
             &[JsonErrorType::EofWhileParsingValue],
             false,
@@ -330,7 +324,7 @@ impl<'rj> RJiter<'rj> {
     #[allow(clippy::missing_errors_doc)]
     pub fn next_number(&mut self) -> JiterResult<NumberAny> {
         self.loop_until_success(
-            |j| j.next_number(),
+            jiter::Jiter::next_number,
             None,
             &[JsonErrorType::EofWhileParsingValue],
             true,
@@ -384,7 +378,7 @@ impl<'rj> RJiter<'rj> {
     #[allow(clippy::missing_errors_doc)]
     pub fn next_skip(&mut self) -> JiterResult<()> {
         self.loop_until_success(
-            |j| j.next_skip(),
+            jiter::Jiter::next_skip,
             None,
             &[
                 JsonErrorType::EofWhileParsingString,
@@ -406,7 +400,7 @@ impl<'rj> RJiter<'rj> {
     #[allow(clippy::missing_errors_doc)]
     pub fn next_value(&mut self) -> JiterResult<JsonValue<'rj>> {
         self.loop_until_success(
-            |j| j.next_value(),
+            jiter::Jiter::next_value,
             None,
             &[
                 JsonErrorType::EofWhileParsingString,
@@ -420,7 +414,7 @@ impl<'rj> RJiter<'rj> {
     #[allow(clippy::missing_errors_doc)]
     pub fn next_value_owned(&mut self) -> JiterResult<JsonValue<'static>> {
         self.loop_until_success(
-            |j| j.next_value_owned(),
+            jiter::Jiter::next_value_owned,
             None,
             &[
                 JsonErrorType::EofWhileParsingString,

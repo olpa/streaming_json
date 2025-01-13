@@ -18,7 +18,6 @@ fn sanity_check() {
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
     let result = rjiter.next_value();
-    println!("sanity_check result: {:?}", result);
     assert!(result.is_ok());
 
     let empty_object = JsonValue::Object(Arc::new(LazyIndexMap::new()));
@@ -137,7 +136,6 @@ fn skip_spaces_for_next_key() {
 
     // act
     let result = rjiter.next_key();
-    println!("skip_spaces_for_next_key result: {:?}", result);
 
     // assert
     assert!(result.is_ok());
@@ -158,7 +156,6 @@ fn next_key_from_one_byte_reader() {
 
     // act
     let result = rjiter.next_key();
-    println!("next_key_from_one_byte_reader result: {:?}", result);
 
     // assert
     assert!(result.is_ok());
@@ -166,7 +163,6 @@ fn next_key_from_one_byte_reader() {
 
     // bonus assert: key value
     let result = rjiter.next_str();
-    println!("next_key_from_one_byte_reader result 2: {:?}", result);
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), "bar");
 }
@@ -181,7 +177,6 @@ fn next_str_with_spaces_one_byte_reader() {
 
     // act
     let result = rjiter.next_str();
-    println!("next_str_with_spaces_one_byte_reader result: {:?}", result);
 
     // assert
     assert!(result.is_ok());
@@ -312,7 +307,6 @@ fn next_number1() {
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
     let result = rjiter.next_number();
-    println!("next_number1 result: {:?}", result);
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), jiter::NumberAny::Float(123.45));
 }
@@ -503,7 +497,10 @@ fn next_skip() {
     // To check that skipped, read the next value
     let result = rjiter.next_number();
     assert!(result.is_ok());
-    assert_eq!(result.unwrap(), jiter::NumberAny::Int(jiter::NumberInt::Int(42)));
+    assert_eq!(
+        result.unwrap(),
+        jiter::NumberAny::Int(jiter::NumberInt::Int(42))
+    );
 }
 
 #[test]
@@ -522,7 +519,10 @@ fn known_skip() {
     // To check that skipped, read the next value
     let result = rjiter.next_number();
     assert!(result.is_ok());
-    assert_eq!(result.unwrap(), jiter::NumberAny::Int(jiter::NumberInt::Int(42)));
+    assert_eq!(
+        result.unwrap(),
+        jiter::NumberAny::Int(jiter::NumberInt::Int(42))
+    );
 }
 
 #[test]
