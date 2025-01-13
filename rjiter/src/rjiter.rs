@@ -95,12 +95,22 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn known_float(&mut self, peek: Peek) -> JiterResult<f64> {
-        self.jiter.known_float(peek)
+        self.loop_until_success(
+            |j| j.known_float(peek),
+            None,
+            &[JsonErrorType::EofWhileParsingValue],
+            true,
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn known_int(&mut self, peek: Peek) -> JiterResult<NumberInt> {
-        self.jiter.known_int(peek)
+        self.loop_until_success(
+            |j| j.known_int(peek),
+            None,
+            &[JsonErrorType::EofWhileParsingValue],
+            true,
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -178,14 +188,22 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_float(&mut self) -> JiterResult<f64> {
-        self.maybe_feed();
-        self.jiter.next_float()
+        self.loop_until_success(
+            |j| j.next_float(),
+            None,
+            &[JsonErrorType::EofWhileParsingValue],
+            true,
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_int(&mut self) -> JiterResult<NumberInt> {
-        self.maybe_feed();
-        self.jiter.next_int()
+        self.loop_until_success(
+            |j| j.next_int(),
+            None,
+            &[JsonErrorType::EofWhileParsingValue],
+            true,
+        )
     }
 
     /// See `Jiter::next_key`
@@ -241,8 +259,10 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_number_bytes(&mut self) -> JiterResult<&[u8]> {
-        self.maybe_feed();
-        self.jiter.next_number_bytes()
+        let f = |j: &mut Jiter<'rj>| unsafe {
+            std::mem::transmute::<JiterResult<&[u8]>, JiterResult<&'rj [u8]>>(j.next_number_bytes())
+        };
+        self.loop_until_success(f, None, &[JsonErrorType::EofWhileParsingValue], true)
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -268,7 +288,7 @@ impl<'rj> RJiter<'rj> {
         let f = |j: &mut Jiter<'rj>| unsafe {
             std::mem::transmute::<JiterResult<&str>, JiterResult<&'rj str>>(j.next_str())
         };
-        self.loop_until_success(f, None, &[JsonErrorType::EofWhileParsingString], true)
+        self.loop_until_success(f, None, &[JsonErrorType::EofWhileParsingString], false)
     }
 
     #[allow(clippy::missing_errors_doc)]
