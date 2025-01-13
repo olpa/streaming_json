@@ -156,12 +156,30 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn known_value(&mut self, peek: Peek) -> JiterResult<JsonValue<'rj>> {
-        self.jiter.known_value(peek)
+        self.loop_until_success(
+            |j| j.known_value(peek),
+            None,
+            &[
+                JsonErrorType::EofWhileParsingString,
+                JsonErrorType::ExpectedObjectCommaOrEnd,
+                JsonErrorType::EofWhileParsingObject,
+            ],
+            true,
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn known_value_owned(&mut self, peek: Peek) -> JiterResult<JsonValue<'static>> {
-        self.jiter.known_value_owned(peek)
+        self.loop_until_success(
+            |j| j.known_value_owned(peek),
+            None,
+            &[
+                JsonErrorType::EofWhileParsingString,
+                JsonErrorType::ExpectedObjectCommaOrEnd,
+                JsonErrorType::EofWhileParsingObject,
+            ],
+            true,
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -301,14 +319,30 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_value(&mut self) -> JiterResult<JsonValue<'rj>> {
-        self.feed();
-        self.jiter.next_value()
+        self.loop_until_success(
+            |j| j.next_value(),
+            None,
+            &[
+                JsonErrorType::EofWhileParsingString,
+                JsonErrorType::ExpectedObjectCommaOrEnd,
+                JsonErrorType::EofWhileParsingObject,
+            ],
+            true,
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_value_owned(&mut self) -> JiterResult<JsonValue<'static>> {
-        self.feed();
-        self.jiter.next_value_owned()
+        self.loop_until_success(
+            |j| j.next_value_owned(),
+            None,
+            &[
+                JsonErrorType::EofWhileParsingString,
+                JsonErrorType::ExpectedObjectCommaOrEnd,
+                JsonErrorType::EofWhileParsingObject,
+            ],
+            true,
+        )
     }
 
     // ----------------
