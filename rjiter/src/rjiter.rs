@@ -145,7 +145,20 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn known_object(&mut self) -> JiterResult<Option<&str>> {
-        self.jiter.known_object()
+        let f = |j: &mut Jiter<'rj>| unsafe {
+            std::mem::transmute::<JiterResult<Option<&str>>, JiterResult<Option<&'rj str>>>(
+                j.known_object(),
+            )
+        };
+        self.loop_until_success(
+            f,
+            Some(b'{'),
+            &[
+                JsonErrorType::EofWhileParsingString,
+                JsonErrorType::EofWhileParsingObject,
+            ],
+            false,
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -321,14 +334,38 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_object(&mut self) -> JiterResult<Option<&str>> {
-        self.maybe_feed();
-        self.jiter.next_object()
+        let f = |j: &mut Jiter<'rj>| unsafe {
+            std::mem::transmute::<JiterResult<Option<&str>>, JiterResult<Option<&'rj str>>>(
+                j.next_object(),
+            )
+        };
+        self.loop_until_success(
+            f,
+            Some(b'{'),
+            &[
+                JsonErrorType::EofWhileParsingString,
+                JsonErrorType::EofWhileParsingObject,
+            ],
+            false,
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_object_bytes(&mut self) -> JiterResult<Option<&[u8]>> {
-        self.maybe_feed();
-        self.jiter.next_object_bytes()
+        let f = |j: &mut Jiter<'rj>| unsafe {
+            std::mem::transmute::<JiterResult<Option<&[u8]>>, JiterResult<Option<&'rj [u8]>>>(
+                j.next_object_bytes(),
+            )
+        };
+        self.loop_until_success(
+            f,
+            Some(b'{'),
+            &[
+                JsonErrorType::EofWhileParsingString,
+                JsonErrorType::EofWhileParsingObject,
+            ],
+            false,
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
