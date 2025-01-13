@@ -575,7 +575,7 @@ fn next_array() {
 #[test]
 fn known_array() {
     let lot_of_spaces = " ".repeat(32);
-    let input = format!(r#"{lot_of_spaces}[{lot_of_spaces}false{lot_of_spaces}, 2, 3]"#);
+    let input = format!(r#"{lot_of_spaces}[{lot_of_spaces}"hello"{lot_of_spaces}, 2, 3]"#);
     let mut reader = OneByteReader::new(input.bytes());
     let mut buffer = [0u8; 10];
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
@@ -583,7 +583,7 @@ fn known_array() {
     let _ = rjiter.finish();
     let result = rjiter.known_array();
     assert!(result.is_ok());
-    assert_eq!(result.unwrap(), Some(Peek::False));
+    assert_eq!(result.unwrap(), Some(Peek::String));
 }
 
 #[test]
@@ -594,8 +594,6 @@ fn array_step() {
     let mut buffer = [0u8; 10];
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
-    rjiter.next_array().unwrap();
-    rjiter.next_number().unwrap();
     let result = rjiter.array_step();
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some(Peek::True));

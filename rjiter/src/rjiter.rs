@@ -75,7 +75,14 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn known_array(&mut self) -> JiterResult<Option<Peek>> {
-        self.jiter.known_array()
+        self.loop_until_success(
+            |j| j.known_array(),
+            Some(b'['),
+            &[
+                JsonErrorType::EofWhileParsingList,
+            ],
+            false,
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -193,14 +200,26 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_array(&mut self) -> JiterResult<Option<Peek>> {
-        self.maybe_feed();
-        self.jiter.next_array()
+        self.loop_until_success(
+            |j| j.next_array(),
+            Some(b'['),
+            &[
+                JsonErrorType::EofWhileParsingList,
+            ],
+            false,
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn array_step(&mut self) -> JiterResult<Option<Peek>> {
-        self.maybe_feed();
-        self.jiter.array_step()
+        self.loop_until_success(
+            |j| j.array_step(),
+            Some(b','),
+            &[
+                JsonErrorType::EofWhileParsingList,
+            ],
+            false,
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
