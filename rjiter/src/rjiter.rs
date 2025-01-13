@@ -300,8 +300,21 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_key_bytes(&mut self) -> JiterResult<Option<&[u8]>> {
-        self.maybe_feed();
-        self.jiter.next_key_bytes()
+        let f = |j: &mut Jiter<'rj>| unsafe {
+            std::mem::transmute::<JiterResult<Option<&[u8]>>, JiterResult<Option<&'rj [u8]>>>(
+                j.next_key_bytes(),
+            )
+        };
+        self.loop_until_success(
+            f,
+            Some(b','),
+            &[
+                JsonErrorType::EofWhileParsingString,
+                JsonErrorType::ExpectedSomeValue,
+                JsonErrorType::EofWhileParsingObject,
+            ],
+            false,
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]

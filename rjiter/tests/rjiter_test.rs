@@ -642,13 +642,12 @@ fn next_object_bytes() {
 #[test]
 fn next_key_bytes() {
     let lot_of_spaces = " ".repeat(32);
-    let input = format!(r#"{lot_of_spaces}{{{lot_of_spaces}"key": "value"}}"#);
+    let input = format!(r#"{lot_of_spaces},{lot_of_spaces}"key": "value"}}"#);
     let mut reader = OneByteReader::new(input.bytes());
     let mut buffer = [0u8; 10];
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
-    rjiter.next_object().unwrap();
     let result = rjiter.next_key_bytes();
     assert!(result.is_ok());
-    assert_eq!(result.unwrap(), None);
+    assert_eq!(result.unwrap(), Some(&b"key"[..]));
 }
