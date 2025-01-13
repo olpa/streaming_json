@@ -44,6 +44,19 @@ impl<'rj> std::fmt::Debug for RJiter<'rj> {
     }
 }
 
+// Copy-paste from jiter/src/error.rs, where it is private
+fn allowed_if_partial(error_type: &JsonErrorType) -> bool {
+    matches!(
+        error_type,
+        JsonErrorType::EofWhileParsingList
+                | JsonErrorType::EofWhileParsingObject
+                | JsonErrorType::EofWhileParsingString
+                | JsonErrorType::EofWhileParsingValue
+                | JsonErrorType::ExpectedListCommaOrEnd
+                | JsonErrorType::ExpectedObjectCommaOrEnd
+        )
+}
+
 impl<'rj> RJiter<'rj> {
     #[allow(clippy::missing_errors_doc)]
     #[allow(clippy::missing_panics_doc)]
@@ -628,7 +641,19 @@ impl<'rj> RJiter<'rj> {
         loop {
             let result = f(&mut self.jiter);
 
-            let result = if result.is_ok() {
+            if result.is_err() {
+                let can_retry = if let Err(JiterError { error_type: JiterErrorType::JsonError(error_type), .. }) = &result {
+                    allowed_if_partial(error_type)
+                } else {
+                    false
+                };
+
+                if !can_retry {
+                    return result;
+                }
+            }
+
+            if result.is_ok() {
                 let really_ok = downgrade_ok_if_eof(
                     &result,
                     should_eager_consume,
@@ -638,15 +663,7 @@ impl<'rj> RJiter<'rj> {
                 if really_ok {
                     return result;
                 }
-                result
-
-            } else {
-                let error = result.unwrap_err();
-                if !error.allowed_if_partial() {
-                    return Err(error);
-                }
-                result
-            };
+            }
 
             if self.buffer.read_more() > 0 {
                 self.create_new_jiter();
