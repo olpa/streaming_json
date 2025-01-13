@@ -492,19 +492,24 @@ fn known_value() {
 #[test]
 fn next_skip() {
     let lot_of_spaces = " ".repeat(32);
-    let input = format!(r#"{lot_of_spaces}"hello""#);
+    let input = format!(r#"{lot_of_spaces}"hello"  42"#);
     let mut reader = OneByteReader::new(input.bytes());
     let mut buffer = [0u8; 10];
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
     let result = rjiter.next_skip();
     assert!(result.is_ok());
+
+    // To check that skipped, read the next value
+    let result = rjiter.next_number();
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), jiter::NumberAny::Int(jiter::NumberInt::Int(42)));
 }
 
 #[test]
 fn known_skip() {
     let lot_of_spaces = " ".repeat(32);
-    let input = format!(r#"{lot_of_spaces}"hello""#);
+    let input = format!(r#"{lot_of_spaces}"hello"  42"#);
     let mut reader = OneByteReader::new(input.bytes());
     let mut buffer = [0u8; 10];
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
@@ -513,6 +518,11 @@ fn known_skip() {
     assert_eq!(peek, Peek::String);
     let result = rjiter.known_skip(peek);
     assert!(result.is_ok());
+
+    // To check that skipped, read the next value
+    let result = rjiter.next_number();
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), jiter::NumberAny::Int(jiter::NumberInt::Int(42)));
 }
 
 #[test]

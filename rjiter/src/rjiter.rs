@@ -143,7 +143,16 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn known_skip(&mut self, peek: Peek) -> JiterResult<()> {
-        self.jiter.known_skip(peek)
+        self.loop_until_success(
+            |j| j.known_skip(peek),
+            None,
+            &[
+                JsonErrorType::EofWhileParsingString,
+                JsonErrorType::ExpectedObjectCommaOrEnd,
+                JsonErrorType::EofWhileParsingObject,
+            ],
+            true,
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -305,8 +314,16 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_skip(&mut self) -> JiterResult<()> {
-        self.maybe_feed();
-        self.jiter.next_skip()
+        self.loop_until_success(
+            |j| j.next_skip(),
+            None,
+            &[
+                JsonErrorType::EofWhileParsingString,
+                JsonErrorType::ExpectedObjectCommaOrEnd,
+                JsonErrorType::EofWhileParsingObject,
+            ],
+            true,
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
