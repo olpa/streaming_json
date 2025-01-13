@@ -49,12 +49,12 @@ fn allowed_if_partial(error_type: &JsonErrorType) -> bool {
     matches!(
         error_type,
         JsonErrorType::EofWhileParsingList
-                | JsonErrorType::EofWhileParsingObject
-                | JsonErrorType::EofWhileParsingString
-                | JsonErrorType::EofWhileParsingValue
-                | JsonErrorType::ExpectedListCommaOrEnd
-                | JsonErrorType::ExpectedObjectCommaOrEnd
-        )
+            | JsonErrorType::EofWhileParsingObject
+            | JsonErrorType::EofWhileParsingString
+            | JsonErrorType::EofWhileParsingValue
+            | JsonErrorType::ExpectedListCommaOrEnd
+            | JsonErrorType::ExpectedObjectCommaOrEnd
+    )
 }
 
 impl<'rj> RJiter<'rj> {
@@ -78,29 +78,17 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn peek(&mut self) -> JiterResult<Peek> {
-        self.loop_until_success(
-            jiter::Jiter::peek,
-            None,
-            false,
-        )
+        self.loop_until_success(jiter::Jiter::peek, None, false)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn known_array(&mut self) -> JiterResult<Option<Peek>> {
-        self.loop_until_success(
-            jiter::Jiter::known_array,
-            Some(b'['),
-            false,
-        )
+        self.loop_until_success(jiter::Jiter::known_array, Some(b'['), false)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn known_bool(&mut self, peek: Peek) -> JiterResult<bool> {
-        self.loop_until_success(
-            |j| j.known_bool(peek),
-            None,
-            false,
-        )
+        self.loop_until_success(|j| j.known_bool(peek), None, false)
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -113,38 +101,22 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn known_float(&mut self, peek: Peek) -> JiterResult<f64> {
-        self.loop_until_success(
-            |j| j.known_float(peek),
-            None,
-            true,
-        )
+        self.loop_until_success(|j| j.known_float(peek), None, true)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn known_int(&mut self, peek: Peek) -> JiterResult<NumberInt> {
-        self.loop_until_success(
-            |j| j.known_int(peek),
-            None,
-            true,
-        )
+        self.loop_until_success(|j| j.known_int(peek), None, true)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn known_null(&mut self) -> JiterResult<()> {
-        self.loop_until_success(
-            jiter::Jiter::known_null,
-            None,
-            false,
-        )
+        self.loop_until_success(jiter::Jiter::known_null, None, false)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn known_number(&mut self, peek: Peek) -> JiterResult<NumberAny> {
-        self.loop_until_success(
-            |j| j.known_number(peek),
-            None,
-            true,
-        )
+        self.loop_until_success(|j| j.known_number(peek), None, true)
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -154,20 +126,12 @@ impl<'rj> RJiter<'rj> {
                 j.known_object(),
             )
         };
-        self.loop_until_success(
-            f,
-            Some(b'{'),
-            false,
-        )
+        self.loop_until_success(f, Some(b'{'), false)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn known_skip(&mut self, peek: Peek) -> JiterResult<()> {
-        self.loop_until_success(
-            |j| j.known_skip(peek),
-            None,
-            true,
-        )
+        self.loop_until_success(|j| j.known_skip(peek), None, true)
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -180,47 +144,27 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn known_value(&mut self, peek: Peek) -> JiterResult<JsonValue<'rj>> {
-        self.loop_until_success(
-            |j| j.known_value(peek),
-            None,
-            true,
-        )
+        self.loop_until_success(|j| j.known_value(peek), None, true)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn known_value_owned(&mut self, peek: Peek) -> JiterResult<JsonValue<'static>> {
-        self.loop_until_success(
-            |j| j.known_value_owned(peek),
-            None,
-            true,
-        )
+        self.loop_until_success(|j| j.known_value_owned(peek), None, true)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_array(&mut self) -> JiterResult<Option<Peek>> {
-        self.loop_until_success(
-            jiter::Jiter::next_array,
-            Some(b'['),
-            false,
-        )
+        self.loop_until_success(jiter::Jiter::next_array, Some(b'['), false)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn array_step(&mut self) -> JiterResult<Option<Peek>> {
-        self.loop_until_success(
-            jiter::Jiter::array_step,
-            Some(b','),
-            false,
-        )
+        self.loop_until_success(jiter::Jiter::array_step, Some(b','), false)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_bool(&mut self) -> JiterResult<bool> {
-        self.loop_until_success(
-            jiter::Jiter::next_bool,
-            None,
-            false,
-        )
+        self.loop_until_success(jiter::Jiter::next_bool, None, false)
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -233,20 +177,12 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_float(&mut self) -> JiterResult<f64> {
-        self.loop_until_success(
-            jiter::Jiter::next_float,
-            None,
-            true,
-        )
+        self.loop_until_success(jiter::Jiter::next_float, None, true)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_int(&mut self) -> JiterResult<NumberInt> {
-        self.loop_until_success(
-            jiter::Jiter::next_int,
-            None,
-            true,
-        )
+        self.loop_until_success(jiter::Jiter::next_int, None, true)
     }
 
     /// See `Jiter::next_key`
@@ -262,11 +198,7 @@ impl<'rj> RJiter<'rj> {
                 j.next_key(),
             )
         };
-        self.loop_until_success(
-            f,
-            Some(b','),
-            false,
-        )
+        self.loop_until_success(f, Some(b','), false)
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -276,29 +208,17 @@ impl<'rj> RJiter<'rj> {
                 j.next_key_bytes(),
             )
         };
-        self.loop_until_success(
-            f,
-            Some(b','),
-            false,
-        )
+        self.loop_until_success(f, Some(b','), false)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_null(&mut self) -> JiterResult<()> {
-        self.loop_until_success(
-            jiter::Jiter::next_null,
-            None,
-            false,
-        )
+        self.loop_until_success(jiter::Jiter::next_null, None, false)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_number(&mut self) -> JiterResult<NumberAny> {
-        self.loop_until_success(
-            jiter::Jiter::next_number,
-            None,
-            true,
-        )
+        self.loop_until_success(jiter::Jiter::next_number, None, true)
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -316,11 +236,7 @@ impl<'rj> RJiter<'rj> {
                 j.next_object(),
             )
         };
-        self.loop_until_success(
-            f,
-            Some(b'{'),
-            false,
-        )
+        self.loop_until_success(f, Some(b'{'), false)
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -330,20 +246,12 @@ impl<'rj> RJiter<'rj> {
                 j.next_object_bytes(),
             )
         };
-        self.loop_until_success(
-            f,
-            Some(b'{'),
-            false,
-        )
+        self.loop_until_success(f, Some(b'{'), false)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_skip(&mut self) -> JiterResult<()> {
-        self.loop_until_success(
-            jiter::Jiter::next_skip,
-            None,
-            true,
-        )
+        self.loop_until_success(jiter::Jiter::next_skip, None, true)
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -356,20 +264,12 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_value(&mut self) -> JiterResult<JsonValue<'rj>> {
-        self.loop_until_success(
-            jiter::Jiter::next_value,
-            None,
-            true,
-        )
+        self.loop_until_success(jiter::Jiter::next_value, None, true)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_value_owned(&mut self) -> JiterResult<JsonValue<'static>> {
-        self.loop_until_success(
-            jiter::Jiter::next_value_owned,
-            None,
-            true,
-        )
+        self.loop_until_success(jiter::Jiter::next_value_owned, None, true)
     }
 
     // ----------------
@@ -642,7 +542,11 @@ impl<'rj> RJiter<'rj> {
             let result = f(&mut self.jiter);
 
             if result.is_err() {
-                let can_retry = if let Err(JiterError { error_type: JiterErrorType::JsonError(error_type), .. }) = &result {
+                let can_retry = if let Err(JiterError {
+                    error_type: JiterErrorType::JsonError(error_type),
+                    ..
+                }) = &result
+                {
                     allowed_if_partial(error_type)
                 } else {
                     false

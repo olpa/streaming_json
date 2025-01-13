@@ -497,10 +497,7 @@ fn next_skip() {
     // To check that skipped, read the next value
     let result = rjiter.next_number();
     assert!(result.is_ok());
-    assert_eq!(
-        result.unwrap(),
-        jiter::NumberAny::Int(jiter::NumberInt::Int(42))
-    );
+    assert_eq!(result.unwrap(), jiter::NumberAny::Int(jiter::NumberInt::Int(42)));
 }
 
 #[test]
@@ -519,10 +516,7 @@ fn known_skip() {
     // To check that skipped, read the next value
     let result = rjiter.next_number();
     assert!(result.is_ok());
-    assert_eq!(
-        result.unwrap(),
-        jiter::NumberAny::Int(jiter::NumberInt::Int(42))
-    );
+    assert_eq!(result.unwrap(), jiter::NumberAny::Int(jiter::NumberInt::Int(42)));
 }
 
 #[test]
