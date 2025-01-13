@@ -68,7 +68,6 @@ impl<'rj> RJiter<'rj> {
         self.loop_until_success(
             jiter::Jiter::peek,
             None,
-            &[JsonErrorType::EofWhileParsingValue],
             false,
         )
     }
@@ -78,7 +77,6 @@ impl<'rj> RJiter<'rj> {
         self.loop_until_success(
             jiter::Jiter::known_array,
             Some(b'['),
-            &[JsonErrorType::EofWhileParsingList],
             false,
         )
     }
@@ -88,7 +86,6 @@ impl<'rj> RJiter<'rj> {
         self.loop_until_success(
             |j| j.known_bool(peek),
             None,
-            &[JsonErrorType::EofWhileParsingValue],
             false,
         )
     }
@@ -98,7 +95,7 @@ impl<'rj> RJiter<'rj> {
         let f = |j: &mut Jiter<'rj>| unsafe {
             std::mem::transmute::<JiterResult<&[u8]>, JiterResult<&'rj [u8]>>(j.known_bytes())
         };
-        self.loop_until_success(f, None, &[JsonErrorType::EofWhileParsingString], false)
+        self.loop_until_success(f, None, false)
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -106,7 +103,6 @@ impl<'rj> RJiter<'rj> {
         self.loop_until_success(
             |j| j.known_float(peek),
             None,
-            &[JsonErrorType::EofWhileParsingValue],
             true,
         )
     }
@@ -116,7 +112,6 @@ impl<'rj> RJiter<'rj> {
         self.loop_until_success(
             |j| j.known_int(peek),
             None,
-            &[JsonErrorType::EofWhileParsingValue],
             true,
         )
     }
@@ -126,7 +121,6 @@ impl<'rj> RJiter<'rj> {
         self.loop_until_success(
             jiter::Jiter::known_null,
             None,
-            &[JsonErrorType::EofWhileParsingValue],
             false,
         )
     }
@@ -136,7 +130,6 @@ impl<'rj> RJiter<'rj> {
         self.loop_until_success(
             |j| j.known_number(peek),
             None,
-            &[JsonErrorType::EofWhileParsingValue],
             true,
         )
     }
@@ -151,10 +144,6 @@ impl<'rj> RJiter<'rj> {
         self.loop_until_success(
             f,
             Some(b'{'),
-            &[
-                JsonErrorType::EofWhileParsingString,
-                JsonErrorType::EofWhileParsingObject,
-            ],
             false,
         )
     }
@@ -164,11 +153,6 @@ impl<'rj> RJiter<'rj> {
         self.loop_until_success(
             |j| j.known_skip(peek),
             None,
-            &[
-                JsonErrorType::EofWhileParsingString,
-                JsonErrorType::ExpectedObjectCommaOrEnd,
-                JsonErrorType::EofWhileParsingObject,
-            ],
             true,
         )
     }
@@ -178,7 +162,7 @@ impl<'rj> RJiter<'rj> {
         let f = |j: &mut Jiter<'rj>| unsafe {
             std::mem::transmute::<JiterResult<&str>, JiterResult<&'rj str>>(j.known_str())
         };
-        self.loop_until_success(f, None, &[JsonErrorType::EofWhileParsingString], false)
+        self.loop_until_success(f, None, false)
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -186,11 +170,6 @@ impl<'rj> RJiter<'rj> {
         self.loop_until_success(
             |j| j.known_value(peek),
             None,
-            &[
-                JsonErrorType::EofWhileParsingString,
-                JsonErrorType::ExpectedObjectCommaOrEnd,
-                JsonErrorType::EofWhileParsingObject,
-            ],
             true,
         )
     }
@@ -200,11 +179,6 @@ impl<'rj> RJiter<'rj> {
         self.loop_until_success(
             |j| j.known_value_owned(peek),
             None,
-            &[
-                JsonErrorType::EofWhileParsingString,
-                JsonErrorType::ExpectedObjectCommaOrEnd,
-                JsonErrorType::EofWhileParsingObject,
-            ],
             true,
         )
     }
@@ -214,7 +188,6 @@ impl<'rj> RJiter<'rj> {
         self.loop_until_success(
             jiter::Jiter::next_array,
             Some(b'['),
-            &[JsonErrorType::EofWhileParsingList],
             false,
         )
     }
@@ -224,7 +197,6 @@ impl<'rj> RJiter<'rj> {
         self.loop_until_success(
             jiter::Jiter::array_step,
             Some(b','),
-            &[JsonErrorType::EofWhileParsingList],
             false,
         )
     }
@@ -234,7 +206,6 @@ impl<'rj> RJiter<'rj> {
         self.loop_until_success(
             jiter::Jiter::next_bool,
             None,
-            &[JsonErrorType::EofWhileParsingValue],
             false,
         )
     }
@@ -244,7 +215,7 @@ impl<'rj> RJiter<'rj> {
         let f = |j: &mut Jiter<'rj>| unsafe {
             std::mem::transmute::<JiterResult<&[u8]>, JiterResult<&'rj [u8]>>(j.next_bytes())
         };
-        self.loop_until_success(f, None, &[JsonErrorType::EofWhileParsingString], false)
+        self.loop_until_success(f, None, false)
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -252,7 +223,6 @@ impl<'rj> RJiter<'rj> {
         self.loop_until_success(
             jiter::Jiter::next_float,
             None,
-            &[JsonErrorType::EofWhileParsingValue],
             true,
         )
     }
@@ -262,7 +232,6 @@ impl<'rj> RJiter<'rj> {
         self.loop_until_success(
             jiter::Jiter::next_int,
             None,
-            &[JsonErrorType::EofWhileParsingValue],
             true,
         )
     }
@@ -283,11 +252,6 @@ impl<'rj> RJiter<'rj> {
         self.loop_until_success(
             f,
             Some(b','),
-            &[
-                JsonErrorType::EofWhileParsingString,
-                JsonErrorType::ExpectedObjectCommaOrEnd,
-                JsonErrorType::EofWhileParsingObject,
-            ],
             false,
         )
     }
@@ -302,11 +266,6 @@ impl<'rj> RJiter<'rj> {
         self.loop_until_success(
             f,
             Some(b','),
-            &[
-                JsonErrorType::EofWhileParsingString,
-                JsonErrorType::ExpectedSomeValue,
-                JsonErrorType::EofWhileParsingObject,
-            ],
             false,
         )
     }
@@ -316,7 +275,6 @@ impl<'rj> RJiter<'rj> {
         self.loop_until_success(
             jiter::Jiter::next_null,
             None,
-            &[JsonErrorType::EofWhileParsingValue],
             false,
         )
     }
@@ -326,7 +284,6 @@ impl<'rj> RJiter<'rj> {
         self.loop_until_success(
             jiter::Jiter::next_number,
             None,
-            &[JsonErrorType::EofWhileParsingValue],
             true,
         )
     }
@@ -336,7 +293,7 @@ impl<'rj> RJiter<'rj> {
         let f = |j: &mut Jiter<'rj>| unsafe {
             std::mem::transmute::<JiterResult<&[u8]>, JiterResult<&'rj [u8]>>(j.next_number_bytes())
         };
-        self.loop_until_success(f, None, &[JsonErrorType::EofWhileParsingValue], true)
+        self.loop_until_success(f, None, true)
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -349,10 +306,6 @@ impl<'rj> RJiter<'rj> {
         self.loop_until_success(
             f,
             Some(b'{'),
-            &[
-                JsonErrorType::EofWhileParsingString,
-                JsonErrorType::EofWhileParsingObject,
-            ],
             false,
         )
     }
@@ -367,10 +320,6 @@ impl<'rj> RJiter<'rj> {
         self.loop_until_success(
             f,
             Some(b'{'),
-            &[
-                JsonErrorType::EofWhileParsingString,
-                JsonErrorType::EofWhileParsingObject,
-            ],
             false,
         )
     }
@@ -380,11 +329,6 @@ impl<'rj> RJiter<'rj> {
         self.loop_until_success(
             jiter::Jiter::next_skip,
             None,
-            &[
-                JsonErrorType::EofWhileParsingString,
-                JsonErrorType::ExpectedObjectCommaOrEnd,
-                JsonErrorType::EofWhileParsingObject,
-            ],
             true,
         )
     }
@@ -394,7 +338,7 @@ impl<'rj> RJiter<'rj> {
         let f = |j: &mut Jiter<'rj>| unsafe {
             std::mem::transmute::<JiterResult<&str>, JiterResult<&'rj str>>(j.next_str())
         };
-        self.loop_until_success(f, None, &[JsonErrorType::EofWhileParsingString], false)
+        self.loop_until_success(f, None, false)
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -402,11 +346,6 @@ impl<'rj> RJiter<'rj> {
         self.loop_until_success(
             jiter::Jiter::next_value,
             None,
-            &[
-                JsonErrorType::EofWhileParsingString,
-                JsonErrorType::ExpectedObjectCommaOrEnd,
-                JsonErrorType::EofWhileParsingObject,
-            ],
             true,
         )
     }
@@ -416,11 +355,6 @@ impl<'rj> RJiter<'rj> {
         self.loop_until_success(
             jiter::Jiter::next_value_owned,
             None,
-            &[
-                JsonErrorType::EofWhileParsingString,
-                JsonErrorType::ExpectedObjectCommaOrEnd,
-                JsonErrorType::EofWhileParsingObject,
-            ],
             true,
         )
     }
@@ -653,7 +587,6 @@ impl<'rj> RJiter<'rj> {
         &mut self,
         mut f: F,
         skip_spaces_token: Option<u8>,
-        retry_error_types: &[JsonErrorType],
         should_eager_consume: bool,
     ) -> JiterResult<T>
     where
@@ -706,18 +639,13 @@ impl<'rj> RJiter<'rj> {
                     return result;
                 }
                 result
+
             } else {
                 let error = result.unwrap_err();
-                if let JiterError {
-                    error_type: JiterErrorType::JsonError(error_type),
-                    ..
-                } = &error
-                {
-                    if !retry_error_types.contains(error_type) {
-                        return Err(error);
-                    }
+                if !error.allowed_if_partial() {
+                    return Err(error);
                 }
-                Err(error)
+                result
             };
 
             if self.buffer.read_more() > 0 {
