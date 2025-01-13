@@ -90,7 +90,10 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn known_bytes(&mut self) -> JiterResult<&[u8]> {
-        self.jiter.known_bytes()
+        let f = |j: &mut Jiter<'rj>| unsafe {
+            std::mem::transmute::<JiterResult<&[u8]>, JiterResult<&'rj [u8]>>(j.known_bytes())
+        };
+        self.loop_until_success(f, None, &[JsonErrorType::EofWhileParsingString], false)
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -145,7 +148,10 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn known_str(&mut self) -> JiterResult<&str> {
-        self.jiter.known_str()
+        let f = |j: &mut Jiter<'rj>| unsafe {
+            std::mem::transmute::<JiterResult<&str>, JiterResult<&'rj str>>(j.known_str())
+        };
+        self.loop_until_success(f, None, &[JsonErrorType::EofWhileParsingString], false)
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -182,8 +188,10 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_bytes(&mut self) -> JiterResult<&[u8]> {
-        self.maybe_feed();
-        self.jiter.next_bytes()
+        let f = |j: &mut Jiter<'rj>| unsafe {
+            std::mem::transmute::<JiterResult<&[u8]>, JiterResult<&'rj [u8]>>(j.next_bytes())
+        };
+        self.loop_until_success(f, None, &[JsonErrorType::EofWhileParsingString], false)
     }
 
     #[allow(clippy::missing_errors_doc)]
