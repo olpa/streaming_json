@@ -267,32 +267,35 @@ fn finish_no_when_need_feed() {
 
 #[test]
 fn known_skip_token() {
-    let some_spaces = " ".repeat(6);
+    let n_spaces = 6;
+    let some_spaces = " ".repeat(n_spaces);
     let input = format!(r#"{some_spaces}trux true"#);
-    let mut buffer = [0u8; 8];
-    let mut reader = Cursor::new(input.as_bytes());
-    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+    for buffer_len in n_spaces..input.len() {
+        let mut buffer = vec![0u8; buffer_len];
+        let mut reader = Cursor::new(input.as_bytes());
+        let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
-    // Position Jiter on the token
-    let _ = rjiter.peek();
+        // Position Jiter on the token
+        let _ = rjiter.peek();
 
-    // Consume the "trux" token
-    let result = rjiter.known_skip_token(b"trux");
-    assert!(result.is_ok(), "skip_token failed");
+        // Consume the "trux" token
+        let result = rjiter.known_skip_token(b"trux");
+        assert!(result.is_ok(), "skip_token failed");
 
-    // The Jiter position should be moved to the "true" token
-    let result = rjiter.peek();
-    assert!(result.is_ok());
-    assert_eq!(result.unwrap(), Peek::True);
+        // The Jiter position should be moved to the "true" token
+        let result = rjiter.peek();
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), Peek::True);
 
-    // Do not consume the "trux" token on "true"
-    let result = rjiter.known_skip_token(b"trux");
-    assert!(result.is_err());
+        // Do not consume the "trux" token on "true"
+        let result = rjiter.known_skip_token(b"trux");
+        assert!(result.is_err());
 
-    // Consume the "true" token
-    let result = rjiter.next_bool();
-    assert!(result.is_ok());
-    assert_eq!(result.unwrap(), true);
+        // Consume the "true" token
+        let result = rjiter.next_bool();
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), true);
+    }
 }
 
 // ----------------------------------------------
