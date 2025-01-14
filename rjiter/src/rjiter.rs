@@ -3,10 +3,9 @@ use std::io::Write;
 
 use crate::buffer::Buffer;
 use jiter::{
-    Jiter, JiterError, JiterErrorType, JiterResult, JsonErrorType, JsonValue, NumberAny, NumberInt,
+    Jiter, JiterError, JiterErrorType, JiterResult, JsonError, JsonErrorType, JsonValue, NumberAny,
+    NumberInt, Peek,
 };
-
-pub type Peek = jiter::Peek;
 
 pub type RJiterResult<T> = Result<T, RJiterError>;
 
@@ -44,6 +43,19 @@ impl<'rj> std::fmt::Debug for RJiter<'rj> {
     }
 }
 
+// Copy-paste from jiter/src/error.rs, where it is private
+fn allowed_if_partial(error_type: &JsonErrorType) -> bool {
+    matches!(
+        error_type,
+        JsonErrorType::EofWhileParsingList
+            | JsonErrorType::EofWhileParsingObject
+            | JsonErrorType::EofWhileParsingString
+            | JsonErrorType::EofWhileParsingValue
+            | JsonErrorType::ExpectedListCommaOrEnd
+            | JsonErrorType::ExpectedObjectCommaOrEnd
+    )
+}
+
 impl<'rj> RJiter<'rj> {
     #[allow(clippy::missing_errors_doc)]
     #[allow(clippy::missing_panics_doc)]
@@ -63,106 +75,123 @@ impl<'rj> RJiter<'rj> {
         }
     }
 
+    fn create_new_jiter(&mut self) {
+        let jiter_buffer_2 = &self.buffer.buf[..self.buffer.n_bytes];
+        let jiter_buffer = unsafe { std::mem::transmute::<&[u8], &'rj [u8]>(jiter_buffer_2) };
+        self.jiter = Jiter::new(jiter_buffer);
+    }
+
+    //  ------------------------------------------------------------
+    // Jiter wrappers
+    //
+
     #[allow(clippy::missing_errors_doc)]
     pub fn peek(&mut self) -> JiterResult<Peek> {
-        self.maybe_feed();
-        self.jiter.peek()
+        self.loop_until_success(jiter::Jiter::peek, None, false)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn known_array(&mut self) -> JiterResult<Option<Peek>> {
-        self.jiter.known_array()
+        self.loop_until_success(jiter::Jiter::known_array, Some(b'['), false)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn known_bool(&mut self, peek: Peek) -> JiterResult<bool> {
-        self.jiter.known_bool(peek)
+        self.loop_until_success(|j| j.known_bool(peek), None, false)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn known_bytes(&mut self) -> JiterResult<&[u8]> {
-        self.jiter.known_bytes()
+        let f = |j: &mut Jiter<'rj>| unsafe {
+            std::mem::transmute::<JiterResult<&[u8]>, JiterResult<&'rj [u8]>>(j.known_bytes())
+        };
+        self.loop_until_success(f, None, false)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn known_float(&mut self, peek: Peek) -> JiterResult<f64> {
-        self.jiter.known_float(peek)
+        self.loop_until_success(|j| j.known_float(peek), None, true)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn known_int(&mut self, peek: Peek) -> JiterResult<NumberInt> {
-        self.jiter.known_int(peek)
+        self.loop_until_success(|j| j.known_int(peek), None, true)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn known_null(&mut self) -> JiterResult<()> {
-        self.jiter.known_null()
+        self.loop_until_success(jiter::Jiter::known_null, None, false)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn known_number(&mut self, peek: Peek) -> JiterResult<NumberAny> {
-        self.jiter.known_number(peek)
+        self.loop_until_success(|j| j.known_number(peek), None, true)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn known_object(&mut self) -> JiterResult<Option<&str>> {
-        self.jiter.known_object()
+        let f = |j: &mut Jiter<'rj>| unsafe {
+            std::mem::transmute::<JiterResult<Option<&str>>, JiterResult<Option<&'rj str>>>(
+                j.known_object(),
+            )
+        };
+        self.loop_until_success(f, Some(b'{'), false)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn known_skip(&mut self, peek: Peek) -> JiterResult<()> {
-        self.jiter.known_skip(peek)
+        self.loop_until_success(|j| j.known_skip(peek), None, true)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn known_str(&mut self) -> JiterResult<&str> {
-        self.jiter.known_str()
+        let f = |j: &mut Jiter<'rj>| unsafe {
+            std::mem::transmute::<JiterResult<&str>, JiterResult<&'rj str>>(j.known_str())
+        };
+        self.loop_until_success(f, None, false)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn known_value(&mut self, peek: Peek) -> JiterResult<JsonValue<'rj>> {
-        self.jiter.known_value(peek)
+        self.loop_until_success(|j| j.known_value(peek), None, true)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn known_value_owned(&mut self, peek: Peek) -> JiterResult<JsonValue<'static>> {
-        self.jiter.known_value_owned(peek)
+        self.loop_until_success(|j| j.known_value_owned(peek), None, true)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_array(&mut self) -> JiterResult<Option<Peek>> {
-        self.maybe_feed();
-        self.jiter.next_array()
+        self.loop_until_success(jiter::Jiter::next_array, Some(b'['), false)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn array_step(&mut self) -> JiterResult<Option<Peek>> {
-        self.maybe_feed();
-        self.jiter.array_step()
+        self.loop_until_success(jiter::Jiter::array_step, Some(b','), false)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_bool(&mut self) -> JiterResult<bool> {
-        self.maybe_feed();
-        self.jiter.next_bool()
+        self.loop_until_success(jiter::Jiter::next_bool, None, false)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_bytes(&mut self) -> JiterResult<&[u8]> {
-        self.maybe_feed();
-        self.jiter.next_bytes()
+        let f = |j: &mut Jiter<'rj>| unsafe {
+            std::mem::transmute::<JiterResult<&[u8]>, JiterResult<&'rj [u8]>>(j.next_bytes())
+        };
+        self.loop_until_success(f, None, false)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_float(&mut self) -> JiterResult<f64> {
-        self.maybe_feed();
-        self.jiter.next_float()
+        self.loop_until_success(jiter::Jiter::next_float, None, true)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_int(&mut self) -> JiterResult<NumberInt> {
-        self.maybe_feed();
-        self.jiter.next_int()
+        self.loop_until_success(jiter::Jiter::next_int, None, true)
     }
 
     /// See `Jiter::next_key`
@@ -178,57 +207,60 @@ impl<'rj> RJiter<'rj> {
                 j.next_key(),
             )
         };
-        self.loop_until_success(
-            f,
-            Some(b','),
-            &[
-                JsonErrorType::EofWhileParsingString,
-                JsonErrorType::ExpectedObjectCommaOrEnd,
-                JsonErrorType::EofWhileParsingObject,
-            ],
-        )
+        self.loop_until_success(f, Some(b','), false)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_key_bytes(&mut self) -> JiterResult<Option<&[u8]>> {
-        self.maybe_feed();
-        self.jiter.next_key_bytes()
+        let f = |j: &mut Jiter<'rj>| unsafe {
+            std::mem::transmute::<JiterResult<Option<&[u8]>>, JiterResult<Option<&'rj [u8]>>>(
+                j.next_key_bytes(),
+            )
+        };
+        self.loop_until_success(f, Some(b','), false)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_null(&mut self) -> JiterResult<()> {
-        self.maybe_feed();
-        self.jiter.next_null()
+        self.loop_until_success(jiter::Jiter::next_null, None, false)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_number(&mut self) -> JiterResult<NumberAny> {
-        self.maybe_feed();
-        self.jiter.next_number()
+        self.loop_until_success(jiter::Jiter::next_number, None, true)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_number_bytes(&mut self) -> JiterResult<&[u8]> {
-        self.maybe_feed();
-        self.jiter.next_number_bytes()
+        let f = |j: &mut Jiter<'rj>| unsafe {
+            std::mem::transmute::<JiterResult<&[u8]>, JiterResult<&'rj [u8]>>(j.next_number_bytes())
+        };
+        self.loop_until_success(f, None, true)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_object(&mut self) -> JiterResult<Option<&str>> {
-        self.maybe_feed();
-        self.jiter.next_object()
+        let f = |j: &mut Jiter<'rj>| unsafe {
+            std::mem::transmute::<JiterResult<Option<&str>>, JiterResult<Option<&'rj str>>>(
+                j.next_object(),
+            )
+        };
+        self.loop_until_success(f, Some(b'{'), false)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_object_bytes(&mut self) -> JiterResult<Option<&[u8]>> {
-        self.maybe_feed();
-        self.jiter.next_object_bytes()
+        let f = |j: &mut Jiter<'rj>| unsafe {
+            std::mem::transmute::<JiterResult<Option<&[u8]>>, JiterResult<Option<&'rj [u8]>>>(
+                j.next_object_bytes(),
+            )
+        };
+        self.loop_until_success(f, Some(b'{'), false)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_skip(&mut self) -> JiterResult<()> {
-        self.maybe_feed();
-        self.jiter.next_skip()
+        self.loop_until_success(jiter::Jiter::next_skip, None, true)
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -236,28 +268,149 @@ impl<'rj> RJiter<'rj> {
         let f = |j: &mut Jiter<'rj>| unsafe {
             std::mem::transmute::<JiterResult<&str>, JiterResult<&'rj str>>(j.next_str())
         };
-        self.loop_until_success(f, None, &[JsonErrorType::EofWhileParsingString])
+        self.loop_until_success(f, None, false)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_value(&mut self) -> JiterResult<JsonValue<'rj>> {
-        self.feed();
-        self.jiter.next_value()
+        self.loop_until_success(jiter::Jiter::next_value, None, true)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn next_value_owned(&mut self) -> JiterResult<JsonValue<'static>> {
-        self.feed();
-        self.jiter.next_value_owned()
+        self.loop_until_success(jiter::Jiter::next_value_owned, None, true)
+    }
+
+    //  ------------------------------------------------------------
+    // The implementation of Jiter wrappers
+    //
+
+    fn loop_until_success<T, F>(
+        &mut self,
+        mut f: F,
+        skip_spaces_token: Option<u8>,
+        should_eager_consume: bool,
+    ) -> JiterResult<T>
+    where
+        F: FnMut(&mut Jiter<'rj>) -> JiterResult<T>,
+        T: std::fmt::Debug,
+    {
+        fn downgrade_ok_if_eof<T>(
+            result: &JiterResult<T>,
+            should_eager_consume: bool,
+            jiter: &Jiter,
+            n_bytes: usize,
+        ) -> bool {
+            if !result.is_ok() {
+                return false;
+            }
+            if !should_eager_consume {
+                return true;
+            }
+            if jiter.current_index() < n_bytes {
+                return true;
+            }
+            false
+        }
+        let jiter_pos = self.jiter.current_index();
+
+        let result = f(&mut self.jiter);
+        let is_ok = downgrade_ok_if_eof(
+            &result,
+            should_eager_consume,
+            &self.jiter,
+            self.buffer.n_bytes,
+        );
+        if is_ok {
+            return result;
+        }
+
+        self.skip_spaces_feeding(jiter_pos, skip_spaces_token);
+
+        loop {
+            let result = f(&mut self.jiter);
+
+            if result.is_err() {
+                let can_retry = if let Err(JiterError {
+                    error_type: JiterErrorType::JsonError(error_type),
+                    ..
+                }) = &result
+                {
+                    allowed_if_partial(error_type)
+                } else {
+                    false
+                };
+
+                if !can_retry {
+                    return result;
+                }
+            }
+
+            if result.is_ok() {
+                let really_ok = downgrade_ok_if_eof(
+                    &result,
+                    should_eager_consume,
+                    &self.jiter,
+                    self.buffer.n_bytes,
+                );
+                if really_ok {
+                    return result;
+                }
+            }
+
+            if self.buffer.read_more() > 0 {
+                self.create_new_jiter();
+                continue;
+            }
+
+            return result;
+        }
+    }
+
+    // If the transparent is found after skipping spaces, skip also spaces after the transparent token
+    // If any space is skipped, feed the buffer content to the position 0
+    // This function should be called only in a retry handler, otherwise it worsens performance
+    fn skip_spaces_feeding(&mut self, jiter_pos: usize, transparent_token: Option<u8>) -> bool {
+        let to_pos = 0;
+        let n_shifted_before = self.buffer.n_shifted_out;
+
+        if jiter_pos > to_pos {
+            self.buffer.shift_buffer(to_pos, jiter_pos);
+        }
+        self.buffer.skip_spaces(to_pos);
+
+        if let Some(transparent_token) = transparent_token {
+            if to_pos >= self.buffer.n_bytes {
+                self.buffer.read_more();
+            }
+            if to_pos < self.buffer.n_bytes && self.buffer.buf[to_pos] == transparent_token {
+                self.buffer.skip_spaces(to_pos + 1);
+            }
+        }
+
+        let is_shifted = self.buffer.n_shifted_out > n_shifted_before;
+        if is_shifted {
+            self.create_new_jiter();
+        }
+
+        is_shifted
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn finish(&mut self) -> JiterResult<()> {
-        self.maybe_feed();
-        self.jiter.finish()
+        loop {
+            self.jiter.finish()?;
+            if self.buffer.read_more() == 0 {
+                return Ok(());
+            }
+            self.buffer.shift_buffer(0, self.jiter.current_index());
+            self.create_new_jiter();
+        }
     }
 
-    // ----------------
+    //  ------------------------------------------------------------
+    // Pass-through long strings and bytes
+    //
 
     fn handle_long<F, T>(
         &mut self,
@@ -359,148 +512,53 @@ impl<'rj> RJiter<'rj> {
         self.handle_long(parser, writer, write_completed, write_segment)
     }
 
-    fn on_before_call_jiter(&mut self) {
-        self.pos_before_call_jiter = self.jiter.current_index();
-    }
+    //  ------------------------------------------------------------
+    // Skip token
+    //
 
-    #[allow(clippy::missing_panics_doc)]
-    pub fn feed(&mut self) -> bool {
-        self.on_before_call_jiter();
-        self.feed_inner(false)
-    }
+    #[allow(clippy::missing_errors_doc)]
+    pub fn known_skip_token(&mut self, token: &[u8]) -> RJiterResult<()> {
+        let shifter_before = self.buffer.n_shifted_out;
+        let mut pos = self.jiter.current_index();
+        let mut err_flag = false;
 
-    // If the transparent is found after skipping spaces, skip also spaces after the transparent token
-    // If any space is skipped, feed the buffer content to the position 0
-    // This function should be called only in a retry handler, otherwise it worsens performance
-    fn skip_spaces_feeding(&mut self, transparent_token: Option<u8>) -> bool {
-        let to_pos = 0;
-        let jiter_pos = self.jiter.current_index();
-        let n_shifted_before = self.buffer.n_shifted_out;
-
-        if jiter_pos > to_pos {
-            self.buffer.shift_buffer(to_pos, jiter_pos);
+        // Read enough bytes to have the token
+        if pos + token.len() >= self.buffer.n_bytes {
+            self.buffer.shift_buffer(0, pos);
+            pos = 0;
         }
-        self.buffer.skip_spaces(to_pos);
-
-        if let Some(transparent_token) = transparent_token {
-            if to_pos >= self.buffer.n_bytes {
-                self.buffer.read_more();
-            }
-            if to_pos < self.buffer.n_bytes && self.buffer.buf[to_pos] == transparent_token {
-                self.buffer.skip_spaces(to_pos + 1);
+        while self.buffer.n_bytes < pos + token.len() {
+            if self.buffer.read_more() == 0 {
+                err_flag = true;
+                break;
             }
         }
 
-        let is_shifted = self.buffer.n_shifted_out > n_shifted_before;
-        if is_shifted {
+        // Find the token
+        let found = if err_flag {
+            false
+        } else {
+            let buf_view = &mut self.buffer.buf[pos..self.buffer.n_bytes];
+            buf_view.starts_with(token)
+        };
+
+        // Sync the Jiter
+        if found {
+            self.buffer.shift_buffer(0, pos + token.len());
+        }
+        if shifter_before != self.buffer.n_shifted_out {
             self.create_new_jiter();
         }
 
-        is_shifted
-    }
-
-    fn create_new_jiter(&mut self) {
-        let jiter_buffer_2 = &self.buffer.buf[..self.buffer.n_bytes];
-        let jiter_buffer = unsafe { std::mem::transmute::<&[u8], &'rj [u8]>(jiter_buffer_2) };
-        self.jiter = Jiter::new(jiter_buffer);
-    }
-
-    fn feed_inner(&mut self, is_partial_string: bool) -> bool {
-        let mut pos = self.pos_before_call_jiter;
-
-        //
-        // Skip whitespaces
-        //
-        if !is_partial_string && pos < self.buffer.n_bytes {
-            let mut skip_ws_parser = Jiter::new(&self.buffer.buf[pos..self.buffer.n_bytes]);
-            let _ = skip_ws_parser.finish();
-            pos += skip_ws_parser.current_index();
+        // Result
+        if found {
+            return Ok(());
         }
-
-        //
-        // Copy remaining bytes to the beginning of the buffer
-        //
-        self.buffer.shift_buffer(0, pos);
-
-        //
-        // Read new bytes
-        //
-        let start_index = if is_partial_string {
-            1
-        } else {
-            self.buffer.n_bytes
+        let json_error = JsonError {
+            error_type: JsonErrorType::ExpectedSomeIdent,
+            index: self.jiter.current_index(),
         };
-        let n_new_bytes = self.buffer.read_more_to_pos(start_index);
-
-        if is_partial_string {
-            self.buffer.buf[0] = 34; // Quote character
-            self.buffer.n_bytes += 1;
-        }
-
-        //
-        // Create new Jiter and inform caller if any new bytes were read
-        //
-        self.create_new_jiter();
-
-        n_new_bytes > 0
-    }
-
-    fn maybe_feed(&mut self) {
-        if self.jiter.current_index() > self.buffer.n_bytes / 2 {
-            self.feed();
-        }
-    }
-
-    pub fn skip_token(&mut self, token: &[u8]) -> bool {
-        self.maybe_feed();
-
-        let buf_view = &mut self.buffer.buf[self.jiter.current_index()..self.buffer.n_bytes];
-        if !buf_view.starts_with(token) {
-            return false;
-        }
-
-        for byte in buf_view.iter_mut().take(token.len()) {
-            *byte = b' ';
-        }
-        let _ = self.jiter.finish(); // feed jiter to the next content
-        buf_view[..token.len()].copy_from_slice(token);
-
-        true
-    }
-
-    fn loop_until_success<T, F>(
-        &mut self,
-        mut f: F,
-        skip_spaces_token: Option<u8>,
-        retry_error_types: &[JsonErrorType],
-    ) -> JiterResult<T>
-    where
-        F: FnMut(&mut Jiter<'rj>) -> JiterResult<T>,
-        T: std::fmt::Debug,
-    {
-        let result = f(&mut self.jiter);
-        if result.is_ok() {
-            return result;
-        }
-
-        self.skip_spaces_feeding(skip_spaces_token);
-        loop {
-            let result = f(&mut self.jiter);
-            if result.is_ok() {
-                return result;
-            }
-            let error = result.unwrap_err();
-            if let JiterError {
-                error_type: JiterErrorType::JsonError(error_type),
-                ..
-            } = &error
-            {
-                if retry_error_types.contains(error_type) && self.buffer.read_more() > 0 {
-                    self.create_new_jiter();
-                    continue;
-                }
-            }
-            return Err(error);
-        }
+        let jiter_error = JiterError::from(json_error);
+        Err(RJiterError::JiterError(jiter_error))
     }
 }
