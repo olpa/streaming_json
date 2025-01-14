@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use jiter::JsonValue;
 use jiter::LazyIndexMap;
+use rjiter::NumberInt;
 use rjiter::Peek;
 use rjiter::RJiter;
 
@@ -61,6 +62,40 @@ fn many_known_foo() {
 
     let result = rjiter.finish();
     assert!(result.is_ok());
+}
+
+#[test]
+fn jiter_doc_example() {
+    let json_data = r#"
+    {
+        "name": "John Doe", 
+        "age": 43,
+        "phones": [
+            "+44 1234567",
+            "+44 2345678"
+        ]
+    }"#;
+    let mut buffer = [0u8; 16];
+    let mut reader = OneByteReader::new(json_data.bytes());
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    assert_eq!(rjiter.next_object().unwrap(), Some("name"));
+    assert_eq!(rjiter.next_str().unwrap(), "John Doe");
+    assert_eq!(rjiter.next_key().unwrap(), Some("age"));
+    assert_eq!(rjiter.next_int().unwrap(), NumberInt::Int(43));
+    assert_eq!(rjiter.next_key().unwrap(), Some("phones"));
+    assert_eq!(rjiter.next_array().unwrap(), Some(Peek::String));
+    // we know the next value is a string as we just asserted so
+    assert_eq!(rjiter.known_str().unwrap(), "+44 1234567");
+    assert_eq!(rjiter.array_step().unwrap(), Some(Peek::String));
+    // same again
+    assert_eq!(rjiter.known_str().unwrap(), "+44 2345678");
+    // next we'll get `None` from `array_step` as the array is finished
+    assert_eq!(rjiter.array_step().unwrap(), None);
+    // and `None` from `next_key` as the object is finished
+    assert_eq!(rjiter.next_key().unwrap(), None);
+    // and we check there's nothing else in the input
+    rjiter.finish().unwrap();
 }
 
 //
