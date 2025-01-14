@@ -518,22 +518,40 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn known_skip_token(&mut self, token: &[u8]) -> RJiterResult<()> {
-        let buf_view = &mut self.buffer.buf[self.jiter.current_index()..self.buffer.n_bytes];
-        if !buf_view.starts_with(token) {
-            let json_error = JsonError {
-                error_type: JsonErrorType::ExpectedSomeIdent,
-                index: self.jiter.current_index(),
-            };
-            let jiter_error = JiterError::from(json_error);
-            return Err(RJiterError::JiterError(jiter_error));
+        let shifter_before = self.buffer.n_shifted_out;
+        let mut err_flag = false;
+
+        // Read enough bytes to have the token
+        if self.jiter.current_index() + token.len() >= self.buffer.n_bytes {
+            self.buffer.shift_buffer(0, self.jiter.current_index());
+        }
+        while self.buffer.n_bytes < self.jiter.current_index() + token.len() {
+            if self.buffer.read_more() == 0 {
+                err_flag = true;
+                break;
+            }
         }
 
-        for byte in buf_view.iter_mut().take(token.len()) {
-            *byte = b' ';
+        // Find the token and sync the Jiter
+        let found = if err_flag {
+            false
+        } else {
+            let buf_view = &mut self.buffer.buf[self.jiter.current_index()..self.buffer.n_bytes];
+            buf_view.starts_with(token)
+        };
+        if shifter_before != self.buffer.n_shifted_out {
+            self.create_new_jiter();
         }
-        let _ = self.jiter.finish(); // feed jiter to the next content
-        buf_view[..token.len()].copy_from_slice(token);
 
-        Ok(())
+        // Result
+        if found {
+            return Ok(());
+        }
+        let json_error = JsonError {
+            error_type: JsonErrorType::ExpectedSomeIdent,
+            index: self.jiter.current_index(),
+        };
+        let jiter_error = JiterError::from(json_error);
+        Err(RJiterError::JiterError(jiter_error))
     }
 }
