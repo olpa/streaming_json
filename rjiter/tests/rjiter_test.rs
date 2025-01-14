@@ -277,7 +277,7 @@ fn known_skip_token() {
     let _ = rjiter.peek();
 
     // Consume the "trux" token
-    let result = rjiter.known_skip_token(b"trux:");
+    let result = rjiter.known_skip_token(b"trux");
     assert!(result.is_ok(), "skip_token failed");
 
     // The Jiter position should be moved to the "true" token

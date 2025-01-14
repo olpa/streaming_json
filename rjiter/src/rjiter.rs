@@ -519,26 +519,33 @@ impl<'rj> RJiter<'rj> {
     #[allow(clippy::missing_errors_doc)]
     pub fn known_skip_token(&mut self, token: &[u8]) -> RJiterResult<()> {
         let shifter_before = self.buffer.n_shifted_out;
+        let mut pos = self.jiter.current_index();
         let mut err_flag = false;
 
         // Read enough bytes to have the token
-        if self.jiter.current_index() + token.len() >= self.buffer.n_bytes {
-            self.buffer.shift_buffer(0, self.jiter.current_index());
+        if pos + token.len() >= self.buffer.n_bytes {
+            self.buffer.shift_buffer(0, pos);
+            pos = 0;
         }
-        while self.buffer.n_bytes < self.jiter.current_index() + token.len() {
+        while self.buffer.n_bytes < pos + token.len() {
             if self.buffer.read_more() == 0 {
                 err_flag = true;
                 break;
             }
         }
 
-        // Find the token and sync the Jiter
+        // Find the token
         let found = if err_flag {
             false
         } else {
-            let buf_view = &mut self.buffer.buf[self.jiter.current_index()..self.buffer.n_bytes];
+            let buf_view = &mut self.buffer.buf[pos..self.buffer.n_bytes];
             buf_view.starts_with(token)
         };
+
+        // Sync the Jiter
+        if found {
+            self.buffer.shift_buffer(0, pos + token.len());
+        }
         if shifter_before != self.buffer.n_shifted_out {
             self.create_new_jiter();
         }
