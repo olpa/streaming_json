@@ -2,11 +2,7 @@ use std::io::Read;
 use std::io::Write;
 
 use crate::buffer::Buffer;
-use jiter::{
-    Jiter, JiterError, JiterErrorType, JiterResult, JsonErrorType, JsonValue, NumberAny, NumberInt,
-};
-
-pub type Peek = jiter::Peek;
+use jiter::{Jiter, JiterError, JiterErrorType, JiterResult, JsonErrorType, JsonValue, NumberAny, NumberInt, Peek};
 
 pub type RJiterResult<T> = Result<T, RJiterError>;
 
@@ -75,6 +71,16 @@ impl<'rj> RJiter<'rj> {
             buffer,
         }
     }
+
+    fn create_new_jiter(&mut self) {
+        let jiter_buffer_2 = &self.buffer.buf[..self.buffer.n_bytes];
+        let jiter_buffer = unsafe { std::mem::transmute::<&[u8], &'rj [u8]>(jiter_buffer_2) };
+        self.jiter = Jiter::new(jiter_buffer);
+    }
+
+    //  ------------------------------------------------------------
+    // Jiter wrappers
+    //
 
     #[allow(clippy::missing_errors_doc)]
     pub fn peek(&mut self) -> JiterResult<Peek> {
@@ -272,7 +278,120 @@ impl<'rj> RJiter<'rj> {
         self.loop_until_success(jiter::Jiter::next_value_owned, None, true)
     }
 
-    // ----------------
+    //  ------------------------------------------------------------
+    // The implementation of Jiter wrappers
+    //
+
+    fn loop_until_success<T, F>(
+        &mut self,
+        mut f: F,
+        skip_spaces_token: Option<u8>,
+        should_eager_consume: bool,
+    ) -> JiterResult<T>
+    where
+        F: FnMut(&mut Jiter<'rj>) -> JiterResult<T>,
+        T: std::fmt::Debug,
+    {
+        fn downgrade_ok_if_eof<T>(
+            result: &JiterResult<T>,
+            should_eager_consume: bool,
+            jiter: &Jiter,
+            n_bytes: usize,
+        ) -> bool {
+            if !result.is_ok() {
+                return false;
+            }
+            if !should_eager_consume {
+                return true;
+            }
+            if jiter.current_index() < n_bytes {
+                return true;
+            }
+            false
+        }
+        let jiter_pos = self.jiter.current_index();
+
+        let result = f(&mut self.jiter);
+        let is_ok = downgrade_ok_if_eof(
+            &result,
+            should_eager_consume,
+            &self.jiter,
+            self.buffer.n_bytes,
+        );
+        if is_ok {
+            return result;
+        }
+
+        self.skip_spaces_feeding(jiter_pos, skip_spaces_token);
+
+        loop {
+            let result = f(&mut self.jiter);
+
+            if result.is_err() {
+                let can_retry = if let Err(JiterError {
+                    error_type: JiterErrorType::JsonError(error_type),
+                    ..
+                }) = &result
+                {
+                    allowed_if_partial(error_type)
+                } else {
+                    false
+                };
+
+                if !can_retry {
+                    return result;
+                }
+            }
+
+            if result.is_ok() {
+                let really_ok = downgrade_ok_if_eof(
+                    &result,
+                    should_eager_consume,
+                    &self.jiter,
+                    self.buffer.n_bytes,
+                );
+                if really_ok {
+                    return result;
+                }
+            }
+
+            if self.buffer.read_more() > 0 {
+                self.create_new_jiter();
+                continue;
+            }
+
+            return result;
+        }
+    }
+
+    // If the transparent is found after skipping spaces, skip also spaces after the transparent token
+    // If any space is skipped, feed the buffer content to the position 0
+    // This function should be called only in a retry handler, otherwise it worsens performance
+    fn skip_spaces_feeding(&mut self, jiter_pos: usize, transparent_token: Option<u8>) -> bool {
+        let to_pos = 0;
+        let n_shifted_before = self.buffer.n_shifted_out;
+
+        if jiter_pos > to_pos {
+            self.buffer.shift_buffer(to_pos, jiter_pos);
+        }
+        self.buffer.skip_spaces(to_pos);
+
+        if let Some(transparent_token) = transparent_token {
+            if to_pos >= self.buffer.n_bytes {
+                self.buffer.read_more();
+            }
+            if to_pos < self.buffer.n_bytes && self.buffer.buf[to_pos] == transparent_token {
+                self.buffer.skip_spaces(to_pos + 1);
+            }
+        }
+
+        let is_shifted = self.buffer.n_shifted_out > n_shifted_before;
+        if is_shifted {
+            self.create_new_jiter();
+        }
+
+        is_shifted
+    }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn finish(&mut self) -> JiterResult<()> {
@@ -286,7 +405,9 @@ impl<'rj> RJiter<'rj> {
         }
     }
 
-    // ----------------
+    //  ------------------------------------------------------------
+    // Pass-through long strings and bytes
+    //
 
     fn handle_long<F, T>(
         &mut self,
@@ -388,100 +509,11 @@ impl<'rj> RJiter<'rj> {
         self.handle_long(parser, writer, write_completed, write_segment)
     }
 
-    fn on_before_call_jiter(&mut self) {
-        self.pos_before_call_jiter = self.jiter.current_index();
-    }
-
-    #[allow(clippy::missing_panics_doc)]
-    pub fn feed(&mut self) -> bool {
-        self.on_before_call_jiter();
-        self.feed_inner(false)
-    }
-
-    // If the transparent is found after skipping spaces, skip also spaces after the transparent token
-    // If any space is skipped, feed the buffer content to the position 0
-    // This function should be called only in a retry handler, otherwise it worsens performance
-    fn skip_spaces_feeding(&mut self, jiter_pos: usize, transparent_token: Option<u8>) -> bool {
-        let to_pos = 0;
-        let n_shifted_before = self.buffer.n_shifted_out;
-
-        if jiter_pos > to_pos {
-            self.buffer.shift_buffer(to_pos, jiter_pos);
-        }
-        self.buffer.skip_spaces(to_pos);
-
-        if let Some(transparent_token) = transparent_token {
-            if to_pos >= self.buffer.n_bytes {
-                self.buffer.read_more();
-            }
-            if to_pos < self.buffer.n_bytes && self.buffer.buf[to_pos] == transparent_token {
-                self.buffer.skip_spaces(to_pos + 1);
-            }
-        }
-
-        let is_shifted = self.buffer.n_shifted_out > n_shifted_before;
-        if is_shifted {
-            self.create_new_jiter();
-        }
-
-        is_shifted
-    }
-
-    fn create_new_jiter(&mut self) {
-        let jiter_buffer_2 = &self.buffer.buf[..self.buffer.n_bytes];
-        let jiter_buffer = unsafe { std::mem::transmute::<&[u8], &'rj [u8]>(jiter_buffer_2) };
-        self.jiter = Jiter::new(jiter_buffer);
-    }
-
-    fn feed_inner(&mut self, is_partial_string: bool) -> bool {
-        let mut pos = self.pos_before_call_jiter;
-
-        //
-        // Skip whitespaces
-        //
-        if !is_partial_string && pos < self.buffer.n_bytes {
-            let mut skip_ws_parser = Jiter::new(&self.buffer.buf[pos..self.buffer.n_bytes]);
-            let _ = skip_ws_parser.finish();
-            pos += skip_ws_parser.current_index();
-        }
-
-        //
-        // Copy remaining bytes to the beginning of the buffer
-        //
-        self.buffer.shift_buffer(0, pos);
-
-        //
-        // Read new bytes
-        //
-        let start_index = if is_partial_string {
-            1
-        } else {
-            self.buffer.n_bytes
-        };
-        let n_new_bytes = self.buffer.read_more_to_pos(start_index);
-
-        if is_partial_string {
-            self.buffer.buf[0] = 34; // Quote character
-            self.buffer.n_bytes += 1;
-        }
-
-        //
-        // Create new Jiter and inform caller if any new bytes were read
-        //
-        self.create_new_jiter();
-
-        n_new_bytes > 0
-    }
-
-    fn maybe_feed(&mut self) {
-        if self.jiter.current_index() > self.buffer.n_bytes / 2 {
-            self.feed();
-        }
-    }
+    //  ------------------------------------------------------------
+    // Skip token
+    //
 
     pub fn skip_token(&mut self, token: &[u8]) -> bool {
-        self.maybe_feed();
-
         let buf_view = &mut self.buffer.buf[self.jiter.current_index()..self.buffer.n_bytes];
         if !buf_view.starts_with(token) {
             return false;
@@ -494,87 +526,5 @@ impl<'rj> RJiter<'rj> {
         buf_view[..token.len()].copy_from_slice(token);
 
         true
-    }
-
-    fn loop_until_success<T, F>(
-        &mut self,
-        mut f: F,
-        skip_spaces_token: Option<u8>,
-        should_eager_consume: bool,
-    ) -> JiterResult<T>
-    where
-        F: FnMut(&mut Jiter<'rj>) -> JiterResult<T>,
-        T: std::fmt::Debug,
-    {
-        fn downgrade_ok_if_eof<T>(
-            result: &JiterResult<T>,
-            should_eager_consume: bool,
-            jiter: &Jiter,
-            n_bytes: usize,
-        ) -> bool {
-            if !result.is_ok() {
-                return false;
-            }
-            if !should_eager_consume {
-                return true;
-            }
-            if jiter.current_index() < n_bytes {
-                return true;
-            }
-            false
-        }
-        let jiter_pos = self.jiter.current_index();
-
-        let result = f(&mut self.jiter);
-        let is_ok = downgrade_ok_if_eof(
-            &result,
-            should_eager_consume,
-            &self.jiter,
-            self.buffer.n_bytes,
-        );
-        if is_ok {
-            return result;
-        }
-
-        self.skip_spaces_feeding(jiter_pos, skip_spaces_token);
-
-        loop {
-            let result = f(&mut self.jiter);
-
-            if result.is_err() {
-                let can_retry = if let Err(JiterError {
-                    error_type: JiterErrorType::JsonError(error_type),
-                    ..
-                }) = &result
-                {
-                    allowed_if_partial(error_type)
-                } else {
-                    false
-                };
-
-                if !can_retry {
-                    return result;
-                }
-            }
-
-            if result.is_ok() {
-                let really_ok = downgrade_ok_if_eof(
-                    &result,
-                    should_eager_consume,
-                    &self.jiter,
-                    self.buffer.n_bytes,
-                );
-                if really_ok {
-                    return result;
-                }
-            }
-
-            if self.buffer.read_more() > 0 {
-                self.create_new_jiter();
-                continue;
-            }
-
-            return result;
-        }
     }
 }

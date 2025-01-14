@@ -25,6 +25,49 @@ fn sanity_check() {
 }
 
 #[test]
+fn many_known_foo() {
+    let input = r#"  42  "hello"  true  false  null  []  {}"#;
+    let mut buffer = [0u8; 10];
+    let mut reader = OneByteReader::new(input.bytes());
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    let result = rjiter.known_int(Peek::new(b'4'));
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), jiter::NumberInt::Int(42));
+
+    let result = rjiter.known_str();
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), "hello");
+
+    let result = rjiter.known_bool(Peek::True);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), true);
+
+    let result = rjiter.known_bool(Peek::False);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), false);
+
+    let result = rjiter.known_null();
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), ());
+
+    let result = rjiter.known_array();
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), None);
+
+    let result = rjiter.known_object();
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), None);
+
+    let result = rjiter.finish();
+    assert!(result.is_ok());
+}
+
+//
+// Pass-through long strings
+//
+
+#[test]
 fn skip_spaces() {
     // Create input with 18 spaces followed by an empty JSON object
     // Use a 16-byte buffer
@@ -107,23 +150,9 @@ fn pass_through_long_string_with_escapes() {
     }
 }
 
-#[test]
-fn skip_token() {
-    let input = r#"data:  42"#;
-    let mut buffer = [0u8; 16];
-    let mut reader = Cursor::new(input.as_bytes());
-
-    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
-
-    // Consume the "data:token
-    let result = rjiter.skip_token(b"data:");
-    assert!(result, "skip_token failed");
-
-    // Consume a number
-    let result = rjiter.next_int();
-    assert!(result.is_ok());
-    assert_eq!(result.unwrap(), jiter::NumberInt::Int(42));
-}
+//
+// Next key
+//
 
 #[test]
 fn skip_spaces_for_next_key() {
@@ -183,6 +212,10 @@ fn next_str_with_spaces_one_byte_reader() {
     assert_eq!(result.unwrap(), "hello");
 }
 
+//
+// `finish()`
+//
+
 #[test]
 fn finish_yes_when_in_buffer() {
     let input = "  \n\t  ".as_bytes();
@@ -228,43 +261,26 @@ fn finish_no_when_need_feed() {
     assert!(result.is_err());
 }
 
+//
+// Skip token
+//
+
 #[test]
-fn many_known_foo() {
-    let input = r#"  42  "hello"  true  false  null  []  {}"#;
-    let mut buffer = [0u8; 10];
-    let mut reader = OneByteReader::new(input.bytes());
+fn skip_token() {
+    let input = r#"data:  42"#;
+    let mut buffer = [0u8; 16];
+    let mut reader = Cursor::new(input.as_bytes());
+
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
-    let result = rjiter.known_int(Peek::new(b'4'));
+    // Consume the "data:token
+    let result = rjiter.skip_token(b"data:");
+    assert!(result, "skip_token failed");
+
+    // Consume a number
+    let result = rjiter.next_int();
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), jiter::NumberInt::Int(42));
-
-    let result = rjiter.known_str();
-    assert!(result.is_ok());
-    assert_eq!(result.unwrap(), "hello");
-
-    let result = rjiter.known_bool(Peek::True);
-    assert!(result.is_ok());
-    assert_eq!(result.unwrap(), true);
-
-    let result = rjiter.known_bool(Peek::False);
-    assert!(result.is_ok());
-    assert_eq!(result.unwrap(), false);
-
-    let result = rjiter.known_null();
-    assert!(result.is_ok());
-    assert_eq!(result.unwrap(), ());
-
-    let result = rjiter.known_array();
-    assert!(result.is_ok());
-    assert_eq!(result.unwrap(), None);
-
-    let result = rjiter.known_object();
-    assert!(result.is_ok());
-    assert_eq!(result.unwrap(), None);
-
-    let result = rjiter.finish();
-    assert!(result.is_ok());
 }
 
 // ----------------------------------------------
@@ -338,7 +354,7 @@ fn known_bool() {
 }
 
 #[test]
-fn next_number1() {
+fn next_number() {
     let lot_of_spaces = " ".repeat(32);
     let input = format!(r#"{lot_of_spaces}123.45"#);
     let mut reader = OneByteReader::new(input.bytes());
