@@ -266,21 +266,33 @@ fn finish_no_when_need_feed() {
 //
 
 #[test]
-fn skip_token() {
-    let input = r#"data:  42"#;
-    let mut buffer = [0u8; 16];
+fn known_skip_token() {
+    let some_spaces = " ".repeat(6);
+    let input = format!(r#"{some_spaces}trux true"#);
+    let mut buffer = [0u8; 8];
     let mut reader = Cursor::new(input.as_bytes());
-
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
-    // Consume the "data:token
-    let result = rjiter.skip_token(b"data:");
-    assert!(result, "skip_token failed");
+    // Position Jiter on the token
+    let _ = rjiter.peek();
 
-    // Consume a number
-    let result = rjiter.next_int();
+    // Consume the "trux" token
+    let result = rjiter.known_skip_token(b"trux:");
+    assert!(result.is_ok(), "skip_token failed");
+
+    // The Jiter position should be moved to the "true" token
+    let result = rjiter.peek();
     assert!(result.is_ok());
-    assert_eq!(result.unwrap(), jiter::NumberInt::Int(42));
+    assert_eq!(result.unwrap(), Peek::True);
+
+    // Do not consume the "trux" token on "true"
+    let result = rjiter.known_skip_token(b"trux");
+    assert!(result.is_err());
+
+    // Consume the "true" token
+    let result = rjiter.next_bool();
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), true);
 }
 
 // ----------------------------------------------

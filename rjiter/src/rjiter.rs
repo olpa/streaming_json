@@ -2,7 +2,10 @@ use std::io::Read;
 use std::io::Write;
 
 use crate::buffer::Buffer;
-use jiter::{Jiter, JiterError, JiterErrorType, JiterResult, JsonErrorType, JsonValue, NumberAny, NumberInt, Peek};
+use jiter::{
+    Jiter, JiterError, JiterErrorType, JiterResult, JsonError, JsonErrorType, JsonValue, NumberAny,
+    NumberInt, Peek,
+};
 
 pub type RJiterResult<T> = Result<T, RJiterError>;
 
@@ -513,10 +516,16 @@ impl<'rj> RJiter<'rj> {
     // Skip token
     //
 
-    pub fn skip_token(&mut self, token: &[u8]) -> bool {
+    #[allow(clippy::missing_errors_doc)]
+    pub fn known_skip_token(&mut self, token: &[u8]) -> RJiterResult<()> {
         let buf_view = &mut self.buffer.buf[self.jiter.current_index()..self.buffer.n_bytes];
         if !buf_view.starts_with(token) {
-            return false;
+            let json_error = JsonError {
+                error_type: JsonErrorType::ExpectedSomeIdent,
+                index: self.jiter.current_index(),
+            };
+            let jiter_error = JiterError::from(json_error);
+            return Err(RJiterError::JiterError(jiter_error));
         }
 
         for byte in buf_view.iter_mut().take(token.len()) {
@@ -525,6 +534,6 @@ impl<'rj> RJiter<'rj> {
         let _ = self.jiter.finish(); // feed jiter to the next content
         buf_view[..token.len()].copy_from_slice(token);
 
-        true
+        Ok(())
     }
 }
