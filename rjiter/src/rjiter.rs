@@ -65,7 +65,7 @@ impl<'rj> RJiter<'rj> {
             #[allow(clippy::transmute_ptr_to_ptr)]
             std::mem::transmute::<&[u8], &'rj mut [u8]>(buf)
         };
-        let buffer = Buffer::new(reader, buf_alias).unwrap();
+        let buffer = Buffer::new(reader, buf_alias);
         let jiter = Jiter::new(&buf[..buffer.n_bytes]);
 
         RJiter {

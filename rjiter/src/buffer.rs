@@ -9,15 +9,13 @@ pub struct Buffer<'buf> {
 }
 
 impl<'buf> Buffer<'buf> {
-    pub fn new(reader: &'buf mut dyn Read, buf: &'buf mut [u8]) -> std::io::Result<Self> {
-        let n_bytes = reader.read(buf)?;
-
-        Ok(Buffer {
+    pub fn new(reader: &'buf mut dyn Read, buf: &'buf mut [u8]) -> Self {
+        Buffer {
             reader,
             buf,
-            n_bytes,
+            n_bytes: 0,
             n_shifted_out: 0,
-        })
+        }
     }
 
     pub fn read_more(&mut self) -> std::io::Result<usize> {
