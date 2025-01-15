@@ -7,10 +7,10 @@ fn test_basic_skip_spaces() {
     let input = format!("{spaces}abc");
     let mut reader = Cursor::new(input.as_bytes());
     let mut buf = [0u8; 16];
-    let mut buffer = Buffer::new(&mut reader, &mut buf);
+    let mut buffer = Buffer::new(&mut reader, &mut buf).unwrap();
 
     // act
-    buffer.skip_spaces(0);
+    buffer.skip_spaces(0).unwrap();
 
     // assert
     assert_eq!(&buffer.buf[..buffer.n_bytes], b"abc");
@@ -23,10 +23,10 @@ fn test_skip_spaces_from_non_zero_pos() {
     let input = format!("{spaces}abc");
     let mut reader = Cursor::new(input.as_bytes());
     let mut buf = [0u8; 16];
-    let mut buffer = Buffer::new(&mut reader, &mut buf);
+    let mut buffer = Buffer::new(&mut reader, &mut buf).unwrap();
 
     // act
-    buffer.skip_spaces(2);
+    buffer.skip_spaces(2).unwrap();
 
     // assert
     assert_eq!(&buffer.buf[..buffer.n_bytes], b"  abc");
@@ -39,10 +39,10 @@ fn test_skip_spaces_with_one_read() {
     let input = format!("{spaces}abc");
     let mut reader = Cursor::new(input.as_bytes());
     let mut buf = [0u8; 4];
-    let mut buffer = Buffer::new(&mut reader, &mut buf);
+    let mut buffer = Buffer::new(&mut reader, &mut buf).unwrap();
 
     // act
-    buffer.skip_spaces(0);
+    buffer.skip_spaces(0).unwrap();
 
     // assert
     assert_eq!(&buffer.buf[..buffer.n_bytes], b"abc");
@@ -55,10 +55,10 @@ fn test_skip_spaces_with_many_reads_and_nonzero_pos() {
     let input = format!("{spaces}abc");
     let mut reader = Cursor::new(input.as_bytes());
     let mut buf = [0u8; 4];
-    let mut buffer = Buffer::new(&mut reader, &mut buf);
+    let mut buffer = Buffer::new(&mut reader, &mut buf).unwrap();
 
     // act
-    buffer.skip_spaces(2);
+    buffer.skip_spaces(2).unwrap();
 
     // assert
     assert_eq!(&buffer.buf[..buffer.n_bytes], b"  a");
@@ -70,10 +70,10 @@ fn test_skip_spaces_eof_without_non_space() {
     let input = " ".repeat(5);
     let mut reader = Cursor::new(input.as_bytes());
     let mut buf = [0u8; 4];
-    let mut buffer = Buffer::new(&mut reader, &mut buf);
+    let mut buffer = Buffer::new(&mut reader, &mut buf).unwrap();
 
     // act
-    buffer.skip_spaces(0);
+    buffer.skip_spaces(0).unwrap();
 
     // assert
     assert_eq!(&buffer.buf[..buffer.n_bytes], b"");
@@ -85,10 +85,10 @@ fn test_skip_spaces_eof_without_non_space_and_nonzero_pos() {
     let input = " ".repeat(5);
     let mut reader = Cursor::new(input.as_bytes());
     let mut buf = [0u8; 4];
-    let mut buffer = Buffer::new(&mut reader, &mut buf);
+    let mut buffer = Buffer::new(&mut reader, &mut buf).unwrap();
 
     // act
-    buffer.skip_spaces(2);
+    buffer.skip_spaces(2).unwrap();
 
     // assert
     assert_eq!(&buffer.buf[..buffer.n_bytes], b"  ");
@@ -100,7 +100,7 @@ fn sanity_test_shift() {
     let input = "abcd12345";
     let mut reader = Cursor::new(input.as_bytes());
     let mut buf = [0u8; 10];
-    let mut buffer = Buffer::new(&mut reader, &mut buf);
+    let mut buffer = Buffer::new(&mut reader, &mut buf).unwrap();
 
     buffer.shift_buffer(3, 7);
 
@@ -113,7 +113,7 @@ fn test_noop_shift_at_pos0() {
     let input = "abc";
     let mut reader = Cursor::new(input.as_bytes());
     let mut buf = [0u8; 4];
-    let mut buffer = Buffer::new(&mut reader, &mut buf);
+    let mut buffer = Buffer::new(&mut reader, &mut buf).unwrap();
 
     buffer.shift_buffer(0, 0);
 
@@ -127,7 +127,7 @@ fn test_noop_shift_at_pos1() {
     let input = "abc";
     let mut reader = Cursor::new(input.as_bytes());
     let mut buf = [0u8; 4];
-    let mut buffer = Buffer::new(&mut reader, &mut buf);
+    let mut buffer = Buffer::new(&mut reader, &mut buf).unwrap();
 
     buffer.shift_buffer(1, 1);
 
@@ -141,7 +141,7 @@ fn test_noop_shift_at_end_minus1() {
     let input = "abc";
     let mut reader = Cursor::new(input.as_bytes());
     let mut buf = [0u8; 4];
-    let mut buffer = Buffer::new(&mut reader, &mut buf);
+    let mut buffer = Buffer::new(&mut reader, &mut buf).unwrap();
 
     buffer.shift_buffer(2, 2);
 
@@ -155,7 +155,7 @@ fn test_noop_shift_at_end() {
     let input = "abc";
     let mut reader = Cursor::new(input.as_bytes());
     let mut buf = [0u8; 4];
-    let mut buffer = Buffer::new(&mut reader, &mut buf);
+    let mut buffer = Buffer::new(&mut reader, &mut buf).unwrap();
 
     buffer.shift_buffer(3, 3);
 
@@ -169,7 +169,7 @@ fn test_shift_pos1_to_pos0() {
     let input = "abcd12345";
     let mut reader = Cursor::new(input.as_bytes());
     let mut buf = [0u8; 10];
-    let mut buffer = Buffer::new(&mut reader, &mut buf);
+    let mut buffer = Buffer::new(&mut reader, &mut buf).unwrap();
 
     buffer.shift_buffer(0, 1);
 
@@ -182,7 +182,7 @@ fn test_shift_preend_to_pos0() {
     let input = "abcd12345";
     let mut reader = Cursor::new(input.as_bytes());
     let mut buf = [0u8; 10];
-    let mut buffer = Buffer::new(&mut reader, &mut buf);
+    let mut buffer = Buffer::new(&mut reader, &mut buf).unwrap();
 
     buffer.shift_buffer(0, input.len() - 1);
 
@@ -195,7 +195,7 @@ fn test_shift_preend_to_pos1() {
     let input = "abcd12345";
     let mut reader = Cursor::new(input.as_bytes());
     let mut buf = [0u8; 10];
-    let mut buffer = Buffer::new(&mut reader, &mut buf);
+    let mut buffer = Buffer::new(&mut reader, &mut buf).unwrap();
 
     buffer.shift_buffer(1, input.len() - 1);
 
@@ -208,7 +208,7 @@ fn test_shift_end_to_pos0() {
     let input = "abcd12345";
     let mut reader = Cursor::new(input.as_bytes());
     let mut buf = [0u8; 10];
-    let mut buffer = Buffer::new(&mut reader, &mut buf);
+    let mut buffer = Buffer::new(&mut reader, &mut buf).unwrap();
 
     buffer.shift_buffer(0, input.len());
 
@@ -221,7 +221,7 @@ fn test_shift_end_to_pos1() {
     let input = "abcd12345";
     let mut reader = Cursor::new(input.as_bytes());
     let mut buf = [0u8; 10];
-    let mut buffer = Buffer::new(&mut reader, &mut buf);
+    let mut buffer = Buffer::new(&mut reader, &mut buf).unwrap();
 
     buffer.shift_buffer(1, input.len());
 
@@ -234,7 +234,7 @@ fn test_shift_postend_to_pos0() {
     let input = "abcd12345";
     let mut reader = Cursor::new(input.as_bytes());
     let mut buf = [0u8; 10];
-    let mut buffer = Buffer::new(&mut reader, &mut buf);
+    let mut buffer = Buffer::new(&mut reader, &mut buf).unwrap();
 
     buffer.shift_buffer(0, input.len() + 1);
 
@@ -247,7 +247,7 @@ fn test_shift_postend_to_pos1() {
     let input = "abcd12345";
     let mut reader = Cursor::new(input.as_bytes());
     let mut buf = [0u8; 10];
-    let mut buffer = Buffer::new(&mut reader, &mut buf);
+    let mut buffer = Buffer::new(&mut reader, &mut buf).unwrap();
 
     buffer.shift_buffer(1, input.len() + 1);
 

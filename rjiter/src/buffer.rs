@@ -9,26 +9,23 @@ pub struct Buffer<'buf> {
 }
 
 impl<'buf> Buffer<'buf> {
-    #[allow(clippy::missing_panics_doc)]
-    pub fn new(reader: &'buf mut dyn Read, buf: &'buf mut [u8]) -> Self {
-        let n_bytes = reader.read(buf).unwrap();
+    pub fn new(reader: &'buf mut dyn Read, buf: &'buf mut [u8]) -> std::io::Result<Self> {
+        let n_bytes = reader.read(buf)?;
 
-        Buffer {
+        Ok(Buffer {
             reader,
             buf,
             n_bytes,
             n_shifted_out: 0,
-        }
+        })
     }
 
-    #[allow(clippy::missing_panics_doc)]
-    pub fn read_more(&mut self) -> usize {
-        let n_new_bytes = self.reader.read(&mut self.buf[self.n_bytes..]).unwrap();
+    pub fn read_more(&mut self) -> std::io::Result<usize> {
+        let n_new_bytes = self.reader.read(&mut self.buf[self.n_bytes..])?;
         self.n_bytes += n_new_bytes;
-        n_new_bytes
+        Ok(n_new_bytes)
     }
 
-    #[allow(clippy::missing_panics_doc)]
     pub fn shift_buffer(&mut self, to_pos: usize, from_pos: usize) {
         if from_pos > to_pos && to_pos < self.n_bytes {
             if from_pos < self.n_bytes {
@@ -41,7 +38,7 @@ impl<'buf> Buffer<'buf> {
         }
     }
 
-    pub fn skip_spaces(&mut self, pos: usize) {
+    pub fn skip_spaces(&mut self, pos: usize) -> std::io::Result<()> {
         let mut i = pos;
         loop {
             while i < self.n_bytes && self.buf[i].is_ascii_whitespace() {
@@ -58,13 +55,14 @@ impl<'buf> Buffer<'buf> {
 
             // Reached end of buffer, shift and read more
             self.shift_buffer(pos, self.n_bytes);
-            let n_new = self.read_more();
+            let n_new = self.read_more()?;
             if n_new == 0 {
                 // EOF reached
                 break;
             }
             i = self.n_bytes - n_new;
         }
+        Ok(())
     }
 }
 

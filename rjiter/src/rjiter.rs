@@ -65,7 +65,7 @@ impl<'rj> RJiter<'rj> {
             #[allow(clippy::transmute_ptr_to_ptr)]
             std::mem::transmute::<&[u8], &'rj mut [u8]>(buf)
         };
-        let buffer = Buffer::new(reader, buf_alias);
+        let buffer = Buffer::new(reader, buf_alias).unwrap();
         let jiter = Jiter::new(&buf[..buffer.n_bytes]);
 
         RJiter {
@@ -358,7 +358,7 @@ impl<'rj> RJiter<'rj> {
                 }
             }
 
-            if self.buffer.read_more() > 0 {
+            if self.buffer.read_more().unwrap() > 0 {
                 self.create_new_jiter();
                 continue;
             }
@@ -377,14 +377,14 @@ impl<'rj> RJiter<'rj> {
         if jiter_pos > to_pos {
             self.buffer.shift_buffer(to_pos, jiter_pos);
         }
-        self.buffer.skip_spaces(to_pos);
+        self.buffer.skip_spaces(to_pos).unwrap();
 
         if let Some(transparent_token) = transparent_token {
             if to_pos >= self.buffer.n_bytes {
-                self.buffer.read_more();
+                self.buffer.read_more().unwrap();
             }
             if to_pos < self.buffer.n_bytes && self.buffer.buf[to_pos] == transparent_token {
-                self.buffer.skip_spaces(to_pos + 1);
+                self.buffer.skip_spaces(to_pos + 1).unwrap();
             }
         }
 
@@ -400,7 +400,7 @@ impl<'rj> RJiter<'rj> {
     pub fn finish(&mut self) -> JiterResult<()> {
         loop {
             self.jiter.finish()?;
-            if self.buffer.read_more() == 0 {
+            if self.buffer.read_more().unwrap() == 0 {
                 return Ok(());
             }
             self.buffer.shift_buffer(0, self.jiter.current_index());
@@ -451,7 +451,7 @@ impl<'rj> RJiter<'rj> {
                 self.buffer.shift_buffer(1, escaping_bs_pos);
             }
 
-            if self.buffer.read_more() == 0 {
+            if self.buffer.read_more().unwrap() == 0 {
                 return Err(RJiterError::JiterError(error));
             }
             self.create_new_jiter();
@@ -528,7 +528,7 @@ impl<'rj> RJiter<'rj> {
             pos = 0;
         }
         while self.buffer.n_bytes < pos + token.len() {
-            if self.buffer.read_more() == 0 {
+            if self.buffer.read_more().unwrap() == 0 {
                 err_flag = true;
                 break;
             }
