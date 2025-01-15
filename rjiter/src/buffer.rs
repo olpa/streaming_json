@@ -9,26 +9,29 @@ pub struct Buffer<'buf> {
 }
 
 impl<'buf> Buffer<'buf> {
-    #[allow(clippy::missing_panics_doc)]
+    #[must_use]
     pub fn new(reader: &'buf mut dyn Read, buf: &'buf mut [u8]) -> Self {
-        let n_bytes = reader.read(buf).unwrap();
-
         Buffer {
             reader,
             buf,
-            n_bytes,
+            n_bytes: 0,
             n_shifted_out: 0,
         }
     }
 
-    #[allow(clippy::missing_panics_doc)]
-    pub fn read_more(&mut self) -> usize {
-        let n_new_bytes = self.reader.read(&mut self.buf[self.n_bytes..]).unwrap();
+    /// Read from the underlying reader into the buffer.
+    ///
+    /// Returns the number of bytes read.
+    ///
+    /// # Errors
+    ///
+    /// From the underlying reader.
+    pub fn read_more(&mut self) -> std::io::Result<usize> {
+        let n_new_bytes = self.reader.read(&mut self.buf[self.n_bytes..])?;
         self.n_bytes += n_new_bytes;
-        n_new_bytes
+        Ok(n_new_bytes)
     }
 
-    #[allow(clippy::missing_panics_doc)]
     pub fn shift_buffer(&mut self, to_pos: usize, from_pos: usize) {
         if from_pos > to_pos && to_pos < self.n_bytes {
             if from_pos < self.n_bytes {
@@ -41,7 +44,17 @@ impl<'buf> Buffer<'buf> {
         }
     }
 
-    pub fn skip_spaces(&mut self, pos: usize) {
+    /// Skip over any ASCII whitespace characters starting at the given position.
+    /// Read-shift-read-shift-read-shift... until non-whitespace is found or EOF is reached.
+    ///
+    /// # Arguments
+    ///
+    /// * `pos` - The position in the buffer to start skipping from
+    ///
+    /// # Errors
+    ///
+    /// From the underlying reader.
+    pub fn skip_spaces(&mut self, pos: usize) -> std::io::Result<()> {
         let mut i = pos;
         loop {
             while i < self.n_bytes && self.buf[i].is_ascii_whitespace() {
@@ -58,13 +71,14 @@ impl<'buf> Buffer<'buf> {
 
             // Reached end of buffer, shift and read more
             self.shift_buffer(pos, self.n_bytes);
-            let n_new = self.read_more();
+            let n_new = self.read_more()?;
             if n_new == 0 {
                 // EOF reached
                 break;
             }
             i = self.n_bytes - n_new;
         }
+        Ok(())
     }
 }
 
@@ -75,5 +89,25 @@ impl<'buf> std::fmt::Debug for Buffer<'buf> {
             "Buffer {{ n_bytes: {:?}, n_shifted_out: {:?}, buf: {:?} }}",
             self.n_bytes, self.n_shifted_out, self.buf
         )
+    }
+}
+
+pub struct ChangeFlag {
+    n_shifted: usize,
+    n_bytes: usize,
+}
+
+impl ChangeFlag {
+    #[must_use]
+    pub fn new(buf: &Buffer) -> Self {
+        ChangeFlag {
+            n_shifted: buf.n_shifted_out,
+            n_bytes: buf.n_bytes,
+        }
+    }
+
+    #[must_use]
+    pub fn is_changed(&self, buf: &Buffer) -> bool {
+        self.n_shifted != buf.n_shifted_out || self.n_bytes != buf.n_bytes
     }
 }
