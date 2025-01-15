@@ -98,22 +98,22 @@ impl<'rj> RJiter<'rj> {
     //
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn peek(&mut self) -> JiterResult<Peek> {
+    pub fn peek(&mut self) -> RJiterResult<Peek> {
         self.loop_until_success(jiter::Jiter::peek, None, false)
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn known_array(&mut self) -> JiterResult<Option<Peek>> {
+    pub fn known_array(&mut self) -> RJiterResult<Option<Peek>> {
         self.loop_until_success(jiter::Jiter::known_array, Some(b'['), false)
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn known_bool(&mut self, peek: Peek) -> JiterResult<bool> {
+    pub fn known_bool(&mut self, peek: Peek) -> RJiterResult<bool> {
         self.loop_until_success(|j| j.known_bool(peek), None, false)
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn known_bytes(&mut self) -> JiterResult<&[u8]> {
+    pub fn known_bytes(&mut self) -> RJiterResult<&[u8]> {
         let f = |j: &mut Jiter<'rj>| unsafe {
             std::mem::transmute::<JiterResult<&[u8]>, JiterResult<&'rj [u8]>>(j.known_bytes())
         };
@@ -121,27 +121,27 @@ impl<'rj> RJiter<'rj> {
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn known_float(&mut self, peek: Peek) -> JiterResult<f64> {
+    pub fn known_float(&mut self, peek: Peek) -> RJiterResult<f64> {
         self.loop_until_success(|j| j.known_float(peek), None, true)
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn known_int(&mut self, peek: Peek) -> JiterResult<NumberInt> {
+    pub fn known_int(&mut self, peek: Peek) -> RJiterResult<NumberInt> {
         self.loop_until_success(|j| j.known_int(peek), None, true)
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn known_null(&mut self) -> JiterResult<()> {
+    pub fn known_null(&mut self) -> RJiterResult<()> {
         self.loop_until_success(jiter::Jiter::known_null, None, false)
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn known_number(&mut self, peek: Peek) -> JiterResult<NumberAny> {
+    pub fn known_number(&mut self, peek: Peek) -> RJiterResult<NumberAny> {
         self.loop_until_success(|j| j.known_number(peek), None, true)
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn known_object(&mut self) -> JiterResult<Option<&str>> {
+    pub fn known_object(&mut self) -> RJiterResult<Option<&str>> {
         let f = |j: &mut Jiter<'rj>| unsafe {
             std::mem::transmute::<JiterResult<Option<&str>>, JiterResult<Option<&'rj str>>>(
                 j.known_object(),
@@ -151,12 +151,12 @@ impl<'rj> RJiter<'rj> {
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn known_skip(&mut self, peek: Peek) -> JiterResult<()> {
+    pub fn known_skip(&mut self, peek: Peek) -> RJiterResult<()> {
         self.loop_until_success(|j| j.known_skip(peek), None, true)
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn known_str(&mut self) -> JiterResult<&str> {
+    pub fn known_str(&mut self) -> RJiterResult<&str> {
         let f = |j: &mut Jiter<'rj>| unsafe {
             std::mem::transmute::<JiterResult<&str>, JiterResult<&'rj str>>(j.known_str())
         };
@@ -164,32 +164,32 @@ impl<'rj> RJiter<'rj> {
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn known_value(&mut self, peek: Peek) -> JiterResult<JsonValue<'rj>> {
+    pub fn known_value(&mut self, peek: Peek) -> RJiterResult<JsonValue<'rj>> {
         self.loop_until_success(|j| j.known_value(peek), None, true)
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn known_value_owned(&mut self, peek: Peek) -> JiterResult<JsonValue<'static>> {
+    pub fn known_value_owned(&mut self, peek: Peek) -> RJiterResult<JsonValue<'static>> {
         self.loop_until_success(|j| j.known_value_owned(peek), None, true)
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn next_array(&mut self) -> JiterResult<Option<Peek>> {
+    pub fn next_array(&mut self) -> RJiterResult<Option<Peek>> {
         self.loop_until_success(jiter::Jiter::next_array, Some(b'['), false)
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn array_step(&mut self) -> JiterResult<Option<Peek>> {
+    pub fn array_step(&mut self) -> RJiterResult<Option<Peek>> {
         self.loop_until_success(jiter::Jiter::array_step, Some(b','), false)
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn next_bool(&mut self) -> JiterResult<bool> {
+    pub fn next_bool(&mut self) -> RJiterResult<bool> {
         self.loop_until_success(jiter::Jiter::next_bool, None, false)
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn next_bytes(&mut self) -> JiterResult<&[u8]> {
+    pub fn next_bytes(&mut self) -> RJiterResult<&[u8]> {
         let f = |j: &mut Jiter<'rj>| unsafe {
             std::mem::transmute::<JiterResult<&[u8]>, JiterResult<&'rj [u8]>>(j.next_bytes())
         };
@@ -197,12 +197,12 @@ impl<'rj> RJiter<'rj> {
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn next_float(&mut self) -> JiterResult<f64> {
+    pub fn next_float(&mut self) -> RJiterResult<f64> {
         self.loop_until_success(jiter::Jiter::next_float, None, true)
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn next_int(&mut self) -> JiterResult<NumberInt> {
+    pub fn next_int(&mut self) -> RJiterResult<NumberInt> {
         self.loop_until_success(jiter::Jiter::next_int, None, true)
     }
 
@@ -213,7 +213,7 @@ impl<'rj> RJiter<'rj> {
     /// # Errors
     ///
     /// See `Jiter::next_key`
-    pub fn next_key(&mut self) -> JiterResult<Option<&str>> {
+    pub fn next_key(&mut self) -> RJiterResult<Option<&str>> {
         let f = |j: &mut Jiter<'rj>| unsafe {
             std::mem::transmute::<JiterResult<Option<&str>>, JiterResult<Option<&'rj str>>>(
                 j.next_key(),
@@ -223,7 +223,7 @@ impl<'rj> RJiter<'rj> {
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn next_key_bytes(&mut self) -> JiterResult<Option<&[u8]>> {
+    pub fn next_key_bytes(&mut self) -> RJiterResult<Option<&[u8]>> {
         let f = |j: &mut Jiter<'rj>| unsafe {
             std::mem::transmute::<JiterResult<Option<&[u8]>>, JiterResult<Option<&'rj [u8]>>>(
                 j.next_key_bytes(),
@@ -233,17 +233,17 @@ impl<'rj> RJiter<'rj> {
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn next_null(&mut self) -> JiterResult<()> {
+    pub fn next_null(&mut self) -> RJiterResult<()> {
         self.loop_until_success(jiter::Jiter::next_null, None, false)
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn next_number(&mut self) -> JiterResult<NumberAny> {
+    pub fn next_number(&mut self) -> RJiterResult<NumberAny> {
         self.loop_until_success(jiter::Jiter::next_number, None, true)
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn next_number_bytes(&mut self) -> JiterResult<&[u8]> {
+    pub fn next_number_bytes(&mut self) -> RJiterResult<&[u8]> {
         let f = |j: &mut Jiter<'rj>| unsafe {
             std::mem::transmute::<JiterResult<&[u8]>, JiterResult<&'rj [u8]>>(j.next_number_bytes())
         };
@@ -251,7 +251,7 @@ impl<'rj> RJiter<'rj> {
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn next_object(&mut self) -> JiterResult<Option<&str>> {
+    pub fn next_object(&mut self) -> RJiterResult<Option<&str>> {
         let f = |j: &mut Jiter<'rj>| unsafe {
             std::mem::transmute::<JiterResult<Option<&str>>, JiterResult<Option<&'rj str>>>(
                 j.next_object(),
@@ -261,7 +261,7 @@ impl<'rj> RJiter<'rj> {
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn next_object_bytes(&mut self) -> JiterResult<Option<&[u8]>> {
+    pub fn next_object_bytes(&mut self) -> RJiterResult<Option<&[u8]>> {
         let f = |j: &mut Jiter<'rj>| unsafe {
             std::mem::transmute::<JiterResult<Option<&[u8]>>, JiterResult<Option<&'rj [u8]>>>(
                 j.next_object_bytes(),
@@ -271,12 +271,12 @@ impl<'rj> RJiter<'rj> {
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn next_skip(&mut self) -> JiterResult<()> {
+    pub fn next_skip(&mut self) -> RJiterResult<()> {
         self.loop_until_success(jiter::Jiter::next_skip, None, true)
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn next_str(&mut self) -> JiterResult<&str> {
+    pub fn next_str(&mut self) -> RJiterResult<&str> {
         let f = |j: &mut Jiter<'rj>| unsafe {
             std::mem::transmute::<JiterResult<&str>, JiterResult<&'rj str>>(j.next_str())
         };
@@ -284,12 +284,12 @@ impl<'rj> RJiter<'rj> {
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn next_value(&mut self) -> JiterResult<JsonValue<'rj>> {
+    pub fn next_value(&mut self) -> RJiterResult<JsonValue<'rj>> {
         self.loop_until_success(jiter::Jiter::next_value, None, true)
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn next_value_owned(&mut self) -> JiterResult<JsonValue<'static>> {
+    pub fn next_value_owned(&mut self) -> RJiterResult<JsonValue<'static>> {
         self.loop_until_success(jiter::Jiter::next_value_owned, None, true)
     }
 
@@ -302,7 +302,7 @@ impl<'rj> RJiter<'rj> {
         mut f: F,
         skip_spaces_token: Option<u8>,
         should_eager_consume: bool,
-    ) -> JiterResult<T>
+    ) -> RJiterResult<T>
     where
         F: FnMut(&mut Jiter<'rj>) -> JiterResult<T>,
         T: std::fmt::Debug,
@@ -334,16 +334,16 @@ impl<'rj> RJiter<'rj> {
             self.buffer.n_bytes,
         );
         if is_ok {
-            return result;
+            return Ok(result?);
         }
 
-        self.skip_spaces_feeding(jiter_pos, skip_spaces_token);
+        self.skip_spaces_feeding(jiter_pos, skip_spaces_token)?;
 
         loop {
             let result = f(&mut self.jiter);
 
             if result.is_err() && !can_retry_if_partial(&result) {
-                return result;
+                return Err(result.unwrap_err().into());
             }
 
             if result.is_ok() {
@@ -354,7 +354,7 @@ impl<'rj> RJiter<'rj> {
                     self.buffer.n_bytes,
                 );
                 if really_ok {
-                    return result;
+                    return Ok(result?);
                 }
             }
 
@@ -364,33 +364,38 @@ impl<'rj> RJiter<'rj> {
                 continue;
             }
 
-            return result;
+            return result.map_err(RJiterError::from);
         }
     }
 
     // If the transparent is found after skipping spaces, skip also spaces after the transparent token
     // If any space is skipped, feed the buffer content to the position 0
     // This function should be called only in a retry handler, otherwise it worsens performance
-    fn skip_spaces_feeding(&mut self, jiter_pos: usize, transparent_token: Option<u8>) {
+    fn skip_spaces_feeding(
+        &mut self,
+        jiter_pos: usize,
+        transparent_token: Option<u8>,
+    ) -> RJiterResult<()> {
         let to_pos = 0;
         let change_flag = ChangeFlag::new(&self.buffer);
 
         if jiter_pos > to_pos {
             self.buffer.shift_buffer(to_pos, jiter_pos);
         }
-        self.buffer.skip_spaces(to_pos).unwrap();
+        self.buffer.skip_spaces(to_pos)?;
         if let Some(transparent_token) = transparent_token {
             if to_pos >= self.buffer.n_bytes {
-                self.buffer.read_more().unwrap();
+                self.buffer.read_more()?;
             }
             if to_pos < self.buffer.n_bytes && self.buffer.buf[to_pos] == transparent_token {
-                self.buffer.skip_spaces(to_pos + 1).unwrap();
+                self.buffer.skip_spaces(to_pos + 1)?;
             }
         }
 
         if change_flag.is_changed(&self.buffer) {
             self.create_new_jiter();
         }
+        Ok(())
     }
 
     #[allow(clippy::missing_errors_doc)]
