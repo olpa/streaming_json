@@ -2,6 +2,7 @@ use std::io::Read;
 use std::io::Write;
 
 use crate::buffer::Buffer;
+use crate::buffer::ChangeFlag;
 use jiter::{
     Jiter, JiterError, JiterErrorType, JiterResult, JsonError, JsonErrorType, JsonValue, NumberAny,
     NumberInt, Peek,
@@ -66,7 +67,6 @@ fn can_retry_if_partial<T>(jiter_result: &JiterResult<T>) -> bool {
     }
     false
 }
-
 
 impl<'rj> RJiter<'rj> {
     #[allow(clippy::missing_errors_doc)]
@@ -342,10 +342,8 @@ impl<'rj> RJiter<'rj> {
         loop {
             let result = f(&mut self.jiter);
 
-            if result.is_err() {
-                if !can_retry_if_partial(&result) {
-                    return result;
-                }
+            if result.is_err() && !can_retry_if_partial(&result) {
+                return result;
             }
 
             if result.is_ok() {
@@ -360,7 +358,8 @@ impl<'rj> RJiter<'rj> {
                 }
             }
 
-            if self.buffer.read_more().unwrap() > 0 {
+            let n_read = self.buffer.read_more().unwrap();
+            if n_read > 0 {
                 self.create_new_jiter();
                 continue;
             }
@@ -372,15 +371,14 @@ impl<'rj> RJiter<'rj> {
     // If the transparent is found after skipping spaces, skip also spaces after the transparent token
     // If any space is skipped, feed the buffer content to the position 0
     // This function should be called only in a retry handler, otherwise it worsens performance
-    fn skip_spaces_feeding(&mut self, jiter_pos: usize, transparent_token: Option<u8>) -> bool {
+    fn skip_spaces_feeding(&mut self, jiter_pos: usize, transparent_token: Option<u8>) {
         let to_pos = 0;
-        let n_shifted_before = self.buffer.n_shifted_out;
+        let change_flag = ChangeFlag::new(&self.buffer);
 
         if jiter_pos > to_pos {
             self.buffer.shift_buffer(to_pos, jiter_pos);
         }
         self.buffer.skip_spaces(to_pos).unwrap();
-
         if let Some(transparent_token) = transparent_token {
             if to_pos >= self.buffer.n_bytes {
                 self.buffer.read_more().unwrap();
@@ -390,12 +388,9 @@ impl<'rj> RJiter<'rj> {
             }
         }
 
-        let is_shifted = self.buffer.n_shifted_out > n_shifted_before;
-        if is_shifted {
+        if change_flag.is_changed(&self.buffer) {
             self.create_new_jiter();
         }
-
-        is_shifted
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -519,7 +514,7 @@ impl<'rj> RJiter<'rj> {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn known_skip_token(&mut self, token: &[u8]) -> RJiterResult<()> {
-        let shifter_before = self.buffer.n_shifted_out;
+        let change_flag = ChangeFlag::new(&self.buffer);
         let mut pos = self.jiter.current_index();
         let mut err_flag = false;
 
@@ -547,7 +542,7 @@ impl<'rj> RJiter<'rj> {
         if found {
             self.buffer.shift_buffer(0, pos + token.len());
         }
-        if shifter_before != self.buffer.n_shifted_out {
+        if change_flag.is_changed(&self.buffer) {
             self.create_new_jiter();
         }
 

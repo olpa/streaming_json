@@ -12,7 +12,7 @@ use crate::one_byte_reader::OneByteReader;
 
 #[test]
 fn sanity_check() {
-    let input = r#"{}}"#;
+    let input = r#"{}"#;
     let mut buffer = [0u8; 16];
     let mut reader = Cursor::new(input.as_bytes());
 
@@ -331,6 +331,25 @@ fn known_skip_token() {
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), true);
     }
+}
+
+//
+// Regression tests
+//
+
+#[test]
+fn regression_next_value_empty_object_with_extra_bracket() {
+    let input = r#"{}}"#; // extra bracket
+    let mut buffer = [0u8; 16];
+    let mut reader = Cursor::new(input.as_bytes());
+
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    let result = rjiter.next_value();
+    assert!(result.is_ok());
+
+    let empty_object = JsonValue::Object(Arc::new(LazyIndexMap::new()));
+    assert_eq!(result.unwrap(), empty_object);
 }
 
 // ----------------------------------------------

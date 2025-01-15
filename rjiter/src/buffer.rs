@@ -73,3 +73,21 @@ impl<'buf> std::fmt::Debug for Buffer<'buf> {
         )
     }
 }
+
+pub struct ChangeFlag {
+    n_shifted: usize,
+    n_bytes: usize,
+}
+
+impl ChangeFlag {
+    pub fn new(buf: &Buffer) -> Self {
+        ChangeFlag {
+            n_shifted: buf.n_shifted_out,
+            n_bytes: buf.n_bytes,
+        }
+    }
+
+    pub fn is_changed(&self, buf: &Buffer) -> bool {
+        self.n_shifted != buf.n_shifted_out || self.n_bytes != buf.n_bytes
+    }
+}
