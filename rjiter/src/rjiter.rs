@@ -56,6 +56,18 @@ fn allowed_if_partial(error_type: &JsonErrorType) -> bool {
     )
 }
 
+fn can_retry_if_partial<T>(jiter_result: &JiterResult<T>) -> bool {
+    if let Err(JiterError {
+        error_type: JiterErrorType::JsonError(error_type),
+        ..
+    }) = &jiter_result
+    {
+        return allowed_if_partial(error_type);
+    }
+    false
+}
+
+
 impl<'rj> RJiter<'rj> {
     #[allow(clippy::missing_errors_doc)]
     #[allow(clippy::missing_panics_doc)]
@@ -331,17 +343,7 @@ impl<'rj> RJiter<'rj> {
             let result = f(&mut self.jiter);
 
             if result.is_err() {
-                let can_retry = if let Err(JiterError {
-                    error_type: JiterErrorType::JsonError(error_type),
-                    ..
-                }) = &result
-                {
-                    allowed_if_partial(error_type)
-                } else {
-                    false
-                };
-
-                if !can_retry {
+                if !can_retry_if_partial(&result) {
                     return result;
                 }
             }
@@ -429,9 +431,8 @@ impl<'rj> RJiter<'rj> {
                 write_completed(value, writer)?;
                 return Ok(());
             }
-            let error = result.unwrap_err();
-            if error.error_type != JiterErrorType::JsonError(JsonErrorType::EofWhileParsingString) {
-                return Err(RJiterError::JiterError(error));
+            if !can_retry_if_partial(&result) {
+                return Err(result.unwrap_err().into());
             }
 
             let mut escaping_bs_pos: usize = self.buffer.n_bytes;
@@ -452,7 +453,7 @@ impl<'rj> RJiter<'rj> {
             }
 
             if self.buffer.read_more().unwrap() == 0 {
-                return Err(RJiterError::JiterError(error));
+                return Err(result.unwrap_err().into());
             }
             self.create_new_jiter();
         }
