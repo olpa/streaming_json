@@ -9,6 +9,7 @@ pub struct Buffer<'buf> {
 }
 
 impl<'buf> Buffer<'buf> {
+    #[must_use]
     pub fn new(reader: &'buf mut dyn Read, buf: &'buf mut [u8]) -> Self {
         Buffer {
             reader,
@@ -18,6 +19,13 @@ impl<'buf> Buffer<'buf> {
         }
     }
 
+    /// Read from the underlying reader into the buffer.
+    ///
+    /// Returns the number of bytes read.
+    ///
+    /// # Errors
+    ///
+    /// From the underlying reader.
     pub fn read_more(&mut self) -> std::io::Result<usize> {
         let n_new_bytes = self.reader.read(&mut self.buf[self.n_bytes..])?;
         self.n_bytes += n_new_bytes;
@@ -36,6 +44,16 @@ impl<'buf> Buffer<'buf> {
         }
     }
 
+    /// Skip over any ASCII whitespace characters starting at the given position.
+    /// Read-shift-read-shift-read-shift... until non-whitespace is found or EOF is reached.
+    ///
+    /// # Arguments
+    ///
+    /// * `pos` - The position in the buffer to start skipping from
+    ///
+    /// # Errors
+    ///
+    /// From the underlying reader.
     pub fn skip_spaces(&mut self, pos: usize) -> std::io::Result<()> {
         let mut i = pos;
         loop {
@@ -80,6 +98,7 @@ pub struct ChangeFlag {
 }
 
 impl ChangeFlag {
+    #[must_use]
     pub fn new(buf: &Buffer) -> Self {
         ChangeFlag {
             n_shifted: buf.n_shifted_out,
@@ -87,6 +106,7 @@ impl ChangeFlag {
         }
     }
 
+    #[must_use]
     pub fn is_changed(&self, buf: &Buffer) -> bool {
         self.n_shifted != buf.n_shifted_out || self.n_bytes != buf.n_bytes
     }
