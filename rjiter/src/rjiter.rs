@@ -95,18 +95,30 @@ impl<'rj> RJiter<'rj> {
     // Jiter wrappers
     //
 
+    /// See `Jiter::peek`
+    /// # Errors
+    /// `std::io::Error` or `JiterError`
     pub fn peek(&mut self) -> RJiterResult<Peek> {
         self.loop_until_success(jiter::Jiter::peek, None, false)
     }
 
+    /// See `Jiter::known_array`
+    /// # Errors
+    /// `std::io::Error` or `JiterError`
     pub fn known_array(&mut self) -> RJiterResult<Option<Peek>> {
         self.loop_until_success(jiter::Jiter::known_array, Some(b'['), false)
     }
 
+    /// See `Jiter::known_bool`
+    /// # Errors
+    /// `std::io::Error` or `JiterError`
     pub fn known_bool(&mut self, peek: Peek) -> RJiterResult<bool> {
         self.loop_until_success(|j| j.known_bool(peek), None, false)
     }
 
+    /// See `Jiter::known_bytes`
+    /// # Errors
+    /// `std::io::Error` or `JiterError`
     pub fn known_bytes(&mut self) -> RJiterResult<&[u8]> {
         let f = |j: &mut Jiter<'rj>| unsafe {
             std::mem::transmute::<JiterResult<&[u8]>, JiterResult<&'rj [u8]>>(j.known_bytes())
@@ -114,22 +126,37 @@ impl<'rj> RJiter<'rj> {
         self.loop_until_success(f, None, false)
     }
 
+    /// See `Jiter::known_float`
+    /// # Errors
+    /// `std::io::Error` or `JiterError`
     pub fn known_float(&mut self, peek: Peek) -> RJiterResult<f64> {
         self.loop_until_success(|j| j.known_float(peek), None, true)
     }
 
+    /// See `Jiter::known_int`
+    /// # Errors
+    /// `std::io::Error` or `JiterError`
     pub fn known_int(&mut self, peek: Peek) -> RJiterResult<NumberInt> {
         self.loop_until_success(|j| j.known_int(peek), None, true)
     }
 
+    /// See `Jiter::known_null`
+    /// # Errors
+    /// `std::io::Error` or `JiterError`
     pub fn known_null(&mut self) -> RJiterResult<()> {
         self.loop_until_success(jiter::Jiter::known_null, None, false)
     }
 
+    /// See `Jiter::known_number`
+    /// # Errors
+    /// `std::io::Error` or `JiterError`
     pub fn known_number(&mut self, peek: Peek) -> RJiterResult<NumberAny> {
         self.loop_until_success(|j| j.known_number(peek), None, true)
     }
 
+    /// See `Jiter::known_object`
+    /// # Errors
+    /// `std::io::Error` or `JiterError`
     pub fn known_object(&mut self) -> RJiterResult<Option<&str>> {
         let f = |j: &mut Jiter<'rj>| unsafe {
             std::mem::transmute::<JiterResult<Option<&str>>, JiterResult<Option<&'rj str>>>(
@@ -139,10 +166,16 @@ impl<'rj> RJiter<'rj> {
         self.loop_until_success(f, Some(b'{'), false)
     }
 
+    /// See `Jiter::known_skip`
+    /// # Errors
+    /// `std::io::Error` or `JiterError`
     pub fn known_skip(&mut self, peek: Peek) -> RJiterResult<()> {
         self.loop_until_success(|j| j.known_skip(peek), None, true)
     }
 
+    /// See `Jiter::known_str`
+    /// # Errors
+    /// `std::io::Error` or `JiterError`
     pub fn known_str(&mut self) -> RJiterResult<&str> {
         let f = |j: &mut Jiter<'rj>| unsafe {
             std::mem::transmute::<JiterResult<&str>, JiterResult<&'rj str>>(j.known_str())
@@ -150,26 +183,44 @@ impl<'rj> RJiter<'rj> {
         self.loop_until_success(f, None, false)
     }
 
+    /// See `Jiter::known_value`
+    /// # Errors
+    /// `std::io::Error` or `JiterError`
     pub fn known_value(&mut self, peek: Peek) -> RJiterResult<JsonValue<'rj>> {
         self.loop_until_success(|j| j.known_value(peek), None, true)
     }
 
+    /// See `Jiter::known_value_owned`
+    /// # Errors
+    /// `std::io::Error` or `JiterError`
     pub fn known_value_owned(&mut self, peek: Peek) -> RJiterResult<JsonValue<'static>> {
         self.loop_until_success(|j| j.known_value_owned(peek), None, true)
     }
 
+    /// See `Jiter::next_array`
+    /// # Errors
+    /// `std::io::Error` or `JiterError`
     pub fn next_array(&mut self) -> RJiterResult<Option<Peek>> {
         self.loop_until_success(jiter::Jiter::next_array, Some(b'['), false)
     }
 
+    /// See `Jiter::array_step`
+    /// # Errors
+    /// `std::io::Error` or `JiterError`
     pub fn array_step(&mut self) -> RJiterResult<Option<Peek>> {
         self.loop_until_success(jiter::Jiter::array_step, Some(b','), false)
     }
 
+    /// See `Jiter::next_bool`
+    /// # Errors
+    /// `std::io::Error` or `JiterError`
     pub fn next_bool(&mut self) -> RJiterResult<bool> {
         self.loop_until_success(jiter::Jiter::next_bool, None, false)
     }
 
+    /// See `Jiter::next_bytes`
+    /// # Errors
+    /// `std::io::Error` or `JiterError`
     pub fn next_bytes(&mut self) -> RJiterResult<&[u8]> {
         let f = |j: &mut Jiter<'rj>| unsafe {
             std::mem::transmute::<JiterResult<&[u8]>, JiterResult<&'rj [u8]>>(j.next_bytes())
@@ -177,21 +228,23 @@ impl<'rj> RJiter<'rj> {
         self.loop_until_success(f, None, false)
     }
 
+    /// See `Jiter::next_float`
+    /// # Errors
+    /// `std::io::Error` or `JiterError`
     pub fn next_float(&mut self) -> RJiterResult<f64> {
         self.loop_until_success(jiter::Jiter::next_float, None, true)
     }
 
+    /// See `Jiter::next_int`
+    /// # Errors
+    /// `std::io::Error` or `JiterError`
     pub fn next_int(&mut self) -> RJiterResult<NumberInt> {
         self.loop_until_success(jiter::Jiter::next_int, None, true)
     }
 
     /// See `Jiter::next_key`
-    ///
-    /// The chunk from the key name to colon (:) should fit to the buffer.
-    ///
     /// # Errors
-    ///
-    /// See `Jiter::next_key`
+    /// `std::io::Error` or `JiterError`
     pub fn next_key(&mut self) -> RJiterResult<Option<&str>> {
         let f = |j: &mut Jiter<'rj>| unsafe {
             std::mem::transmute::<JiterResult<Option<&str>>, JiterResult<Option<&'rj str>>>(
@@ -201,6 +254,9 @@ impl<'rj> RJiter<'rj> {
         self.loop_until_success(f, Some(b','), false)
     }
 
+    /// See `Jiter::next_key_bytes`
+    /// # Errors
+    /// `std::io::Error` or `JiterError`
     pub fn next_key_bytes(&mut self) -> RJiterResult<Option<&[u8]>> {
         let f = |j: &mut Jiter<'rj>| unsafe {
             std::mem::transmute::<JiterResult<Option<&[u8]>>, JiterResult<Option<&'rj [u8]>>>(
@@ -210,14 +266,23 @@ impl<'rj> RJiter<'rj> {
         self.loop_until_success(f, Some(b','), false)
     }
 
+    /// See `Jiter::next_null`
+    /// # Errors
+    /// `std::io::Error` or `JiterError`
     pub fn next_null(&mut self) -> RJiterResult<()> {
         self.loop_until_success(jiter::Jiter::next_null, None, false)
     }
 
+    /// See `Jiter::next_number`
+    /// # Errors
+    /// `std::io::Error` or `JiterError`
     pub fn next_number(&mut self) -> RJiterResult<NumberAny> {
         self.loop_until_success(jiter::Jiter::next_number, None, true)
     }
 
+    /// See `Jiter::next_number_bytes`
+    /// # Errors
+    /// `std::io::Error` or `JiterError`
     pub fn next_number_bytes(&mut self) -> RJiterResult<&[u8]> {
         let f = |j: &mut Jiter<'rj>| unsafe {
             std::mem::transmute::<JiterResult<&[u8]>, JiterResult<&'rj [u8]>>(j.next_number_bytes())
@@ -225,6 +290,9 @@ impl<'rj> RJiter<'rj> {
         self.loop_until_success(f, None, true)
     }
 
+    /// See `Jiter::next_object`
+    /// # Errors
+    /// `std::io::Error` or `JiterError`
     pub fn next_object(&mut self) -> RJiterResult<Option<&str>> {
         let f = |j: &mut Jiter<'rj>| unsafe {
             std::mem::transmute::<JiterResult<Option<&str>>, JiterResult<Option<&'rj str>>>(
@@ -234,6 +302,9 @@ impl<'rj> RJiter<'rj> {
         self.loop_until_success(f, Some(b'{'), false)
     }
 
+    /// See `Jiter::next_object_bytes`
+    /// # Errors
+    /// `std::io::Error` or `JiterError`
     pub fn next_object_bytes(&mut self) -> RJiterResult<Option<&[u8]>> {
         let f = |j: &mut Jiter<'rj>| unsafe {
             std::mem::transmute::<JiterResult<Option<&[u8]>>, JiterResult<Option<&'rj [u8]>>>(
@@ -243,10 +314,16 @@ impl<'rj> RJiter<'rj> {
         self.loop_until_success(f, Some(b'{'), false)
     }
 
+    /// See `Jiter::next_skip`
+    /// # Errors
+    /// `std::io::Error` or `JiterError`
     pub fn next_skip(&mut self) -> RJiterResult<()> {
         self.loop_until_success(jiter::Jiter::next_skip, None, true)
     }
 
+    /// See `Jiter::next_str`
+    /// # Errors
+    /// `std::io::Error` or `JiterError`
     pub fn next_str(&mut self) -> RJiterResult<&str> {
         let f = |j: &mut Jiter<'rj>| unsafe {
             std::mem::transmute::<JiterResult<&str>, JiterResult<&'rj str>>(j.next_str())
@@ -254,10 +331,16 @@ impl<'rj> RJiter<'rj> {
         self.loop_until_success(f, None, false)
     }
 
+    /// See `Jiter::next_value`
+    /// # Errors
+    /// `std::io::Error` or `JiterError`
     pub fn next_value(&mut self) -> RJiterResult<JsonValue<'rj>> {
         self.loop_until_success(jiter::Jiter::next_value, None, true)
     }
 
+    /// See `Jiter::next_value_owned`
+    /// # Errors
+    /// `std::io::Error` or `JiterError`
     pub fn next_value_owned(&mut self) -> RJiterResult<JsonValue<'static>> {
         self.loop_until_success(jiter::Jiter::next_value_owned, None, true)
     }
