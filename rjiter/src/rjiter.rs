@@ -68,6 +68,13 @@ fn can_retry_if_partial<T>(jiter_result: &JiterResult<T>) -> bool {
     false
 }
 
+fn can_retry_if_partial2(jiter_error: &JiterError) -> bool {
+    if let JiterErrorType::JsonError(error_type) = &jiter_error.error_type {
+        return allowed_if_partial(error_type);
+    }
+    false
+}
+
 impl<'rj> RJiter<'rj> {
     pub fn new(reader: &'rj mut dyn Read, buf: &'rj mut [u8]) -> Self {
         let buf_alias = unsafe {
@@ -394,8 +401,10 @@ impl<'rj> RJiter<'rj> {
         loop {
             let result = f(&mut self.jiter);
 
-            if result.is_err() && !can_retry_if_partial(&result) {
-                return Err(result.unwrap_err().into());
+            if let Err(e) = &result {
+                if !can_retry_if_partial2(e) {
+                    return result.map_err(RJiterError::from);
+                }
             }
 
             if result.is_ok() {
