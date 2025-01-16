@@ -3,30 +3,8 @@ use std::io::Write;
 
 use crate::buffer::Buffer;
 use crate::buffer::ChangeFlag;
-use jiter::{
-    Jiter, JiterError, JiterErrorType, JiterResult, JsonError, JsonErrorType, JsonValue, NumberAny,
-    NumberInt, Peek,
-};
-
-pub type RJiterResult<T> = Result<T, RJiterError>;
-
-#[derive(Debug)]
-pub enum RJiterError {
-    JiterError(JiterError),
-    IoError(std::io::Error),
-}
-
-impl From<JiterError> for RJiterError {
-    fn from(err: JiterError) -> Self {
-        RJiterError::JiterError(err)
-    }
-}
-
-impl From<std::io::Error> for RJiterError {
-    fn from(err: std::io::Error) -> Self {
-        RJiterError::IoError(err)
-    }
-}
+use crate::error::{Error as RJiterError, Result as RJiterResult, can_retry_if_partial};
+use jiter::{Jiter, JiterError, JiterResult, JsonError, JsonErrorType, JsonValue, NumberAny, NumberInt, Peek};
 
 pub struct RJiter<'rj> {
     jiter: Jiter<'rj>,
@@ -42,26 +20,6 @@ impl<'rj> std::fmt::Debug for RJiter<'rj> {
             self.jiter, self.pos_before_call_jiter, self.buffer
         )
     }
-}
-
-// Copy-paste from jiter/src/error.rs, where it is private
-fn allowed_if_partial(error_type: &JsonErrorType) -> bool {
-    matches!(
-        error_type,
-        JsonErrorType::EofWhileParsingList
-            | JsonErrorType::EofWhileParsingObject
-            | JsonErrorType::EofWhileParsingString
-            | JsonErrorType::EofWhileParsingValue
-            | JsonErrorType::ExpectedListCommaOrEnd
-            | JsonErrorType::ExpectedObjectCommaOrEnd
-    )
-}
-
-fn can_retry_if_partial(jiter_error: &JiterError) -> bool {
-    if let JiterErrorType::JsonError(error_type) = &jiter_error.error_type {
-        return allowed_if_partial(error_type);
-    }
-    false
 }
 
 impl<'rj> RJiter<'rj> {
