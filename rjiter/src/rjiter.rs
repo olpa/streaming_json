@@ -594,6 +594,10 @@ impl<'rj> RJiter<'rj> {
     // Skip token
     //
 
+    /// Skip the token if found, otherwise return an error.
+    ///
+    /// # Errors
+    /// `std::io::Error` or `RJiterError(ExpectedSomeIdent)`
     pub fn known_skip_token(&mut self, token: &[u8]) -> RJiterResult<()> {
         let change_flag = ChangeFlag::new(&self.buffer);
         let mut pos = self.jiter.current_index();
