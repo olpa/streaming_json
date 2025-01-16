@@ -459,6 +459,9 @@ impl<'rj> RJiter<'rj> {
         Ok(())
     }
 
+    /// See `Jiter::finish`
+    /// # Errors
+    /// `std::io::Error` or `JiterError`
     pub fn finish(&mut self) -> RJiterResult<()> {
         loop {
             self.jiter.finish()?;
