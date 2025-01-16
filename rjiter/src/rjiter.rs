@@ -522,6 +522,15 @@ impl<'rj> RJiter<'rj> {
         }
     }
 
+    /// Write-read-write-read-... until the end of the json string.
+    /// The bytes are written as such, without transforming them.
+    /// This function is useful to copy a long json string to another json.
+    ///
+    /// Rjiter should be positioned at the beginning of the json string, on a quote character.
+    /// Bounding quotes are not included in the output.
+    ///
+    /// # Errors
+    /// `std::io::Error` or `JiterError`
     pub fn write_long_bytes(&mut self, writer: &mut dyn Write) -> RJiterResult<()> {
         fn write_completed(bytes: &[u8], writer: &mut dyn Write) -> RJiterResult<()> {
             writer.write_all(bytes)?;
@@ -541,6 +550,15 @@ impl<'rj> RJiter<'rj> {
         self.handle_long(parser, writer, write_completed, write_segment)
     }
 
+
+    /// Write-read-write-read-... until the end of the json string.
+    /// Converts the json escapes to the corresponding characters.
+    ///
+    /// Rjiter should be positioned at the beginning of the json string, on a quote character.
+    /// Bounding quotes are not included in the output.
+    ///
+    /// # Errors
+    /// `std::io::Error` or `JiterError`
     pub fn write_long_str(&mut self, writer: &mut dyn Write) -> RJiterResult<()> {
         fn write_completed(string: &str, writer: &mut dyn Write) -> RJiterResult<()> {
             writer.write_all(string.as_bytes())?;
