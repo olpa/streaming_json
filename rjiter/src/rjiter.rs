@@ -358,7 +358,7 @@ impl<'rj> RJiter<'rj> {
                 }
             }
 
-            let n_read = self.buffer.read_more().unwrap();
+            let n_read = self.buffer.read_more()?;
             if n_read > 0 {
                 self.create_new_jiter();
                 continue;
@@ -399,10 +399,10 @@ impl<'rj> RJiter<'rj> {
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn finish(&mut self) -> JiterResult<()> {
+    pub fn finish(&mut self) -> RJiterResult<()> {
         loop {
             self.jiter.finish()?;
-            if self.buffer.read_more().unwrap() == 0 {
+            if self.buffer.read_more()? == 0 {
                 return Ok(());
             }
             self.buffer.shift_buffer(0, self.jiter.current_index());
@@ -452,7 +452,7 @@ impl<'rj> RJiter<'rj> {
                 self.buffer.shift_buffer(1, escaping_bs_pos);
             }
 
-            if self.buffer.read_more().unwrap() == 0 {
+            if self.buffer.read_more()? == 0 {
                 return Err(result.unwrap_err().into());
             }
             self.create_new_jiter();
@@ -529,7 +529,7 @@ impl<'rj> RJiter<'rj> {
             pos = 0;
         }
         while self.buffer.n_bytes < pos + token.len() {
-            if self.buffer.read_more().unwrap() == 0 {
+            if self.buffer.read_more()? == 0 {
                 err_flag = true;
                 break;
             }
