@@ -3,8 +3,10 @@ use std::io::Write;
 
 use crate::buffer::Buffer;
 use crate::buffer::ChangeFlag;
-use crate::error::{Error as RJiterError, Result as RJiterResult, can_retry_if_partial};
-use jiter::{Jiter, JiterError, JiterResult, JsonError, JsonErrorType, JsonValue, NumberAny, NumberInt, Peek};
+use crate::error::{can_retry_if_partial, Error as RJiterError, Result as RJiterResult};
+use jiter::{
+    Jiter, JiterError, JiterResult, JsonError, JsonErrorType, JsonValue, NumberAny, NumberInt, Peek,
+};
 
 pub struct RJiter<'rj> {
     jiter: Jiter<'rj>,
