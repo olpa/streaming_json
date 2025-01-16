@@ -550,7 +550,6 @@ impl<'rj> RJiter<'rj> {
         self.handle_long(parser, writer, write_completed, write_segment)
     }
 
-
     /// Write-read-write-read-... until the end of the json string.
     /// Converts the json escapes to the corresponding characters.
     ///
