@@ -57,18 +57,7 @@ fn allowed_if_partial(error_type: &JsonErrorType) -> bool {
     )
 }
 
-fn can_retry_if_partial<T>(jiter_result: &JiterResult<T>) -> bool {
-    if let Err(JiterError {
-        error_type: JiterErrorType::JsonError(error_type),
-        ..
-    }) = &jiter_result
-    {
-        return allowed_if_partial(error_type);
-    }
-    false
-}
-
-fn can_retry_if_partial2(jiter_error: &JiterError) -> bool {
+fn can_retry_if_partial(jiter_error: &JiterError) -> bool {
     if let JiterErrorType::JsonError(error_type) = &jiter_error.error_type {
         return allowed_if_partial(error_type);
     }
@@ -402,7 +391,7 @@ impl<'rj> RJiter<'rj> {
             let result = f(&mut self.jiter);
 
             if let Err(e) = &result {
-                if !can_retry_if_partial2(e) {
+                if !can_retry_if_partial(e) {
                     return result.map_err(RJiterError::from);
                 }
             }
@@ -494,8 +483,9 @@ impl<'rj> RJiter<'rj> {
                 write_completed(value, writer)?;
                 return Ok(());
             }
-            if !can_retry_if_partial(&result) {
-                return Err(result.unwrap_err().into());
+            let err = result.unwrap_err();
+            if !can_retry_if_partial(&err) {
+                return Err(err.into());
             }
 
             let mut escaping_bs_pos: usize = self.buffer.n_bytes;
@@ -516,7 +506,7 @@ impl<'rj> RJiter<'rj> {
             }
 
             if self.buffer.read_more()? == 0 {
-                return Err(result.unwrap_err().into());
+                return Err(err.into());
             }
             self.create_new_jiter();
         }
