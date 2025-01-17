@@ -1,6 +1,6 @@
+use std::cmp::min;
 use std::io::Read;
 use std::io::Write;
-use std::cmp::min;
 
 use crate::buffer::Buffer;
 use crate::buffer::ChangeFlag;
