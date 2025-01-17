@@ -339,25 +339,25 @@ fn known_skip_token() {
 
 #[test]
 fn current_index() {
-    let input = r#" data:   {  "foo":  "bar"}  "#;
+    let input = r#" data+   {  "foo":  "bar"}  "#;
     let pos_data_pre = 1;
     let pos_data_post = pos_data_pre + 5;
-    let pos_key_post = input.find(":").unwrap();
+    let pos_key_post = input.find(":").unwrap() + 1;
     let pos_value_pre = input.find("b").unwrap() - 1;
     let pos_value_post = pos_value_pre + 3 + 2;
     let pos_object_post = input.find("}").unwrap() + 1;
     let pos_len_done = input.len();
 
-    for buffer_len in n_spaces..input.len() {
+    for buffer_len in 8..input.len() {
         let mut buffer = vec![0u8; buffer_len];
         let mut reader = Cursor::new(input.as_bytes());
         let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
-        let result = rjiter.buffer.finish();
+        let result = rjiter.finish();
         assert!(result.is_err());
         assert_eq!(rjiter.current_index(), pos_data_pre);
 
-        rjiter.known_skip_token(b"data").unwrap();
+        rjiter.known_skip_token(b"data+").unwrap();
         assert_eq!(rjiter.current_index(), pos_data_post);
 
         let result = rjiter.next_object();
@@ -369,7 +369,7 @@ fn current_index() {
         assert_eq!(result.unwrap(), Peek::String);
         assert_eq!(rjiter.current_index(), pos_value_pre);
 
-        let result = rjiter.write_long_str(std::io::sink());
+        let result = rjiter.write_long_str(&mut std::io::sink());
         assert!(result.is_ok());
         assert_eq!(rjiter.current_index(), pos_value_post);
 
