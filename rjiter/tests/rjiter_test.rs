@@ -149,10 +149,25 @@ fn pass_through_long_bytes() {
 }
 
 #[test]
-fn pass_through_long_string2() { // FIXME naming
+fn pass_through_long_string() {
     let input = r#""very very very long string""#;
     let mut buffer = [0u8; 5];
     let mut reader = OneByteReader::new(input.bytes());
+    let mut writer = Vec::new();
+
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    let wb = rjiter.write_long_str(&mut writer);
+    wb.unwrap();
+
+    assert_eq!(writer, "very very very long string".as_bytes());
+}
+
+#[test]
+fn regression_pass_through_long_string_with_chunk_reader() {
+    let input = r#""very very very long string""#;
+    let mut buffer = [0u8; 5];
+    let mut reader = Cursor::new(input.as_bytes());
     let mut writer = Vec::new();
 
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
