@@ -542,6 +542,7 @@ impl<'rj> RJiter<'rj> {
         let parser = |j: &mut Jiter<'rj>| unsafe {
             std::mem::transmute::<JiterResult<&str>, JiterResult<&'rj str>>(j.next_str())
         };
+        println!("write_long_str, buffer: {:?}", self.buffer); // FIXME
         self.handle_long(parser, writer, write_completed, write_segment)
     }
 
