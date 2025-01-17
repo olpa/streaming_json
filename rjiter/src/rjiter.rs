@@ -1,5 +1,6 @@
 use std::io::Read;
 use std::io::Write;
+use std::cmp::min;
 
 use crate::buffer::Buffer;
 use crate::buffer::ChangeFlag;
@@ -458,11 +459,13 @@ impl<'rj> RJiter<'rj> {
                 i += 1;
             }
 
-            self.buffer.buf[0] = b'"';
-
             if escaping_bs_pos > 1 {
-                write_segment(self.buffer.buf, escaping_bs_pos, writer)?;
-                self.buffer.shift_buffer(1, escaping_bs_pos);
+                // To write a segment, the writer needs an extra byte to put the quote character
+                let segment_end_pos = min(escaping_bs_pos, self.buffer.n_bytes - 1);
+                self.buffer.buf[0] = b'"';
+
+                write_segment(self.buffer.buf, segment_end_pos, writer)?;
+                self.buffer.shift_buffer(1, segment_end_pos);
             }
 
             if self.buffer.read_more()? == 0 {
@@ -518,12 +521,13 @@ impl<'rj> RJiter<'rj> {
             escaping_bs_pos: usize,
             writer: &mut dyn Write,
         ) -> RJiterResult<()> {
+            let orig_char = bytes[escaping_bs_pos];
             bytes[escaping_bs_pos] = b'"';
             let sub_jiter_buf = &bytes[..=escaping_bs_pos];
             let sub_jiter_buf = unsafe { std::mem::transmute::<&[u8], &[u8]>(sub_jiter_buf) };
             let mut sub_jiter = Jiter::new(sub_jiter_buf);
             let sub_result = sub_jiter.known_str();
-            bytes[escaping_bs_pos] = b'\\';
+            bytes[escaping_bs_pos] = orig_char;
 
             match sub_result {
                 Ok(string) => {
