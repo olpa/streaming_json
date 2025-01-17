@@ -149,6 +149,21 @@ fn pass_through_long_bytes() {
 }
 
 #[test]
+fn pass_through_long_string2() { // FIXME naming
+    let input = r#""very very very long string""#;
+    let mut buffer = [0u8; 5];
+    let mut reader = OneByteReader::new(input.bytes());
+    let mut writer = Vec::new();
+
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    let wb = rjiter.write_long_str(&mut writer);
+    wb.unwrap();
+
+    assert_eq!(writer, "very very very long string".as_bytes());
+}
+
+#[test]
 fn escapes_in_pass_through_long_bytes() {
     let input = r#""escapes X\n\\\"\u0410""#;
     let pos = input.find("X").unwrap();
@@ -349,6 +364,7 @@ fn current_index() {
     let pos_len_done = input.len();
 
     for buffer_len in 8..input.len() {
+        println!("buffer_len: {}", buffer_len); // FIXME
         let mut buffer = vec![0u8; buffer_len];
         let mut reader = Cursor::new(input.as_bytes());
         let mut rjiter = RJiter::new(&mut reader, &mut buffer);
