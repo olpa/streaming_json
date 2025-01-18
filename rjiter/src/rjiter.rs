@@ -498,7 +498,7 @@ impl<'rj> RJiter<'rj> {
         }
         fn write_segment(
             bytes: &mut [u8],
-            quote_pos: usize,   
+            quote_pos: usize,
             escaping_bs_pos: usize,
             writer: &mut dyn Write,
         ) -> RJiterResult<()> {
