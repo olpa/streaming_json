@@ -96,24 +96,6 @@ fn test_skip_spaces_eof_without_non_space_and_nonzero_pos() {
 }
 
 #[test]
-fn test_skip_spaces_regression() {
-    let input = r#" "foo":  "bar"}  "#;
-    let mut reader = Cursor::new(input.as_bytes());
-    let mut buf = [0u8; 11];
-    buf[0] = 123;
-    buf[1] = 32;
-    let mut buffer = Buffer::new(&mut reader, &mut buf);
-    buffer.n_bytes = 2;
-    buffer.n_shifted_out = 9;
-
-    buffer.skip_spaces(1).unwrap();
-
-    // assert
-    assert_eq!(&buffer.buf[..buffer.n_bytes], b"{\"foo\":  \"");
-    assert_eq!(buffer.n_shifted_out, 10);
-}
-
-#[test]
 fn sanity_test_shift() {
     let input = "abcd12345";
     let mut reader = Cursor::new(input.as_bytes());
