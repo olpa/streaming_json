@@ -404,7 +404,6 @@ impl<'rj> RJiter<'rj> {
             if to_pos >= self.buffer.n_bytes {
                 self.buffer.read_more()?;
             }
-            println!("!!!!!!!!!!!!!! after read_more, buffer: {:?}, to_pos: {}", self.buffer, to_pos); // FIXME
             if to_pos < self.buffer.n_bytes && self.buffer.buf[to_pos] == transparent_token {
                 self.buffer.skip_spaces(to_pos + 1)?;
                 println!("after transparent_token skip_spaces, buffer: {:?}", self.buffer); // FIXME
@@ -481,12 +480,16 @@ impl<'rj> RJiter<'rj> {
             if escaping_bs_pos > 1 {
                 // To write a segment, the writer needs an extra byte to put the quote character
                 let segment_end_pos = min(escaping_bs_pos, self.buffer.n_bytes - 1);
-                self.buffer.buf[0] = b'"';
 
-                if segment_end_pos > quote_pos + 1 {
+                if segment_end_pos > quote_pos {
                     write_segment(self.buffer.buf, quote_pos, segment_end_pos, writer)?;
+                    self.buffer.shift_buffer(1, segment_end_pos);
+                } else {
+                    // Corner case: the quote character is the last byte of the buffer
+                    self.buffer.shift_buffer(0, segment_end_pos);
                 }
-                self.buffer.shift_buffer(1, segment_end_pos);
+
+                self.buffer.buf[0] = b'"';
                 println!("after shift_buffer, buffer: {:?}, segment_end_pos was: {}", self.buffer, segment_end_pos); // FIXME
             }
 
