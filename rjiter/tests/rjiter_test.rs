@@ -214,6 +214,7 @@ fn pass_through_long_string_with_escapes() {
         );
     }
 }
+
 #[test]
 fn long_write_regression_segment_from_quote() {
     let input = r#"      "bar" true"#;
@@ -222,7 +223,25 @@ fn long_write_regression_segment_from_quote() {
     let mut reader = Cursor::new(input.as_bytes());
     let mut writer = Vec::new();
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
-    //assert_eq!(rjiter.peek().unwrap(), Peek::String);
+    rjiter.finish().unwrap_err();
+
+    let wb = rjiter.write_long_bytes(&mut writer);
+    wb.unwrap();
+
+    assert_eq!(writer, "bar".as_bytes());
+
+    let after_bar = rjiter.peek().unwrap();
+    assert_eq!(after_bar, Peek::True);
+}
+
+#[test]
+fn long_write_regression_quote_last_buffer_byte() {
+    let input = r#"      "bar" true"#;
+    let buf_len = input.find("b").unwrap();
+    let mut buffer = vec![0u8; buf_len];
+    let mut reader = Cursor::new(input.as_bytes());
+    let mut writer = Vec::new();
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
     rjiter.finish().unwrap_err();
 
     let wb = rjiter.write_long_bytes(&mut writer);
@@ -423,6 +442,7 @@ fn current_index() {
 
         println!("-----------------------------"); // FIXME
         let result = rjiter.write_long_str(&mut std::io::sink());
+        println!("result: {:?}", result); // FIXME
         assert!(result.is_ok());
         // FIXME
         // assert_eq!(rjiter.current_index(), pos_value_post);
