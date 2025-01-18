@@ -106,9 +106,7 @@ fn test_skip_spaces_regression() {
     buffer.n_bytes = 2;
     buffer.n_shifted_out = 9;
 
-    println!("before skip_spaces, buffer: {:?}", buffer); // FIXME
     buffer.skip_spaces(1).unwrap();
-    println!("after skip_spaces, buffer: {:?}", buffer); // FIXME
 
     // assert
     assert_eq!(&buffer.buf[..buffer.n_bytes], b"{\"foo\":  \"");

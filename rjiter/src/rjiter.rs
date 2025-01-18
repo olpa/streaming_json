@@ -56,7 +56,6 @@ impl<'rj> RJiter<'rj> {
     /// # Errors
     /// `std::io::Error` or `JiterError`
     pub fn peek(&mut self) -> RJiterResult<Peek> {
-        println!("peek, buffer: {:?}, pos: {}", self.buffer, self.jiter.current_index()); // FIXME
         self.loop_until_success(jiter::Jiter::peek, None, false)
     }
 
@@ -209,7 +208,6 @@ impl<'rj> RJiter<'rj> {
                 j.next_key(),
             )
         };
-        println!("next_key, buffer: {:?}, jiter index: {}", self.buffer, self.jiter.current_index()); // FIXME
         self.loop_until_success(f, Some(b','), false)
     }
 
@@ -258,7 +256,6 @@ impl<'rj> RJiter<'rj> {
                 j.next_object(),
             )
         };
-        println!("next_object, buffer: {:?}, pos: {}", self.buffer, self.jiter.current_index()); // FIXME
         self.loop_until_success(f, Some(b'{'), false)
     }
 
@@ -349,9 +346,7 @@ impl<'rj> RJiter<'rj> {
             return Ok(result?);
         }
 
-        println!("before skip_spaces_feeding, buffer: {:?}, pos: {}", self.buffer, self.jiter.current_index()); // FIXME
         self.skip_spaces_feeding(jiter_pos, skip_spaces_token)?;
-        println!("after skip_spaces_feeding, buffer: {:?}, pos: {}", self.buffer, self.jiter.current_index()); // FIXME
 
         loop {
             let result = f(&mut self.jiter);
@@ -399,21 +394,18 @@ impl<'rj> RJiter<'rj> {
             self.buffer.shift_buffer(to_pos, jiter_pos);
         }
         self.buffer.skip_spaces(to_pos)?;
-        println!("after skip_spaces, buffer: {:?}", self.buffer); // FIXME
         if let Some(transparent_token) = transparent_token {
             if to_pos >= self.buffer.n_bytes {
                 self.buffer.read_more()?;
             }
             if to_pos < self.buffer.n_bytes && self.buffer.buf[to_pos] == transparent_token {
                 self.buffer.skip_spaces(to_pos + 1)?;
-                println!("after transparent_token skip_spaces, buffer: {:?}", self.buffer); // FIXME
             }
         }
 
         if change_flag.is_changed(&self.buffer) {
             self.create_new_jiter();
         }
-        println!("end of skip_spaces_feeding, buffer: {:?}, pos: {}", self.buffer, self.jiter.current_index()); // FIXME
         Ok(())
     }
 
@@ -454,9 +446,7 @@ impl<'rj> RJiter<'rj> {
     {
         loop {
             let quote_pos = self.jiter.current_index();
-            println!("handle_long, loop, before parser, buffer: {:?}, pos: {}", self.buffer, self.jiter.current_index()); // FIXME
             let result = parser(&mut self.jiter);
-            println!("handle_long, loop, result: {:?}, buffer: {:?}, pos: {}", result, self.buffer, self.jiter.current_index()); // FIXME
             if let Ok(value) = result {
                 write_completed(value, writer)?;
                 return Ok(());
@@ -475,7 +465,6 @@ impl<'rj> RJiter<'rj> {
                 }
                 i += 1;
             }
-            println!("2 quote_pos: {}, escaping_bs_pos: {}, n_bytes: {}", quote_pos, escaping_bs_pos, self.buffer.n_bytes); // FIXME
 
             if escaping_bs_pos > 1 {
                 // To write a segment, the writer needs an extra byte to put the quote character
@@ -490,13 +479,11 @@ impl<'rj> RJiter<'rj> {
                 }
 
                 self.buffer.buf[0] = b'"';
-                println!("after shift_buffer, buffer: {:?}, segment_end_pos was: {}", self.buffer, segment_end_pos); // FIXME
             }
 
             if self.buffer.read_more()? == 0 {
                 return Err(err.into());
             }
-            println!("before create_new_jiter, buffer: {:?}", self.buffer); // FIXME
             self.create_new_jiter();
         }
     }
@@ -527,9 +514,7 @@ impl<'rj> RJiter<'rj> {
         let parser = |j: &mut Jiter<'rj>| unsafe {
             std::mem::transmute::<JiterResult<&[u8]>, JiterResult<&'rj [u8]>>(j.known_bytes())
         };
-        let x = self.handle_long(parser, writer, write_completed, write_segment);
-        println!("after write_long_bytes, buffer: {:?}, jiter index: {}", self.buffer, self.jiter.current_index()); // FIXME
-        x
+        self.handle_long(parser, writer, write_completed, write_segment)
     }
 
     /// Write-read-write-read-... until the end of the json string.
@@ -570,10 +555,7 @@ impl<'rj> RJiter<'rj> {
         let parser = |j: &mut Jiter<'rj>| unsafe {
             std::mem::transmute::<JiterResult<&str>, JiterResult<&'rj str>>(j.known_str())
         };
-        println!("write_long_str, buffer: {:?}, jiter index: {}", self.buffer, self.jiter.current_index()); // FIXME
-        let x = self.handle_long(parser, writer, write_completed, write_segment);
-        println!("after write_long_str, buffer: {:?}, jiter index: {}", self.buffer, self.jiter.current_index()); // FIXME
-        x
+        self.handle_long(parser, writer, write_completed, write_segment)
     }
 
     //  ------------------------------------------------------------

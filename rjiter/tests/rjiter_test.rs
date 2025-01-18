@@ -440,9 +440,7 @@ fn current_index() {
         assert_eq!(result.unwrap(), Peek::String);
         assert_eq!(rjiter.current_index(), pos_value_pre);
 
-        println!("-----------------------------"); // FIXME
         let result = rjiter.write_long_str(&mut std::io::sink());
-        println!("result: {:?}", result); // FIXME
         assert!(result.is_ok());
         // FIXME
         // assert_eq!(rjiter.current_index(), pos_value_post);
