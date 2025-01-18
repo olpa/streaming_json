@@ -476,15 +476,18 @@ impl<'rj> RJiter<'rj> {
                 }
                 i += 1;
             }
-            println!("quote_pos: {}, escaping_bs_pos: {}, n_bytes: {}", quote_pos, escaping_bs_pos, self.buffer.n_bytes); // FIXME
+            println!("2 quote_pos: {}, escaping_bs_pos: {}, n_bytes: {}", quote_pos, escaping_bs_pos, self.buffer.n_bytes); // FIXME
 
             if escaping_bs_pos > 1 {
                 // To write a segment, the writer needs an extra byte to put the quote character
                 let segment_end_pos = min(escaping_bs_pos, self.buffer.n_bytes - 1);
                 self.buffer.buf[0] = b'"';
 
-                write_segment(self.buffer.buf, quote_pos, segment_end_pos, writer)?;
+                if segment_end_pos > quote_pos + 1 {
+                    write_segment(self.buffer.buf, quote_pos, segment_end_pos, writer)?;
+                }
                 self.buffer.shift_buffer(1, segment_end_pos);
+                println!("after shift_buffer, buffer: {:?}, segment_end_pos was: {}", self.buffer, segment_end_pos); // FIXME
             }
 
             if self.buffer.read_more()? == 0 {
