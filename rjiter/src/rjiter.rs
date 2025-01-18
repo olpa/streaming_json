@@ -432,13 +432,14 @@ impl<'rj> RJiter<'rj> {
         parser: F,
         writer: &mut dyn Write,
         write_completed: impl Fn(T, &mut dyn Write) -> RJiterResult<()>,
-        write_segment: impl Fn(&mut [u8], usize, &mut dyn Write) -> RJiterResult<()>,
+        write_segment: impl Fn(&mut [u8], usize, usize, &mut dyn Write) -> RJiterResult<()>,
     ) -> RJiterResult<()>
     where
         F: Fn(&mut Jiter<'rj>) -> JiterResult<T>,
         T: std::fmt::Debug,
     {
         loop {
+            let quote_pos = self.jiter.current_index();
             let result = parser(&mut self.jiter);
             if let Ok(value) = result {
                 write_completed(value, writer)?;
@@ -450,7 +451,7 @@ impl<'rj> RJiter<'rj> {
             }
 
             let mut escaping_bs_pos: usize = self.buffer.n_bytes;
-            let mut i: usize = 1; // skip the quote character
+            let mut i: usize = quote_pos + 1;
             while i < self.buffer.n_bytes {
                 if self.buffer.buf[i] == b'\\' {
                     escaping_bs_pos = i;
@@ -462,10 +463,16 @@ impl<'rj> RJiter<'rj> {
             if escaping_bs_pos > 1 {
                 // To write a segment, the writer needs an extra byte to put the quote character
                 let segment_end_pos = min(escaping_bs_pos, self.buffer.n_bytes - 1);
-                self.buffer.buf[0] = b'"';
 
-                write_segment(self.buffer.buf, segment_end_pos, writer)?;
-                self.buffer.shift_buffer(1, segment_end_pos);
+                if segment_end_pos > quote_pos {
+                    write_segment(self.buffer.buf, quote_pos, segment_end_pos, writer)?;
+                    self.buffer.shift_buffer(1, segment_end_pos);
+                } else {
+                    // Corner case: the quote character is the last byte of the buffer
+                    self.buffer.shift_buffer(0, segment_end_pos);
+                }
+
+                self.buffer.buf[0] = b'"';
             }
 
             if self.buffer.read_more()? == 0 {
@@ -491,10 +498,11 @@ impl<'rj> RJiter<'rj> {
         }
         fn write_segment(
             bytes: &mut [u8],
+            quote_pos: usize,   
             escaping_bs_pos: usize,
             writer: &mut dyn Write,
         ) -> RJiterResult<()> {
-            writer.write_all(&bytes[1..escaping_bs_pos])?;
+            writer.write_all(&bytes[quote_pos + 1..escaping_bs_pos])?;
             Ok(())
         }
         let parser = |j: &mut Jiter<'rj>| unsafe {
@@ -518,12 +526,13 @@ impl<'rj> RJiter<'rj> {
         }
         fn write_segment(
             bytes: &mut [u8],
+            quote_pos: usize,
             escaping_bs_pos: usize,
             writer: &mut dyn Write,
         ) -> RJiterResult<()> {
             let orig_char = bytes[escaping_bs_pos];
             bytes[escaping_bs_pos] = b'"';
-            let sub_jiter_buf = &bytes[..=escaping_bs_pos];
+            let sub_jiter_buf = &bytes[quote_pos..=escaping_bs_pos];
             let sub_jiter_buf = unsafe { std::mem::transmute::<&[u8], &[u8]>(sub_jiter_buf) };
             let mut sub_jiter = Jiter::new(sub_jiter_buf);
             let sub_result = sub_jiter.known_str();
@@ -538,7 +547,7 @@ impl<'rj> RJiter<'rj> {
             }
         }
         let parser = |j: &mut Jiter<'rj>| unsafe {
-            std::mem::transmute::<JiterResult<&str>, JiterResult<&'rj str>>(j.next_str())
+            std::mem::transmute::<JiterResult<&str>, JiterResult<&'rj str>>(j.known_str())
         };
         self.handle_long(parser, writer, write_completed, write_segment)
     }
