@@ -364,6 +364,27 @@ fn finish_no_when_need_feed() {
     assert!(result.is_err());
 }
 
+#[test]
+fn handle_buffer_end_pos_in_finish() {
+    let input = r#"true  }  false"#;
+    let pos = input.find("}").unwrap();
+    let mut buffer = vec![0u8; pos + 1];
+    let mut reader = Cursor::new(input);
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    // Move the jiter position to the end of buffer
+    let result = rjiter.next_bool();
+    assert_eq!(result.unwrap(), true);
+    let result = rjiter.next_key();
+    assert_eq!(result.unwrap(), None);
+    assert_eq!(rjiter.current_index(), pos + 1);
+
+    // Act and assert: not finished
+    let result = rjiter.finish();
+    assert!(result.is_err());
+}
+
+
 //
 // Skip token
 //
@@ -419,7 +440,7 @@ fn current_index() {
     // FIXME
     //for buffer_len in 8..input.len() {
     for buffer_len in 13..input.len() {
-        println!("buffer_len: {} of max {}", buffer_len, input.len()); // FIXME
+        println!("============== buffer_len: {} of max {}", buffer_len, input.len()); // FIXME
         let mut buffer = vec![0u8; buffer_len];
         let mut reader = Cursor::new(input.as_bytes());
         let mut rjiter = RJiter::new(&mut reader, &mut buffer);
@@ -448,6 +469,7 @@ fn current_index() {
         assert_eq!(result.unwrap(), None);
         assert_eq!(rjiter.current_index(), pos_object_post);
 
+        println!("--- before finish test"); // FIXME
         let result = rjiter.finish();
         println!("result: {:?}, idx: {}", result, rjiter.current_index()); // FIXME
         assert!(result.is_ok());
