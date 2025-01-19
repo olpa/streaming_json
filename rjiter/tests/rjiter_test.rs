@@ -6,7 +6,7 @@ use jiter::LazyIndexMap;
 use rjiter::NumberInt;
 use rjiter::Peek;
 use rjiter::RJiter;
-
+use rjiter::Error as RJiterError;
 mod one_byte_reader;
 use crate::one_byte_reader::OneByteReader;
 
@@ -468,6 +468,24 @@ fn current_index() {
         let result = rjiter.finish();
         assert!(result.is_ok());
         assert_eq!(rjiter.current_index(), pos_len_done);
+    }
+}
+
+#[test]
+fn index_in_error() {
+    let token_pos = 32;
+    let lot_of_spaces = " ".repeat(token_pos);
+    let input = format!(r#"{lot_of_spaces}"hello""#);
+    let mut buffer = [0u8; 16];
+    let mut reader = Cursor::new(input.as_bytes());
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    let result = rjiter.next_bool();
+    match result {
+        Err(RJiterError::JiterError(jiter_err)) => {
+            assert_eq!(jiter_err.index, token_pos);
+        }
+        _ => panic!("Expected JiterError"),
     }
 }
 
