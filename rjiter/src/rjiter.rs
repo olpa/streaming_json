@@ -415,6 +415,7 @@ impl<'rj> RJiter<'rj> {
     pub fn finish(&mut self) -> RJiterResult<()> {
         loop {
             self.jiter.finish()?;
+            #[allow(clippy::collapsible_if)]
             if self.jiter.current_index() < self.buffer.buf.len() {
                 if self.buffer.read_more()? == 0 {
                     return Ok(());
@@ -427,6 +428,7 @@ impl<'rj> RJiter<'rj> {
 
     //  ------------------------------------------------------------
 
+    #[must_use]
     pub fn current_index(&self) -> usize {
         self.jiter.current_index() + self.buffer.n_shifted_out
     }
