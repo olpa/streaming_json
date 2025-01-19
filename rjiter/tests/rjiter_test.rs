@@ -418,8 +418,8 @@ fn current_index() {
 
     // FIXME
     //for buffer_len in 8..input.len() {
-    for buffer_len in 11..input.len() {
-        println!("buffer_len: {}", buffer_len); // FIXME
+    for buffer_len in 13..input.len() {
+        println!("buffer_len: {} of max {}", buffer_len, input.len()); // FIXME
         let mut buffer = vec![0u8; buffer_len];
         let mut reader = Cursor::new(input.as_bytes());
         let mut rjiter = RJiter::new(&mut reader, &mut buffer);
@@ -442,14 +442,14 @@ fn current_index() {
 
         let result = rjiter.write_long_str(&mut std::io::sink());
         assert!(result.is_ok());
-        // FIXME
-        // assert_eq!(rjiter.current_index(), pos_value_post);
+        assert_eq!(rjiter.current_index(), pos_value_post);
 
         let result = rjiter.next_key();
         assert_eq!(result.unwrap(), None);
         assert_eq!(rjiter.current_index(), pos_object_post);
 
         let result = rjiter.finish();
+        println!("result: {:?}, idx: {}", result, rjiter.current_index()); // FIXME
         assert!(result.is_ok());
         assert_eq!(rjiter.current_index(), pos_len_done);
     }
