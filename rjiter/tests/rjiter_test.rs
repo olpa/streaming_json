@@ -436,10 +436,7 @@ fn current_index() {
     let pos_object_post = input.find("}").unwrap() + 1;
     let pos_len_done = input.len();
 
-    // FIXME
-    //for buffer_len in 8..input.len() {
-    for buffer_len in 13..input.len() {
-        println!("============== buffer_len: {} of max {}", buffer_len, input.len()); // FIXME
+    for buffer_len in 8..input.len() {
         let mut buffer = vec![0u8; buffer_len];
         let mut reader = Cursor::new(input.as_bytes());
         let mut rjiter = RJiter::new(&mut reader, &mut buffer);
@@ -468,9 +465,7 @@ fn current_index() {
         assert_eq!(result.unwrap(), None);
         assert_eq!(rjiter.current_index(), pos_object_post);
 
-        println!("--- before finish test"); // FIXME
         let result = rjiter.finish();
-        println!("result: {:?}, idx: {}", result, rjiter.current_index()); // FIXME
         assert!(result.is_ok());
         assert_eq!(rjiter.current_index(), pos_len_done);
     }
