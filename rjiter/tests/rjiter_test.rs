@@ -364,6 +364,26 @@ fn finish_no_when_need_feed() {
     assert!(result.is_err());
 }
 
+#[test]
+fn handle_buffer_end_pos_in_finish() {
+    let input = r#"true  }  false"#;
+    let pos = input.find("}").unwrap();
+    let mut buffer = vec![0u8; pos + 1];
+    let mut reader = Cursor::new(input);
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    // Move the jiter position to the end of buffer
+    let result = rjiter.next_bool();
+    assert_eq!(result.unwrap(), true);
+    let result = rjiter.next_key();
+    assert_eq!(result.unwrap(), None);
+    assert_eq!(rjiter.current_index(), pos + 1);
+
+    // Act and assert: not finished
+    let result = rjiter.finish();
+    assert!(result.is_err());
+}
+
 //
 // Skip token
 //

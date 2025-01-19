@@ -424,6 +424,12 @@ impl<'rj> RJiter<'rj> {
     }
 
     //  ------------------------------------------------------------
+
+    pub fn current_index(&self) -> usize {
+        self.jiter.current_index() + self.buffer.n_shifted_out
+    }
+
+    //  ------------------------------------------------------------
     // Pass-through long strings and bytes
     //
 
