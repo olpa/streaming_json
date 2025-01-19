@@ -384,7 +384,6 @@ fn handle_buffer_end_pos_in_finish() {
     assert!(result.is_err());
 }
 
-
 //
 // Skip token
 //
