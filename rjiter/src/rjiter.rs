@@ -415,8 +415,10 @@ impl<'rj> RJiter<'rj> {
     pub fn finish(&mut self) -> RJiterResult<()> {
         loop {
             self.jiter.finish()?;
-            if self.buffer.read_more()? == 0 {
-                return Ok(());
+            if self.jiter.current_index() < self.buffer.buf.len() {
+                if self.buffer.read_more()? == 0 {
+                    return Ok(());
+                }
             }
             self.buffer.shift_buffer(0, self.jiter.current_index());
             self.create_new_jiter();
