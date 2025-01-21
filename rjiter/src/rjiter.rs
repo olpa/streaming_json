@@ -4,7 +4,7 @@ use std::io::Write;
 
 use crate::buffer::Buffer;
 use crate::buffer::ChangeFlag;
-use crate::error::{can_retry_if_partial, Error as RJiterError, Result as RJiterResult, rewrite_error_index};
+use crate::error::{can_retry_if_partial, Error as RJiterError, Result as RJiterResult, from_jiter_error};
 use jiter::{
     Jiter, JiterError, JiterResult, JsonError, JsonErrorType, JsonValue, NumberAny, NumberInt, Peek,
 };
@@ -345,7 +345,7 @@ impl<'rj> RJiter<'rj> {
             self.buffer.n_bytes,
         );
         if is_ok {
-            return Ok(result?);
+            return Ok(result.unwrap());
         }
 
         self.skip_spaces_feeding(jiter_pos, skip_spaces_token)?;
@@ -355,7 +355,7 @@ impl<'rj> RJiter<'rj> {
 
             if let Err(e) = &result {
                 if !can_retry_if_partial(e) {
-                    return result.map_err(RJiterError::from);
+                    return from_jiter_error(self, e);
                 }
             }
 
@@ -367,7 +367,7 @@ impl<'rj> RJiter<'rj> {
                     self.buffer.n_bytes,
                 );
                 if really_ok {
-                    return Ok(result?);
+                    return Ok(result.unwrap());
                 }
             }
 
@@ -377,7 +377,7 @@ impl<'rj> RJiter<'rj> {
                 continue;
             }
 
-            return result.map_err(|e| rewrite_error_index(self, e));
+            return from_jiter_error(self, result.unwrap_err());
         }
     }
 
@@ -416,7 +416,10 @@ impl<'rj> RJiter<'rj> {
     /// `std::io::Error` or `JiterError`
     pub fn finish(&mut self) -> RJiterResult<()> {
         loop {
-            self.jiter.finish()?;
+            let finish_in_this_buf = self.jiter.finish();
+            if finish_in_this_buf.is_err() { // is finished if `is_err`
+                return from_jiter_error(self, finish_in_this_buf.unwrap_err());
+            }
             #[allow(clippy::collapsible_if)]
             if self.jiter.current_index() < self.buffer.buf.len() {
                 if self.buffer.read_more()? == 0 {
@@ -459,7 +462,7 @@ impl<'rj> RJiter<'rj> {
             }
             let err = result.unwrap_err();
             if !can_retry_if_partial(&err) {
-                return Err(err.into());
+                return from_jiter_error(self, err);
             }
 
             let mut escaping_bs_pos: usize = self.buffer.n_bytes;
@@ -488,7 +491,7 @@ impl<'rj> RJiter<'rj> {
             }
 
             if self.buffer.read_more()? == 0 {
-                return Err(err.into());
+                return from_jiter_error(self, err);
             }
             self.create_new_jiter();
         }
