@@ -17,32 +17,32 @@ pub struct Error {
 }
 
 impl Error {
-    pub(crate) fn from_jiter_error(rjiter: &RJiter, jiter_error: JiterError) -> Error {
+    pub(crate) fn from_jiter_error(index: usize, jiter_error: JiterError) -> Error {
         Error {
             error_type: match jiter_error.error_type {
                 JiterErrorType::JsonError(json_error_type) => ErrorType::JsonError(json_error_type),
                 JiterErrorType::WrongType { expected, actual } => ErrorType::WrongType { expected, actual },
             },
-            index: jiter_error.index + rjiter.current_index(),
+            index: jiter_error.index + index,
         }
     }
 
-    pub(crate) fn from_json_error(rjiter: &RJiter, json_error_type: JsonErrorType) -> Error {
+    pub(crate) fn from_json_error(index: usize, json_error_type: JsonErrorType) -> Error {
         Error {
             error_type: ErrorType::JsonError(json_error_type),
-            index: rjiter.current_index(),
+            index: index,
         }
     }
 
-    pub(crate) fn from_io_error(rjiter: &RJiter, io_error: std::io::Error) -> Error {
+    pub(crate) fn from_io_error(index: usize, io_error: std::io::Error) -> Error {
         Error {
             error_type: ErrorType::IoError(io_error),
-            index: rjiter.current_index(),
+            index: index,
         }
     }
 
     pub fn get_position(&self, rjiter: &RJiter) -> LinePosition {
-        return rjiter.error_position(0);
+        return rjiter.error_position(self.index);
     }
 }
 

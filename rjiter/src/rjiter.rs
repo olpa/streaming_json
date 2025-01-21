@@ -8,7 +8,7 @@ use crate::error::{
     can_retry_if_partial, Error as RJiterError, Result as RJiterResult,
 };
 use jiter::{
-    Jiter, JiterError, JiterResult, JsonError, JsonErrorType, JsonValue, NumberAny, NumberInt, Peek, LinePosition
+    Jiter, JiterResult, JsonErrorType, JsonValue, NumberAny, NumberInt, Peek, LinePosition
 };
 
 pub struct RJiter<'rj> {
@@ -355,7 +355,7 @@ impl<'rj> RJiter<'rj> {
 
             if let Err(e) = &result {
                 if !can_retry_if_partial(e) {
-                    return Err(from_jiter_error(self, e.clone()));
+                    return Err(RJiterError::from_jiter_error(self, e.clone()));
                 }
             }
 
@@ -371,13 +371,16 @@ impl<'rj> RJiter<'rj> {
                 }
             }
 
-            let n_read = self.buffer.read_more()?;
-            if n_read > 0 {
+            let n_read = self.buffer.read_more();
+            if let Err(e) = n_read {
+                return Err(RJiterError::from_io_error(self, e));
+            }
+            if n_read.unwrap() > 0 {
                 self.create_new_jiter();
                 continue;
             }
 
-            return result.map_err(|e| from_jiter_error(self, e));
+            return result.map_err(|e| RJiterError::from_jiter_error(self, e));
         }
     }
 
@@ -395,13 +398,19 @@ impl<'rj> RJiter<'rj> {
         if jiter_pos > to_pos {
             self.buffer.shift_buffer(to_pos, jiter_pos);
         }
-        self.buffer.skip_spaces(to_pos)?;
+        if let Err(e) = self.buffer.skip_spaces(to_pos) {
+            return Err(RJiterError::from_io_error(self, e));
+        }
         if let Some(transparent_token) = transparent_token {
             if to_pos >= self.buffer.n_bytes {
-                self.buffer.read_more()?;
+                if let Err(e) = self.buffer.read_more() {
+                    return Err(RJiterError::from_io_error(self, e));
+                }
             }
             if to_pos < self.buffer.n_bytes && self.buffer.buf[to_pos] == transparent_token {
-                self.buffer.skip_spaces(to_pos + 1)?;
+                if let Err(e) = self.buffer.skip_spaces(to_pos + 1) {
+                    return Err(RJiterError::from_io_error(self, e));
+                }
             }
         }
 
@@ -419,11 +428,15 @@ impl<'rj> RJiter<'rj> {
             let finish_in_this_buf = self.jiter.finish();
             if finish_in_this_buf.is_err() {
                 // is finished if `is_err`
-                return finish_in_this_buf.map_err(|e| from_jiter_error(self, e));
+                return finish_in_this_buf.map_err(|e| RJiterError::from_jiter_error(self, e));
             }
             #[allow(clippy::collapsible_if)]
             if self.jiter.current_index() < self.buffer.buf.len() {
-                if self.buffer.read_more()? == 0 {
+                let n_new_bytes = self.buffer.read_more();
+                if let Err(e) = n_new_bytes {
+                    return Err(RJiterError::from_io_error(self, e));
+                }
+                if n_new_bytes.unwrap() == 0 {
                     return Ok(());
                 }
             }
@@ -452,8 +465,8 @@ impl<'rj> RJiter<'rj> {
         &mut self,
         parser: F,
         writer: &mut dyn Write,
-        write_completed: impl Fn(T, &mut dyn Write) -> RJiterResult<()>,
-        write_segment: impl Fn(&mut [u8], usize, usize, &mut dyn Write) -> RJiterResult<()>,
+        write_completed: impl Fn(T, &RJiter<'rj>, &mut dyn Write) -> RJiterResult<()>,
+        write_segment: impl Fn(&mut [u8], usize, usize, &RJiter<'rj>, &mut dyn Write) -> RJiterResult<()>,
     ) -> RJiterResult<()>
     where
         F: Fn(&mut Jiter<'rj>) -> JiterResult<T>,
@@ -463,12 +476,12 @@ impl<'rj> RJiter<'rj> {
             let quote_pos = self.jiter.current_index();
             let result = parser(&mut self.jiter);
             if let Ok(value) = result {
-                write_completed(value, writer)?;
+                write_completed(value, self, writer)?;
                 return Ok(());
             }
             let err = result.unwrap_err();
             if !can_retry_if_partial(&err) {
-                return Err(from_jiter_error(self, err));
+                return Err(RJiterError::from_jiter_error(self, err));
             }
 
             let mut escaping_bs_pos: usize = self.buffer.n_bytes;
@@ -486,7 +499,7 @@ impl<'rj> RJiter<'rj> {
                 let segment_end_pos = min(escaping_bs_pos, self.buffer.n_bytes - 1);
 
                 if segment_end_pos > quote_pos {
-                    write_segment(self.buffer.buf, quote_pos, segment_end_pos, writer)?;
+                    write_segment(self.buffer.buf, quote_pos, segment_end_pos, self, writer)?;
                     self.buffer.shift_buffer(1, segment_end_pos);
                 } else {
                     // Corner case: the quote character is the last byte of the buffer
@@ -496,8 +509,12 @@ impl<'rj> RJiter<'rj> {
                 self.buffer.buf[0] = b'"';
             }
 
-            if self.buffer.read_more()? == 0 {
-                return Err(from_jiter_error(self, err));
+            let n_new_bytes = self.buffer.read_more();
+            if let Err(e) = n_new_bytes {
+                return Err(RJiterError::from_io_error(self, e));
+            }
+            if n_new_bytes.unwrap() == 0 {
+                return Err(RJiterError::from_jiter_error(self, err));
             }
             self.create_new_jiter();
         }
@@ -513,17 +530,24 @@ impl<'rj> RJiter<'rj> {
     /// # Errors
     /// `std::io::Error` or `JiterError`
     pub fn write_long_bytes(&mut self, writer: &mut dyn Write) -> RJiterResult<()> {
-        fn write_completed(bytes: &[u8], writer: &mut dyn Write) -> RJiterResult<()> {
-            writer.write_all(bytes)?;
+        fn write_completed(bytes: &[u8], rjiter: &RJiter, writer: &mut dyn Write) -> RJiterResult<()> {
+            let n_written = writer.write_all(bytes);
+            if let Err(e) = n_written {
+                return Err(RJiterError::from_io_error(rjiter, e));
+            }
             Ok(())
         }
         fn write_segment(
             bytes: &mut [u8],
             quote_pos: usize,
             escaping_bs_pos: usize,
+            rjiter: &RJiter,
             writer: &mut dyn Write,
         ) -> RJiterResult<()> {
-            writer.write_all(&bytes[quote_pos + 1..escaping_bs_pos])?;
+            let n_written = writer.write_all(&bytes[quote_pos + 1..escaping_bs_pos]);
+            if let Err(e) = n_written {
+                return Err(RJiterError::from_io_error(rjiter, e));
+            }
             Ok(())
         }
         let parser = |j: &mut Jiter<'rj>| unsafe {
@@ -541,14 +565,18 @@ impl<'rj> RJiter<'rj> {
     /// # Errors
     /// `std::io::Error` or `JiterError`
     pub fn write_long_str(&mut self, writer: &mut dyn Write) -> RJiterResult<()> {
-        fn write_completed(string: &str, writer: &mut dyn Write) -> RJiterResult<()> {
-            writer.write_all(string.as_bytes())?;
+        fn write_completed(string: &str, rjiter: &RJiter, writer: &mut dyn Write) -> RJiterResult<()> {
+            let n_written = writer.write_all(string.as_bytes());
+            if let Err(e) = n_written {
+                return Err(RJiterError::from_io_error(rjiter, e));
+            }
             Ok(())
         }
         fn write_segment(
             bytes: &mut [u8],
             quote_pos: usize,
             escaping_bs_pos: usize,
+            rjiter: &RJiter,
             writer: &mut dyn Write,
         ) -> RJiterResult<()> {
             let orig_char = bytes[escaping_bs_pos];
@@ -561,10 +589,13 @@ impl<'rj> RJiter<'rj> {
 
             match sub_result {
                 Ok(string) => {
-                    writer.write_all(string.as_bytes())?;
+                    let n_written = writer.write_all(string.as_bytes());
+                    if let Err(e) = n_written {
+                        return Err(RJiterError::from_io_error(rjiter, e));
+                    }
                     Ok(())
                 }
-                Err(e) => Err(RJiterError::JiterError(e)),
+                Err(e) => Err(RJiterError::from_jiter_error(rjiter, e)),
             }
         }
         let parser = |j: &mut Jiter<'rj>| unsafe {
@@ -592,7 +623,11 @@ impl<'rj> RJiter<'rj> {
             pos = 0;
         }
         while self.buffer.n_bytes < pos + token.len() {
-            if self.buffer.read_more()? == 0 {
+            let n_new_bytes = self.buffer.read_more();
+            if let Err(e) = n_new_bytes {
+                return Err(RJiterError::from_io_error(self, e));
+            }
+            if n_new_bytes.unwrap() == 0 {
                 err_flag = true;
                 break;
             }
