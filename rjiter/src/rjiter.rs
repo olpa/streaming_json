@@ -355,7 +355,7 @@ impl<'rj> RJiter<'rj> {
 
             if let Err(e) = &result {
                 if !can_retry_if_partial(e) {
-                    return from_jiter_error(self, e);
+                    return Err(from_jiter_error(self, e.clone()));
                 }
             }
 
@@ -377,7 +377,7 @@ impl<'rj> RJiter<'rj> {
                 continue;
             }
 
-            return from_jiter_error(self, result.unwrap_err());
+            return result.map_err(|e| from_jiter_error(self, e));
         }
     }
 
@@ -418,7 +418,7 @@ impl<'rj> RJiter<'rj> {
         loop {
             let finish_in_this_buf = self.jiter.finish();
             if finish_in_this_buf.is_err() { // is finished if `is_err`
-                return from_jiter_error(self, finish_in_this_buf.unwrap_err());
+                return finish_in_this_buf.map_err(|e| from_jiter_error(self, e));
             }
             #[allow(clippy::collapsible_if)]
             if self.jiter.current_index() < self.buffer.buf.len() {
@@ -462,7 +462,7 @@ impl<'rj> RJiter<'rj> {
             }
             let err = result.unwrap_err();
             if !can_retry_if_partial(&err) {
-                return from_jiter_error(self, err);
+                return Err(from_jiter_error(self, err));
             }
 
             let mut escaping_bs_pos: usize = self.buffer.n_bytes;
@@ -491,7 +491,7 @@ impl<'rj> RJiter<'rj> {
             }
 
             if self.buffer.read_more()? == 0 {
-                return from_jiter_error(self, err);
+                return Err(from_jiter_error(self, err));
             }
             self.create_new_jiter();
         }
