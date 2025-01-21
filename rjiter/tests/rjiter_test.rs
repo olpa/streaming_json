@@ -3,10 +3,10 @@ use std::sync::Arc;
 
 use jiter::JsonValue;
 use jiter::LazyIndexMap;
+use rjiter::Error as RJiterError;
 use rjiter::NumberInt;
 use rjiter::Peek;
 use rjiter::RJiter;
-use rjiter::Error as RJiterError;
 mod one_byte_reader;
 use crate::one_byte_reader::OneByteReader;
 

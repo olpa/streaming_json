@@ -1,5 +1,5 @@
-use jiter::{JiterError, JiterErrorType, JsonErrorType};
 use crate::rjiter::RJiter;
+use jiter::{JiterError, JiterErrorType, JsonErrorType};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -20,7 +20,7 @@ pub(crate) fn from_jiter_error(rjiter: &RJiter, jiter_error: JiterError) -> Erro
         error_type: jiter_error.error_type,
         index: jiter_error.index + rjiter.current_index(),
     };
-    return Error::JiterError(jiter_error);
+    Error::JiterError(jiter_error)
 }
 
 // Copy-paste from jiter/src/error.rs, where it is private

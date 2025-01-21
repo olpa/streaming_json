@@ -4,7 +4,9 @@ use std::io::Write;
 
 use crate::buffer::Buffer;
 use crate::buffer::ChangeFlag;
-use crate::error::{can_retry_if_partial, Error as RJiterError, Result as RJiterResult, from_jiter_error};
+use crate::error::{
+    can_retry_if_partial, from_jiter_error, Error as RJiterError, Result as RJiterResult,
+};
 use jiter::{
     Jiter, JiterError, JiterResult, JsonError, JsonErrorType, JsonValue, NumberAny, NumberInt, Peek,
 };
@@ -172,9 +174,7 @@ impl<'rj> RJiter<'rj> {
     /// # Errors
     /// `std::io::Error` or `JiterError`
     pub fn next_bool(&mut self) -> RJiterResult<bool> {
-        let x = self.loop_until_success(jiter::Jiter::next_bool, None, false);
-        println!("x: {:?}", x); // FIXME
-        x
+        self.loop_until_success(jiter::Jiter::next_bool, None, false)
     }
 
     /// See `Jiter::next_bytes`
@@ -417,7 +417,8 @@ impl<'rj> RJiter<'rj> {
     pub fn finish(&mut self) -> RJiterResult<()> {
         loop {
             let finish_in_this_buf = self.jiter.finish();
-            if finish_in_this_buf.is_err() { // is finished if `is_err`
+            if finish_in_this_buf.is_err() {
+                // is finished if `is_err`
                 return finish_in_this_buf.map_err(|e| from_jiter_error(self, e));
             }
             #[allow(clippy::collapsible_if)]
