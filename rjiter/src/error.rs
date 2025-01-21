@@ -3,27 +3,34 @@ use jiter::{JiterError, JiterErrorType, JsonErrorType, LinePosition};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Debug)]
-pub enum Error {
-    JiterError(JiterError),
+#[derive(Debug]
+pub enum ErrorType {
+    JsonError(JsonErrorType),
+    WrongType { expected: JsonType, actual: JsonType },
     IoError(std::io::Error),
 }
 
-impl From<std::io::Error> for Error {
-    fn from(err: std::io::Error) -> Self {
-        Error::IoError(err)
-    }
-}
-
-pub(crate) fn from_jiter_error(rjiter: &RJiter, jiter_error: JiterError) -> Error {
-    let jiter_error = JiterError {
-        error_type: jiter_error.error_type,
-        index: jiter_error.index + rjiter.current_index(),
-    };
-    Error::JiterError(jiter_error)
+#[derive(Debug)]
+pub struct Error {
+    pub error_type: ErrorType,
+    pub index: usize,
 }
 
 impl Error {
+    pub(crate) fn from_jiter_error(rjiter: &RJiter, jiter_error: JiterError) -> Error {
+        Error {
+            error_type: ErrorType::JiterError(jiter_error.error_type),
+            index: jiter_error.index + rjiter.current_index(),
+        }
+    }
+
+    pub(crate) fn from_io_error(rjiter: &RJiter, io_error: std::io::Error) -> Error {
+        Error {
+            error_type: ErrorType::IoError(io_error),
+            index: rjiter.current_index(),
+        }
+    }
+
     pub fn get_position(&self, rjiter: &RJiter) -> LinePosition {
         return rjiter.error_position(0);
     }
