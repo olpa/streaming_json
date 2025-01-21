@@ -4,7 +4,7 @@ use std::io::Write;
 
 use crate::buffer::Buffer;
 use crate::buffer::ChangeFlag;
-use crate::error::{can_retry_if_partial, Error as RJiterError, Result as RJiterResult};
+use crate::error::{can_retry_if_partial, Error as RJiterError, Result as RJiterResult, rewrite_error_index};
 use jiter::{
     Jiter, JiterError, JiterResult, JsonError, JsonErrorType, JsonValue, NumberAny, NumberInt, Peek,
 };
@@ -172,7 +172,9 @@ impl<'rj> RJiter<'rj> {
     /// # Errors
     /// `std::io::Error` or `JiterError`
     pub fn next_bool(&mut self) -> RJiterResult<bool> {
-        self.loop_until_success(jiter::Jiter::next_bool, None, false)
+        let x = self.loop_until_success(jiter::Jiter::next_bool, None, false);
+        println!("x: {:?}", x); // FIXME
+        x
     }
 
     /// See `Jiter::next_bytes`
@@ -375,7 +377,7 @@ impl<'rj> RJiter<'rj> {
                 continue;
             }
 
-            return result.map_err(RJiterError::from);
+            return result.map_err(|e| rewrite_error_index(self, e));
         }
     }
 

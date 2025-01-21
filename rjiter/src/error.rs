@@ -1,4 +1,5 @@
 use jiter::{JiterError, JiterErrorType, JsonErrorType};
+use crate::rjiter::RJiter;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -38,4 +39,12 @@ pub(crate) fn can_retry_if_partial(jiter_error: &JiterError) -> bool {
         return allowed_if_partial(error_type);
     }
     false
+}
+
+pub(crate) fn rewrite_error_index(rjiter: &RJiter, jiter_error: JiterError) -> Error {
+    let jiter_error = JiterError {
+        error_type: jiter_error.error_type,
+        index: jiter_error.index + rjiter.current_index(),
+    };
+    return Error::JiterError(jiter_error);
 }
