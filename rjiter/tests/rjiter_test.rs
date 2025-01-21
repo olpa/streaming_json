@@ -4,10 +4,10 @@ use std::sync::Arc;
 use jiter::JsonValue;
 use jiter::LazyIndexMap;
 use rjiter::Error as RJiterError;
+use rjiter::LinePosition;
 use rjiter::NumberInt;
 use rjiter::Peek;
 use rjiter::RJiter;
-use rjiter::LinePosition;
 mod one_byte_reader;
 use crate::one_byte_reader::OneByteReader;
 
@@ -482,12 +482,8 @@ fn index_in_error() {
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
     let result = rjiter.next_bool();
-    match result {
-        Err(RJiterError::JiterError(jiter_err)) => {
-            assert_eq!(jiter_err.index, token_pos);
-        }
-        _ => panic!("Expected JiterError"),
-    }
+    let err = result.unwrap_err();
+    assert_eq!(err.index, token_pos);
 }
 
 #[test]

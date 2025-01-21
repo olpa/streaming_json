@@ -4,9 +4,13 @@ use jiter::{JiterError, JiterErrorType, JsonErrorType, JsonType, LinePosition};
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
+#[allow(clippy::module_name_repetitions)]
 pub enum ErrorType {
     JsonError(JsonErrorType),
-    WrongType { expected: JsonType, actual: JsonType },
+    WrongType {
+        expected: JsonType,
+        actual: JsonType,
+    },
     IoError(std::io::Error),
 }
 
@@ -21,7 +25,9 @@ impl Error {
         Error {
             error_type: match jiter_error.error_type {
                 JiterErrorType::JsonError(json_error_type) => ErrorType::JsonError(json_error_type),
-                JiterErrorType::WrongType { expected, actual } => ErrorType::WrongType { expected, actual },
+                JiterErrorType::WrongType { expected, actual } => {
+                    ErrorType::WrongType { expected, actual }
+                }
             },
             index: jiter_error.index + index,
         }
@@ -30,19 +36,20 @@ impl Error {
     pub(crate) fn from_json_error(index: usize, json_error_type: JsonErrorType) -> Error {
         Error {
             error_type: ErrorType::JsonError(json_error_type),
-            index: index,
+            index,
         }
     }
 
     pub(crate) fn from_io_error(index: usize, io_error: std::io::Error) -> Error {
         Error {
             error_type: ErrorType::IoError(io_error),
-            index: index,
+            index,
         }
     }
 
+    #[must_use]
     pub fn get_position(&self, rjiter: &RJiter) -> LinePosition {
-        return rjiter.error_position(self.index);
+        rjiter.error_position(self.index)
     }
 }
 

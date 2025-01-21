@@ -4,11 +4,9 @@ use std::io::Write;
 
 use crate::buffer::Buffer;
 use crate::buffer::ChangeFlag;
-use crate::error::{
-    can_retry_if_partial, Error as RJiterError, Result as RJiterResult,
-};
+use crate::error::{can_retry_if_partial, Error as RJiterError, Result as RJiterResult};
 use jiter::{
-    Jiter, JiterResult, JsonErrorType, JsonValue, NumberAny, NumberInt, Peek, LinePosition
+    Jiter, JiterResult, JsonErrorType, JsonValue, LinePosition, NumberAny, NumberInt, Peek,
 };
 
 pub struct RJiter<'rj> {
@@ -355,7 +353,10 @@ impl<'rj> RJiter<'rj> {
 
             if let Err(e) = &result {
                 if !can_retry_if_partial(e) {
-                    return Err(RJiterError::from_jiter_error(self.current_index(), e.clone()));
+                    return Err(RJiterError::from_jiter_error(
+                        self.current_index(),
+                        e.clone(),
+                    ));
                 }
             }
 
@@ -428,16 +429,15 @@ impl<'rj> RJiter<'rj> {
             let finish_in_this_buf = self.jiter.finish();
             if finish_in_this_buf.is_err() {
                 // is finished if `is_err`
-                return finish_in_this_buf.map_err(|e| RJiterError::from_jiter_error(self.current_index(), e));
+                return finish_in_this_buf
+                    .map_err(|e| RJiterError::from_jiter_error(self.current_index(), e));
             }
             #[allow(clippy::collapsible_if)]
             if self.jiter.current_index() < self.buffer.buf.len() {
                 let n_new_bytes = self.buffer.read_more();
-                if let Err(e) = n_new_bytes {
-                    return Err(RJiterError::from_io_error(self.current_index(), e));
-                }
-                if n_new_bytes.unwrap() == 0 {
-                    return Ok(());
+                match n_new_bytes {
+                    Err(e) => return Err(RJiterError::from_io_error(self.current_index(), e)),
+                    Ok(_) => return Ok(()),
                 }
             }
             self.buffer.shift_buffer(0, self.jiter.current_index());
@@ -499,7 +499,13 @@ impl<'rj> RJiter<'rj> {
                 let segment_end_pos = min(escaping_bs_pos, self.buffer.n_bytes - 1);
 
                 if segment_end_pos > quote_pos {
-                    write_segment(self.buffer.buf, quote_pos, segment_end_pos, self.current_index(), writer)?;
+                    write_segment(
+                        self.buffer.buf,
+                        quote_pos,
+                        segment_end_pos,
+                        self.current_index(),
+                        writer,
+                    )?;
                     self.buffer.shift_buffer(1, segment_end_pos);
                 } else {
                     // Corner case: the quote character is the last byte of the buffer
@@ -624,12 +630,13 @@ impl<'rj> RJiter<'rj> {
         }
         while self.buffer.n_bytes < pos + token.len() {
             let n_new_bytes = self.buffer.read_more();
-            if let Err(e) = n_new_bytes {
-                return Err(RJiterError::from_io_error(self.current_index(), e));
-            }
-            if n_new_bytes.unwrap() == 0 {
-                err_flag = true;
-                break;
+            match n_new_bytes {
+                Err(e) => return Err(RJiterError::from_io_error(self.current_index(), e)),
+                Ok(0) => {
+                    err_flag = true;
+                    break;
+                }
+                Ok(_) => {}
             }
         }
 
@@ -653,6 +660,9 @@ impl<'rj> RJiter<'rj> {
         if found {
             return Ok(());
         }
-        Err(RJiterError::from_json_error(self.current_index(), JsonErrorType::ExpectedSomeIdent))
+        Err(RJiterError::from_json_error(
+            self.current_index(),
+            JsonErrorType::ExpectedSomeIdent,
+        ))
     }
 }
