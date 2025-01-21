@@ -5,7 +5,7 @@ use std::io::Write;
 use crate::buffer::Buffer;
 use crate::buffer::ChangeFlag;
 use crate::error::{
-    can_retry_if_partial, from_jiter_error, Error as RJiterError, Result as RJiterResult,
+    can_retry_if_partial, Error as RJiterError, Result as RJiterResult,
 };
 use jiter::{
     Jiter, JiterError, JiterResult, JsonError, JsonErrorType, JsonValue, NumberAny, NumberInt, Peek, LinePosition
@@ -618,11 +618,6 @@ impl<'rj> RJiter<'rj> {
         if found {
             return Ok(());
         }
-        let json_error = JsonError {
-            error_type: JsonErrorType::ExpectedSomeIdent,
-            index: self.jiter.current_index(),
-        };
-        let jiter_error = JiterError::from(json_error);
-        Err(RJiterError::JiterError(jiter_error))
+        Err(RJiterError::from_json_error(self, JsonErrorType::ExpectedSomeIdent))
     }
 }
