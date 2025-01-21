@@ -7,6 +7,7 @@ use rjiter::Error as RJiterError;
 use rjiter::NumberInt;
 use rjiter::Peek;
 use rjiter::RJiter;
+use rjiter::LinePosition;
 mod one_byte_reader;
 use crate::one_byte_reader::OneByteReader;
 
@@ -484,6 +485,24 @@ fn index_in_error() {
     match result {
         Err(RJiterError::JiterError(jiter_err)) => {
             assert_eq!(jiter_err.index, token_pos);
+        }
+        _ => panic!("Expected JiterError"),
+    }
+}
+
+#[test]
+fn position_for_error() {
+    let leading_text = "\n \n  \n   \n    \n      \n   ";
+    let input = format!(r#"{leading_text}"hello""#);
+    let mut buffer = [0u8; 10];
+    let mut reader = Cursor::new(input.as_bytes());
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    let result = rjiter.next_bool();
+    match result {
+        Err(rjiter_err) => {
+            let pos = rjiter_err.get_position(&rjiter);
+            assert_eq!(pos, LinePosition::new(6, 4));
         }
         _ => panic!("Expected JiterError"),
     }

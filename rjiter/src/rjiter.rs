@@ -8,7 +8,7 @@ use crate::error::{
     can_retry_if_partial, from_jiter_error, Error as RJiterError, Result as RJiterResult,
 };
 use jiter::{
-    Jiter, JiterError, JiterResult, JsonError, JsonErrorType, JsonValue, NumberAny, NumberInt, Peek,
+    Jiter, JiterError, JiterResult, JsonError, JsonErrorType, JsonValue, NumberAny, NumberInt, Peek, LinePosition
 };
 
 pub struct RJiter<'rj> {
@@ -437,6 +437,11 @@ impl<'rj> RJiter<'rj> {
     #[must_use]
     pub fn current_index(&self) -> usize {
         self.jiter.current_index() + self.buffer.n_shifted_out
+    }
+
+    #[must_use]
+    pub fn error_position(&self, index: usize) -> LinePosition {
+        self.jiter.error_position(index)
     }
 
     //  ------------------------------------------------------------

@@ -1,5 +1,5 @@
 use crate::rjiter::RJiter;
-use jiter::{JiterError, JiterErrorType, JsonErrorType};
+use jiter::{JiterError, JiterErrorType, JsonErrorType, LinePosition};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -21,6 +21,12 @@ pub(crate) fn from_jiter_error(rjiter: &RJiter, jiter_error: JiterError) -> Erro
         index: jiter_error.index + rjiter.current_index(),
     };
     Error::JiterError(jiter_error)
+}
+
+impl Error {
+    pub fn get_position(&self, rjiter: &RJiter) -> LinePosition {
+        return rjiter.error_position(0);
+    }
 }
 
 // Copy-paste from jiter/src/error.rs, where it is private
