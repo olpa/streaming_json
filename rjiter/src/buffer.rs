@@ -39,6 +39,14 @@ impl<'buf> Buffer<'buf> {
     pub fn shift_buffer(&mut self, to_pos: usize, from_pos: usize) {
         if from_pos > to_pos && to_pos < self.n_bytes {
             if from_pos < self.n_bytes {
+                for ch in self.buf[to_pos..from_pos].iter() {
+                    if *ch == b'\n' {
+                        self.pos_shifted.line += 1;
+                        self.pos_shifted.column = 0;
+                    } else {
+                        self.pos_shifted.column += 1;
+                    }
+                }
                 self.buf.copy_within(from_pos..self.n_bytes, to_pos);
             }
             let from_pos = min(from_pos, self.n_bytes);
