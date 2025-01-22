@@ -301,11 +301,9 @@ fn test_shift_position_multiple_reads() {
     let mut buffer = Buffer::new(&mut reader, &mut buf);
     buffer.read_more().unwrap();
 
-    buffer.shift_buffer(0, 8);
+    buffer.shift_buffer(0, 88);
     buffer.read_more().unwrap();
-    buffer.shift_buffer(0, 8);
-    buffer.read_more().unwrap();
-    buffer.shift_buffer(0, input.len() - 16 - 1);
+    buffer.shift_buffer(0, input.len() - 8);
 
     assert_eq!(buffer.pos_shifted, LinePosition::new(3, 3));
 }
