@@ -3,7 +3,6 @@ use std::sync::Arc;
 
 use jiter::JsonValue;
 use jiter::LazyIndexMap;
-use rjiter::Error as RJiterError;
 use rjiter::LinePosition;
 use rjiter::NumberInt;
 use rjiter::Peek;
