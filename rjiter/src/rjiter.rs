@@ -427,15 +427,18 @@ impl<'rj> RJiter<'rj> {
     pub fn finish(&mut self) -> RJiterResult<()> {
         loop {
             let finish_in_this_buf = self.jiter.finish();
-            if finish_in_this_buf.is_err() {
-                return finish_in_this_buf
-                    .map_err(|e| RJiterError::from_jiter_error(self.current_index(), e));
+            // Error here is actually not an error, but a marker that something is found
+            // and therefore the jiter is not at the end of the json
+            if let Err(e) = finish_in_this_buf {
+                return Err(RJiterError::from_jiter_error(self.current_index(), e));
             }
+            // The current buffer was all only spaces. Read more.
             if self.jiter.current_index() < self.buffer.buf.len() {
                 let n_new_bytes = self.buffer.read_more();
                 if let Err(e) = n_new_bytes {
                     return Err(RJiterError::from_io_error(self.current_index(), e));
                 }
+                // The end of the json is reached
                 if let Ok(0) = n_new_bytes {
                     return Ok(());
                 }
