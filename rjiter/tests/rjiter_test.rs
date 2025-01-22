@@ -488,16 +488,18 @@ fn index_in_error() {
 #[test]
 fn position_for_error() {
     let leading_text = "\n \n  \n   \n    \n      \n   ";
-    let input = format!(r#"{leading_text}"hello""#);
+    let input = format!(r#"{leading_text}null null"#);
     let mut buffer = [0u8; 10];
     let mut reader = Cursor::new(input.as_bytes());
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
-    let result = rjiter.next_bool();
+    let result = rjiter.next_str();
     match result {
         Err(rjiter_err) => {
             let pos = rjiter_err.get_position(&rjiter);
-            assert_eq!(pos, LinePosition::new(6, 4));
+            // for column: jiter reports the position of the space after "null"
+            // 3 spaces in `leading_text`, 4 characters in "null"
+            assert_eq!(pos, LinePosition::new(7, 8));
         }
         _ => panic!("Expected JiterError"),
     }
