@@ -48,7 +48,7 @@ fn description_of_error() {
         Err(rjiter_err) => {
             // see `position_for_error` for the position
             let desc = rjiter_err.description(&rjiter);
-            assert_eq!(desc, "Expected string, found null at line 7, column 8");
+            assert_eq!(desc, "expected string but found null at line 7 column 8");
         }
         _ => panic!("Expected JiterError"),
     }

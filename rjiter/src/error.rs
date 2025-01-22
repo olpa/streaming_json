@@ -13,6 +13,17 @@ pub enum ErrorType {
     },
     IoError(std::io::Error),
 }
+impl std::fmt::Display for ErrorType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::JsonError(error_type) => write!(f, "{error_type}"),
+            Self::WrongType { expected, actual } => {
+                write!(f, "expected {expected} but found {actual}")
+            }
+            Self::IoError(ioe) => write!(f, "{ioe}"),
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct Error {
