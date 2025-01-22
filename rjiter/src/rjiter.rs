@@ -428,16 +428,16 @@ impl<'rj> RJiter<'rj> {
         loop {
             let finish_in_this_buf = self.jiter.finish();
             if finish_in_this_buf.is_err() {
-                // is finished if `is_err`
                 return finish_in_this_buf
                     .map_err(|e| RJiterError::from_jiter_error(self.current_index(), e));
             }
-            #[allow(clippy::collapsible_if)]
             if self.jiter.current_index() < self.buffer.buf.len() {
                 let n_new_bytes = self.buffer.read_more();
-                match n_new_bytes {
-                    Err(e) => return Err(RJiterError::from_io_error(self.current_index(), e)),
-                    Ok(_) => return Ok(()),
+                if let Err(e) = n_new_bytes {
+                    return Err(RJiterError::from_io_error(self.current_index(), e));
+                }
+                if let Ok(0) = n_new_bytes {
+                    return Ok(());
                 }
             }
             self.buffer.shift_buffer(0, self.jiter.current_index());
@@ -630,13 +630,15 @@ impl<'rj> RJiter<'rj> {
         }
         while self.buffer.n_bytes < pos + token.len() {
             let n_new_bytes = self.buffer.read_more();
-            match n_new_bytes {
-                Err(e) => return Err(RJiterError::from_io_error(self.current_index(), e)),
-                Ok(0) => {
-                    err_flag = true;
-                    break;
-                }
-                Ok(_) => {}
+            if let Err(e) = n_new_bytes {
+                // Fatal error, the caller can't do anything anymore
+                return Err(RJiterError::from_io_error(self.current_index(), e));
+            }
+            if let Ok(0) = n_new_bytes {
+                // Not an error for the caller, just a normal end of the json
+                // The code should create a new Jiter. Doing so below
+                err_flag = true;
+                break;
             }
         }
 
