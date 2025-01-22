@@ -51,6 +51,12 @@ impl Error {
     pub fn get_position(&self, rjiter: &RJiter) -> LinePosition {
         rjiter.error_position(self.index)
     }
+
+    #[must_use]
+    pub fn description(&self, rjiter: &RJiter) -> String {
+        let position = self.get_position(rjiter);
+        format!("{} at {}", self.error_type, position)
+    }
 }
 
 // Copy-paste from jiter/src/error.rs, where it is private
