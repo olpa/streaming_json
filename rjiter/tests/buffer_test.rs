@@ -1,6 +1,6 @@
 use rjiter::buffer::Buffer;
-use std::io::Cursor;
 use rjiter::LinePosition;
+use std::io::Cursor;
 
 #[test]
 fn test_basic_skip_spaces() {

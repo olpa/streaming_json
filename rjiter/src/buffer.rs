@@ -6,8 +6,8 @@ use crate::LinePosition;
 pub struct Buffer<'buf> {
     reader: &'buf mut dyn Read,
     pub buf: &'buf mut [u8],
-    pub n_bytes: usize, // Size of the buffer
-    pub n_shifted_out: usize, // Number of bytes shifted out
+    pub n_bytes: usize,            // Size of the buffer
+    pub n_shifted_out: usize,      // Number of bytes shifted out
     pub pos_shifted: LinePosition, // Correction for the error position due to shifting
 }
 
@@ -37,7 +37,7 @@ impl<'buf> Buffer<'buf> {
     }
 
     pub fn shift_buffer(&mut self, to_pos: usize, from_pos: usize) {
-        for ch in self.buf[to_pos..min(from_pos, self.n_bytes)].iter() {
+        for ch in &self.buf[to_pos..min(from_pos, self.n_bytes)] {
             if *ch == b'\n' {
                 self.pos_shifted.line += 1;
                 self.pos_shifted.column = 0;
