@@ -1,11 +1,14 @@
 use std::cmp::min;
 use std::io::Read;
 
+use crate::LinePosition;
+
 pub struct Buffer<'buf> {
     reader: &'buf mut dyn Read,
     pub buf: &'buf mut [u8],
-    pub n_bytes: usize,
-    pub n_shifted_out: usize,
+    pub n_bytes: usize, // Size of the buffer
+    pub n_shifted_out: usize, // Number of bytes shifted out
+    pub pos_shifted: LinePosition, // Correction for the error position due to shifting
 }
 
 impl<'buf> Buffer<'buf> {
@@ -16,6 +19,7 @@ impl<'buf> Buffer<'buf> {
             buf,
             n_bytes: 0,
             n_shifted_out: 0,
+            pos_shifted: LinePosition::new(0, 0),
         }
     }
 

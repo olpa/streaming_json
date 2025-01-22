@@ -1,5 +1,6 @@
 use rjiter::buffer::Buffer;
 use std::io::Cursor;
+use rjiter::LinePosition;
 
 #[test]
 fn test_basic_skip_spaces() {
@@ -254,4 +255,57 @@ fn test_shift_postend_to_pos1() {
 
     assert_eq!(&buffer.buf[..buffer.n_bytes], b"a");
     assert_eq!(buffer.n_shifted_out, input.len() - 1);
+}
+
+#[test]
+fn test_shift_position_newlines() {
+    let input = "abc\ndef\nghi\njkl";
+    let mut reader = Cursor::new(input.as_bytes());
+    let mut buf = [0u8; 32];
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+    buffer.read_more().unwrap();
+    let pos_d = input.find('d').unwrap();
+    let pos_i = input.find('i').unwrap();
+
+    assert_eq!(buffer.pos_shifted, LinePosition::new(0, 0));
+
+    buffer.shift_buffer(0, pos_d);
+    assert_eq!(buffer.pos_shifted, LinePosition::new(1, 0));
+
+    buffer.shift_buffer(0, pos_i - pos_d);
+    assert_eq!(buffer.pos_shifted, LinePosition::new(2, 2));
+}
+
+#[test]
+fn test_shift_position_no_newlines() {
+    let input = "abcdefghijkl";
+    let mut reader = Cursor::new(input.as_bytes());
+    let mut buf = [0u8; 32];
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+    buffer.read_more().unwrap();
+    let pos_d = input.find('d').unwrap();
+    let pos_i = input.find('i').unwrap();
+
+    buffer.shift_buffer(0, pos_d);
+    assert_eq!(buffer.pos_shifted, LinePosition::new(0, pos_d));
+
+    buffer.shift_buffer(0, pos_i - pos_d);
+    assert_eq!(buffer.pos_shifted, LinePosition::new(0, pos_i));
+}
+
+#[test]
+fn test_shift_position_multiple_reads() {
+    let input = "abc\ndef\nghi\njkl";
+    let mut reader = Cursor::new(input.as_bytes());
+    let mut buf = [0u8; 8];
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+    buffer.read_more().unwrap();
+
+    buffer.shift_buffer(0, 8);
+    buffer.read_more().unwrap();
+    buffer.shift_buffer(0, 8);
+    buffer.read_more().unwrap();
+    buffer.shift_buffer(0, input.len() - 16 - 1);
+
+    assert_eq!(buffer.pos_shifted, LinePosition::new(3, 3));
 }
