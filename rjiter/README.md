@@ -50,3 +50,19 @@ assert_eq!(rjiter.next_key().unwrap(), None);
 rjiter.finish().unwrap();
 ```
 
+
+## Logic and limitations
+
+First, RJiter calls Jiter. If the result is ok, RJiter returns it. Otherwise, the logic is as follows:
+
+- Skip spaces
+- Shift the buffer
+- Read, try again, read, try again, and so on till the success or till the error can't be fixed by reading more data
+
+The buffer should be large enough to contain each complete JSON element. In the example above, if the buffer size were 12 bytes, the parsing would fail on the telefone numbers:
+
+```
+called `Result::unwrap()` on an `Err` value: Error { error_type: JsonError(EofWhileParsingString), index: 79 }
+```
+
+The functions that return pointers to bytes, they point to inside the buffer. You should copy the bytes elsewere before calling RJiter again, otherwise RJiter may shift the buffer and the pointers will become invalid.
