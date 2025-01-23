@@ -75,7 +75,7 @@ fn jiter_doc_example() {
         ]
     }"#;
     let mut buffer = [0u8; 16];
-    let mut reader = OneByteReader::new(json_data.bytes());
+    let mut reader = Cursor::new(json_data.as_bytes());
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
     assert_eq!(rjiter.next_object().unwrap(), Some("name"));
