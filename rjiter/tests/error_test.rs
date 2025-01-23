@@ -63,11 +63,16 @@ fn display_of_error() {
     let mut reader = Cursor::new(input.as_bytes());
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
+    let expected_index = leading_text.len() + 5;
+
     let result = rjiter.next_str();
     match result {
         Err(rjiter_err) => {
             let desc = format!("{rjiter_err}");
-            assert_eq!(desc, "expected string but found null at index 31");
+            assert_eq!(
+                desc,
+                format!("expected string but found null at index {expected_index}")
+            );
         }
         _ => panic!("Expected JiterError"),
     }
