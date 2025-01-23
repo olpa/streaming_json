@@ -457,6 +457,7 @@ impl<'rj> RJiter<'rj> {
 
     #[must_use]
     pub fn error_position(&self, index: usize) -> LinePosition {
+        let index = index - self.buffer.n_shifted_out;
         let pos = self.jiter.error_position(index);
         LinePosition::new(
             pos.line + self.buffer.pos_shifted.line,

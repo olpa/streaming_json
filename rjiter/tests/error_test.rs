@@ -28,9 +28,7 @@ fn position_for_error() {
     match result {
         Err(rjiter_err) => {
             let pos = rjiter_err.get_position(&rjiter);
-            // for column: jiter reports the position of the space after "null"
-            // 3 spaces in `leading_text`, 4 characters in "null"
-            assert_eq!(pos, LinePosition::new(7, 8));
+            assert_eq!(pos, LinePosition::new(7, 4));
         }
         _ => panic!("Expected JiterError"),
     }
@@ -47,9 +45,8 @@ fn description_of_error() {
     let result = rjiter.next_str();
     match result {
         Err(rjiter_err) => {
-            // see `position_for_error` for the position
             let desc = rjiter_err.description(&rjiter);
-            assert_eq!(desc, "expected string but found null at line 7 column 8");
+            assert_eq!(desc, "expected string but found null at line 7 column 4");
         }
         _ => panic!("Expected JiterError"),
     }
@@ -63,15 +60,16 @@ fn display_of_error() {
     let mut reader = Cursor::new(input.as_bytes());
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
-    let expected_index = leading_text.len() + 5;
-
     let result = rjiter.next_str();
     match result {
         Err(rjiter_err) => {
             let desc = format!("{rjiter_err}");
             assert_eq!(
                 desc,
-                format!("expected string but found null at index {expected_index}")
+                format!(
+                    "expected string but found null at index {}",
+                    leading_text.len()
+                )
             );
         }
         _ => panic!("Expected JiterError"),
