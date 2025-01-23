@@ -6,7 +6,6 @@ use jiter::LazyIndexMap;
 use rjiter::NumberInt;
 use rjiter::Peek;
 use rjiter::RJiter;
-
 mod one_byte_reader;
 use crate::one_byte_reader::OneByteReader;
 
@@ -418,6 +417,56 @@ fn known_skip_token() {
         let result = rjiter.next_bool();
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), true);
+    }
+}
+
+//
+// Current index
+//
+
+#[test]
+fn current_index() {
+    let input = r#" data+   {  "foo":  "bar"}  "#;
+    let pos_data_pre = 1;
+    let pos_data_post = pos_data_pre + 5;
+    let pos_key_post = input.find(":").unwrap() + 1;
+    let pos_value_pre = input.find("b").unwrap() - 1;
+    let pos_value_post = pos_value_pre + 3 + 2;
+    let pos_object_post = input.find("}").unwrap() + 1;
+    let pos_len_done = input.len();
+
+    for buffer_len in 8..input.len() {
+        let mut buffer = vec![0u8; buffer_len];
+        let mut reader = Cursor::new(input.as_bytes());
+        let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+        let result = rjiter.finish();
+        assert!(result.is_err());
+        assert_eq!(rjiter.current_index(), pos_data_pre);
+
+        rjiter.known_skip_token(b"data+").unwrap();
+        assert_eq!(rjiter.current_index(), pos_data_post);
+
+        let result = rjiter.next_object();
+        assert_eq!(result.unwrap(), Some("foo"));
+        assert_eq!(rjiter.current_index(), pos_key_post);
+
+        let result = rjiter.peek();
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), Peek::String);
+        assert_eq!(rjiter.current_index(), pos_value_pre);
+
+        let result = rjiter.write_long_str(&mut std::io::sink());
+        assert!(result.is_ok());
+        assert_eq!(rjiter.current_index(), pos_value_post);
+
+        let result = rjiter.next_key();
+        assert_eq!(result.unwrap(), None);
+        assert_eq!(rjiter.current_index(), pos_object_post);
+
+        let result = rjiter.finish();
+        assert!(result.is_ok());
+        assert_eq!(rjiter.current_index(), pos_len_done);
     }
 }
 

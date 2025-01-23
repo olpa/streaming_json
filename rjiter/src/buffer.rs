@@ -1,11 +1,14 @@
 use std::cmp::min;
 use std::io::Read;
 
+use crate::LinePosition;
+
 pub struct Buffer<'buf> {
     reader: &'buf mut dyn Read,
     pub buf: &'buf mut [u8],
-    pub n_bytes: usize,
-    pub n_shifted_out: usize,
+    pub n_bytes: usize,            // Size of the buffer
+    pub n_shifted_out: usize,      // Number of bytes shifted out
+    pub pos_shifted: LinePosition, // Correction for the error position due to shifting
 }
 
 impl<'buf> Buffer<'buf> {
@@ -16,6 +19,7 @@ impl<'buf> Buffer<'buf> {
             buf,
             n_bytes: 0,
             n_shifted_out: 0,
+            pos_shifted: LinePosition::new(0, 0),
         }
     }
 
@@ -33,12 +37,23 @@ impl<'buf> Buffer<'buf> {
     }
 
     pub fn shift_buffer(&mut self, to_pos: usize, from_pos: usize) {
+        let safe_from_pos = min(from_pos, self.n_bytes);
+        if to_pos < safe_from_pos {
+            for ch in &self.buf[to_pos..safe_from_pos] {
+                if *ch == b'\n' {
+                    self.pos_shifted.line += 1;
+                    self.pos_shifted.column = 0;
+                } else {
+                    self.pos_shifted.column += 1;
+                }
+            }
+        }
+
         if from_pos > to_pos && to_pos < self.n_bytes {
             if from_pos < self.n_bytes {
                 self.buf.copy_within(from_pos..self.n_bytes, to_pos);
             }
-            let from_pos = min(from_pos, self.n_bytes);
-            let n_shifted_out = from_pos - to_pos;
+            let n_shifted_out = safe_from_pos - to_pos;
             self.n_bytes -= n_shifted_out;
             self.n_shifted_out += n_shifted_out;
         }
@@ -86,8 +101,8 @@ impl<'buf> std::fmt::Debug for Buffer<'buf> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Buffer {{ n_bytes: {:?}, n_shifted_out: {:?}, buf: {:?} }}",
-            self.n_bytes, self.n_shifted_out, self.buf
+            "Buffer {{ n_bytes: {:?}, buf: {:?}, n_shifted_out: {:?}, pos_shifted: {:?} }}",
+            self.n_bytes, self.buf, self.n_shifted_out, self.pos_shifted
         )
     }
 }
