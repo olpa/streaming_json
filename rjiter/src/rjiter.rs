@@ -623,6 +623,7 @@ impl<'rj> RJiter<'rj> {
     //
 
     /// Skip the token if found, otherwise return an error.
+    /// RJiter should be positioned at the beginning of the potential token using `peek` or `finish`
     ///
     /// # Errors
     /// `std::io::Error` or `RJiterError(ExpectedSomeIdent)`
