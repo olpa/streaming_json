@@ -11,7 +11,6 @@ use jiter::{
 
 pub struct RJiter<'rj> {
     jiter: Jiter<'rj>,
-    pos_before_call_jiter: usize,
     buffer: Buffer<'rj>,
 }
 
@@ -19,8 +18,8 @@ impl<'rj> std::fmt::Debug for RJiter<'rj> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "RJiter {{ jiter: {:?}, pos_before_call_jiter: {:?}, buffer: {:?} }}",
-            self.jiter, self.pos_before_call_jiter, self.buffer
+            "RJiter {{ jiter: {:?}, buffer: {:?} }}",
+            self.jiter, self.buffer
         )
     }
 }
@@ -35,11 +34,7 @@ impl<'rj> RJiter<'rj> {
         let buffer = Buffer::new(reader, buf_alias);
         let jiter = Jiter::new(&buf[..buffer.n_bytes]);
 
-        RJiter {
-            jiter,
-            pos_before_call_jiter: 0,
-            buffer,
-        }
+        RJiter { jiter, buffer }
     }
 
     fn create_new_jiter(&mut self) {
@@ -623,7 +618,7 @@ impl<'rj> RJiter<'rj> {
     //
 
     /// Skip the token if found, otherwise return an error.
-    /// RJiter should be positioned at the beginning of the potential token using `peek` or `finish`
+    /// `RJiter` should be positioned at the beginning of the potential token using `peek()` or `finish()`
     ///
     /// # Errors
     /// `std::io::Error` or `RJiterError(ExpectedSomeIdent)`
