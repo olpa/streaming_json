@@ -1,9 +1,8 @@
 # RJiter: Streaming JSON parser for Rust
 
-RJiter is a wrapper for [jiter](https://github.com/pydantic/jiter) that allows to process a big JSON having a small buffer. "R" stands for "Reader", which is used to fill the buffer.
+RJiter is a wrapper for [jiter](https://crates.io/crates/jiter) that allows to process a big JSON having a small buffer. "R" stands for "Reader", which fills the buffer on demand.
 
-Documentation: Work in progress.
+API documentation:
 
-For usage, see [tests](https://github.com/olpa/streaming_json/tree/master/rjiter/tests).
-
-RJiter has the same API as Jiter, plus methods to pass through long strings and bytes.
+- [RJiter](https://docs.rs/rjiter/latest/rjiter/). For most functions`, the documentation redirects to `Jiter`
+- [Jiter](https://docs.rs/jiter/latest/jiter/)
