@@ -263,10 +263,7 @@ fn regression_write_long_bs_in_first_position() {
     let mut writer = Vec::new();
     let wb = rjiter.write_long_str(&mut writer);
     wb.unwrap();
-    assert_eq!(
-        writer,
-        "how can I help you?".as_bytes()
-    );
+    assert_eq!(writer, "how can I help you?".as_bytes());
 }
 
 //

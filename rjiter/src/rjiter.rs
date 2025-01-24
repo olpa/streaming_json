@@ -480,8 +480,21 @@ impl<'rj> RJiter<'rj> {
         F: Fn(&mut Jiter<'rj>) -> JiterResult<T>,
         T: std::fmt::Debug,
     {
+        // First, move the string to the beginning of the buffer
+        // Doing so avoids several corner cases
+        if self.jiter.current_index() > 0 {
+            self.buffer.shift_buffer(0, self.jiter.current_index());
+            self.create_new_jiter();
+        }
+
         loop {
-            let quote_pos = self.jiter.current_index();
+            println!(
+                "handle_long, loop begin, buffer: {:?}, jiter: {:?}",
+                self.buffer, self.jiter
+            ); // FIXME
+               // Handle simple cases:
+               // - The string is completed
+               // - The error is not recoverable
             let result = parser(&mut self.jiter);
             if let Ok(value) = result {
                 write_completed(value, self.current_index(), writer)?;
@@ -492,37 +505,52 @@ impl<'rj> RJiter<'rj> {
                 return Err(RJiterError::from_jiter_error(self.current_index(), err));
             }
 
-            let mut escaping_bs_pos: usize = self.buffer.n_bytes;
-            let mut i: usize = quote_pos + 1;
-            while i < self.buffer.n_bytes {
-                if self.buffer.buf[i] == b'\\' {
-                    escaping_bs_pos = i;
-                    i += 1;
+            // Current state: the string is not completed
+            // Find out a segment to write
+
+            let mut bs_pos: usize = self.buffer.buf.iter().position(|&b| b == b'\\');
+            let segment_end_pos = match bs_pos {
+                // No backslash: the segment is the whole buffer
+                // `-1`: To write a segment, the writer needs an extra byte to put the quote character
+                None => self.buffer.n_bytes - 1,
+                // Backslash is somewhere in the buffer
+                // The segment is the part of the buffer before the backslash
+                Some(bs_pos) if bs_pos > 1 => bs_pos,
+                // Backslash is the first byte of the buffer
+                // The segment is the escape sequence
+                Some(bs_pos) => {
+                    let buf_len = self.buffer.n_bytes;
+                    if buf_len < 3 { // [QUOTE, SLASH, CHAR, ....]
+                        bs_pos
+                    } else {
+                        let after_bs = self.buffer.buf[2];
+                        if after_bs != b'u' && after_bs != b'U' {
+                            bs_pos + 2
+                        } else {
+                            // [QUOTE, SLASH, u, HEXDEC, HEXDEC, HEXDEC, HEXDEC, ....]
+                            if buf_len < 7 {
+                                bs_pos
+                            } else {
+                                bs_pos + 6
+                            }
+                        }
+                    }
                 }
-                i += 1;
+            };
+
+            // Write the segment
+            if segment_end_pos > 1 {
+                write_segment(
+                    self.buffer.buf,
+                    quote_pos,
+                    segment_end_pos,
+                    self.current_index(),
+                    writer,
+                )?;
+                self.buffer.shift_buffer(1, segment_end_pos);
             }
 
-            if escaping_bs_pos > 1 {
-                // To write a segment, the writer needs an extra byte to put the quote character
-                let segment_end_pos = min(escaping_bs_pos, self.buffer.n_bytes - 1);
-
-                if segment_end_pos > quote_pos {
-                    write_segment(
-                        self.buffer.buf,
-                        quote_pos,
-                        segment_end_pos,
-                        self.current_index(),
-                        writer,
-                    )?;
-                    self.buffer.shift_buffer(1, segment_end_pos);
-                } else {
-                    // Corner case: the quote character is the last byte of the buffer
-                    self.buffer.shift_buffer(0, segment_end_pos);
-                }
-
-                self.buffer.buf[0] = b'"';
-            }
-
+            // Read more and repeat
             let n_new_bytes = self.buffer.read_more();
             if let Err(e) = n_new_bytes {
                 return Err(RJiterError::from_io_error(self.current_index(), e));
