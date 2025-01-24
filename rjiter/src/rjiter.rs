@@ -487,13 +487,9 @@ impl<'rj> RJiter<'rj> {
         }
 
         loop {
-            println!(
-                "handle_long, loop begin, buffer: {:?}, jiter: {:?}",
-                self.buffer, self.jiter
-            ); // FIXME
-               // Handle simple cases:
-               // - The string is completed
-               // - The error is not recoverable
+            // Handle simple cases:
+            // - The string is completed
+            // - The error is not recoverable
             let result = parser(&mut self.jiter);
             if let Ok(value) = result {
                 write_completed(value, self.current_index(), writer)?;
@@ -542,7 +538,6 @@ impl<'rj> RJiter<'rj> {
             };
 
             // Write the segment
-            println!("write_segment, segment_end_pos: {}, buffer: {:?}", segment_end_pos, self.buffer); // FIXME
             if segment_end_pos > 1 {
                 write_segment(
                     self.buffer.buf,
