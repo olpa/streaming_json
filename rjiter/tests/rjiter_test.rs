@@ -254,7 +254,7 @@ fn long_write_regression_quote_last_buffer_byte() {
 
 #[test]
 fn regression_write_long_bs_in_first_position() {
-    let input = format!("\"\\ how can I help you?\"");
+    let input = r#""\\ how can I help you?""#;
 
     let mut buffer = [0u8; 10];
     let mut reader = Cursor::new(input.as_bytes());
@@ -263,7 +263,7 @@ fn regression_write_long_bs_in_first_position() {
     let mut writer = Vec::new();
     let wb = rjiter.write_long_str(&mut writer);
     wb.unwrap();
-    assert_eq!(writer, "how can I help you?".as_bytes());
+    assert_eq!(writer, "\\ how can I help you?".as_bytes());
 }
 
 //

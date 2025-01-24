@@ -1,4 +1,3 @@
-use std::cmp::min;
 use std::io::Read;
 use std::io::Write;
 
@@ -508,11 +507,15 @@ impl<'rj> RJiter<'rj> {
             // Current state: the string is not completed
             // Find out a segment to write
 
-            let mut bs_pos: usize = self.buffer.buf.iter().position(|&b| b == b'\\');
+            let bs_pos = self.buffer.buf.iter().position(|&b| b == b'\\');
             let segment_end_pos = match bs_pos {
                 // No backslash: the segment is the whole buffer
                 // `-1`: To write a segment, the writer needs an extra byte to put the quote character
-                None => self.buffer.n_bytes - 1,
+                None => if self.buffer.n_bytes == 0 {
+                    0
+                } else {
+                    self.buffer.n_bytes - 1
+                },
                 // Backslash is somewhere in the buffer
                 // The segment is the part of the buffer before the backslash
                 Some(bs_pos) if bs_pos > 1 => bs_pos,
@@ -539,10 +542,11 @@ impl<'rj> RJiter<'rj> {
             };
 
             // Write the segment
+            println!("write_segment, segment_end_pos: {}, buffer: {:?}", segment_end_pos, self.buffer); // FIXME
             if segment_end_pos > 1 {
                 write_segment(
                     self.buffer.buf,
-                    quote_pos,
+                    0,
                     segment_end_pos,
                     self.current_index(),
                     writer,
