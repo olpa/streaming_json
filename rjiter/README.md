@@ -66,3 +66,12 @@ called `Result::unwrap()` on an `Err` value: Error { error_type: JsonError(EofWh
 ```
 
 The functions that return pointers to bytes, they point to inside the buffer. You should copy the bytes elsewere before calling RJiter again, otherwise RJiter may shift the buffer and the pointers will become invalid.
+
+## Pass-through long stings
+
+Strings can be longer than the buffer, therefore the default logic doesn't work for them. RJiter provides a workaround: The caller provides a writer and RJiter writes the string to it.
+
+- `write_long_bytes`: Copy bytes as is, without touching escapes. Useful for json-to-json conversion.
+- `write_long_str`: Unescape the string during copying. Useful for json-to-text conversion.
+
+
