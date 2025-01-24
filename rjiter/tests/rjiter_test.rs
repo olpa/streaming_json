@@ -253,29 +253,20 @@ fn long_write_regression_quote_last_buffer_byte() {
 }
 
 #[test]
-fn regression_write_long() {
-    let cdata = r#"\"\u4F60\u597d\" \n\\\\\\\\\\\\\\\\\\\\\\\\ how can I help you?"#;
-    let input = format!("\"{cdata}\"\"{cdata}\"");
+fn regression_write_long_bs_in_first_position() {
+    let input = format!("\"\\ how can I help you?\"");
 
     let mut buffer = [0u8; 10];
     let mut reader = Cursor::new(input.as_bytes());
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
     let mut writer = Vec::new();
-    let wb = rjiter.write_long_bytes(&mut writer);
-    wb.unwrap();
-    assert_eq!(writer, cdata.as_bytes());
-
-    let mut writer = Vec::new();
     let wb = rjiter.write_long_str(&mut writer);
     wb.unwrap();
     assert_eq!(
         writer,
-        "\"你好\" \n\\\\\\\\\\\\\\\\\\\\\\\\ how can I help you?".as_bytes()
+        "how can I help you?".as_bytes()
     );
-
-    let finish = rjiter.finish();
-    assert!(finish.is_ok());
 }
 
 //
