@@ -74,4 +74,37 @@ Strings can be longer than the buffer, therefore the default logic doesn't work 
 - `write_long_bytes`: Copy bytes as is, without touching escapes. Useful for json-to-json conversion.
 - `write_long_str`: Unescape the string during copying. Useful for json-to-text conversion.
 
+```rust
+use rjiter::RJiter;
+use std::io::Cursor;
 
+let cdata = r#"\"\u4F60\u597d\" \n\\\\\\\\\\\\\\\\\\\\\\\\ how can I help you today?"#;
+let input = format!("\"{cdata}\"\"{cdata}\"");
+
+let mut buffer = [0u8; 10];
+let mut reader = Cursor::new(input.as_bytes());
+let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+//
+// write_long_bytes
+//
+
+let mut writer = Vec::new();
+let wb = rjiter.write_long_bytes(&mut writer);
+wb.unwrap();
+assert_eq!(writer, cdata.as_bytes()); // <--- bytes are copied as is
+
+//
+// write_long_str
+//
+let mut writer = Vec::new();
+let wb = rjiter.write_long_str(&mut writer);
+wb.unwrap();
+assert_eq!( // <--- escapes are decoded
+    writer,
+    "\"你好\" \n\\\\\\\\\\\\\\\\\\\\\\\\ how can I help you today?".as_bytes()
+);
+
+let finish = rjiter.finish();
+assert!(finish.is_ok());
+```
