@@ -107,7 +107,7 @@ impl<'buf> std::fmt::Debug for Buffer<'buf> {
     }
 }
 
-pub struct ChangeFlag {
+pub(crate) struct ChangeFlag {
     n_shifted: usize,
     n_bytes: usize,
 }
