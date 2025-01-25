@@ -451,7 +451,12 @@ fn known_skip_token() {
 
 #[test]
 fn skip_tokens_example_for_readme() {
-    fn peek_skipping_sse(rjiter: &mut RJiter, tokens: &[&str]) -> RJiterResult<Peek> {
+    let json_data = r#"
+        event: ping
+        data: {"type": "ping"}
+    "#;
+
+    fn peek_skipping_tokens(rjiter: &mut RJiter, tokens: &[&str]) -> RJiterResult<Peek> {
         'outer: loop {
             let peek = rjiter.peek();
             for token in tokens {
@@ -464,14 +469,12 @@ fn skip_tokens_example_for_readme() {
         }
     }
 
-    let input = "event: ping\ndata: {\"type\": \"ping\"}";
-    let sse_tokens = vec!["event:", "ping", "data:"];
-
     let mut buffer = [0u8; 10];
-    let mut reader = Cursor::new(input.as_bytes());
+    let mut reader = Cursor::new(json_data.as_bytes());
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
-    let result = peek_skipping_sse(&mut rjiter, &sse_tokens);
+    let tokens = vec!["data:", "event:", "ping"];
+    let result = peek_skipping_tokens(&mut rjiter, &tokens);
     assert_eq!(result.unwrap(), Peek::Object);
 
     let key = rjiter.next_object();

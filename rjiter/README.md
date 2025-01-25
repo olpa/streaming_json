@@ -7,6 +7,7 @@ API documentation:
 - [RJiter](https://docs.rs/rjiter/latest/rjiter/). For most functions`, the documentation redirects to `Jiter`
 - [Jiter](https://docs.rs/jiter/latest/jiter/)
 
+
 ## RJiter Example
 
 The example repeats the one of Jiter. The only difference is how RJiter is constructed: To parse JSON, it uses the buffer of size 16 bytes.
@@ -67,6 +68,8 @@ called `Result::unwrap()` on an `Err` value: Error { error_type: JsonError(EofWh
 
 The functions that return pointers to bytes, they point to inside the buffer. You should copy the bytes elsewere before calling RJiter again, otherwise RJiter may shift the buffer and the pointers will become invalid.
 
+
+
 ## Pass-through long stings
 
 Strings can be longer than the buffer, therefore the default logic doesn't work for them. RJiter provides a workaround: The caller provides a writer and RJiter writes the string to it.
@@ -107,4 +110,43 @@ assert_eq!( // <--- escapes are decoded
 
 let finish = rjiter.finish();
 assert!(finish.is_ok());
+```
+
+
+## Skip tokens
+
+For the case when JSON fragments are mixed with known text, `RJiter` provides the function `known_skip_token`.
+
+```rust
+use rjiter::{Peek, RJiter, Result as RJiterResult};
+use std::io::Cursor;
+
+let json_data = r#"
+    event: ping
+    data: {"type": "ping"}
+"#;
+
+fn peek_skipping_tokens(rjiter: &mut RJiter, tokens: &[&str]) -> RJiterResult<Peek> {
+    'outer: loop {
+        let peek = rjiter.peek();
+        for token in tokens {
+            let found = rjiter.known_skip_token(token.as_bytes());
+            if found.is_ok() {
+                continue 'outer;
+            }
+        }
+        return peek;
+    }
+}
+
+let mut buffer = [0u8; 10];
+let mut reader = Cursor::new(json_data.as_bytes());
+let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+let tokens = vec!["data:", "event:", "ping"];
+let result = peek_skipping_tokens(&mut rjiter, &tokens);
+assert_eq!(result.unwrap(), Peek::Object);
+
+let key = rjiter.next_object();
+assert_eq!(key.unwrap(), Some("type"));
 ```
