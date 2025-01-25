@@ -479,13 +479,6 @@ impl<'rj> RJiter<'rj> {
         F: Fn(&mut Jiter<'rj>) -> JiterResult<T>,
         T: std::fmt::Debug,
     {
-        // First, move the string to the beginning of the buffer
-        // Doing so avoids several corner cases
-        if self.jiter.current_index() > 0 {
-            self.buffer.shift_buffer(0, self.jiter.current_index());
-            self.create_new_jiter();
-        }
-
         loop {
             // Handle simple cases:
             // - The string is completed
@@ -498,6 +491,13 @@ impl<'rj> RJiter<'rj> {
             let err = result.unwrap_err();
             if !can_retry_if_partial(&err) {
                 return Err(RJiterError::from_jiter_error(self.current_index(), err));
+            }
+
+            // Move the string to the beginning of the buffer to avoid corner cases.
+            // This code runs at most once, and only on the first loop iteration.
+            if self.jiter.current_index() > 0 {
+                self.buffer.shift_buffer(0, self.jiter.current_index());
+                self.create_new_jiter();
             }
 
             // Current state: the string is not completed
