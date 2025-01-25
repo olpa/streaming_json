@@ -252,6 +252,34 @@ fn long_write_regression_quote_last_buffer_byte() {
     assert_eq!(after_bar, Peek::True);
 }
 
+#[test]
+fn write_long_with_bs_in_first_position() {
+    let input = r#""\\ how can I help you?""#;
+
+    let mut buffer = [0u8; 10];
+    let mut reader = Cursor::new(input.as_bytes());
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    let mut writer = Vec::new();
+    let wb = rjiter.write_long_str(&mut writer);
+    wb.unwrap();
+    assert_eq!(writer, "\\ how can I help you?".as_bytes());
+}
+
+#[test]
+fn write_long_with_unicode_bs_in_first_position() {
+    let input = r#""\u4F60\u597d, how can I help you?""#;
+
+    let mut buffer = [0u8; 10];
+    let mut reader = Cursor::new(input.as_bytes());
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    let mut writer = Vec::new();
+    let wb = rjiter.write_long_str(&mut writer);
+    wb.unwrap();
+    assert_eq!(writer, "\u{4F60}\u{597d}, how can I help you?".as_bytes());
+}
+
 //
 // Next key
 //
