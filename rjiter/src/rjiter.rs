@@ -8,6 +8,7 @@ use jiter::{
     Jiter, JiterResult, JsonErrorType, JsonValue, LinePosition, NumberAny, NumberInt, Peek,
 };
 
+/// Streaming JSON parser, a wrapper around `Jiter`.
 pub struct RJiter<'rj> {
     jiter: Jiter<'rj>,
     buffer: Buffer<'rj>,
@@ -24,6 +25,11 @@ impl<'rj> std::fmt::Debug for RJiter<'rj> {
 }
 
 impl<'rj> RJiter<'rj> {
+    /// Constructs a new `RJiter`.
+    ///
+    /// # Arguments
+    /// - `reader`: The json stream
+    /// - `buf`: The working buffer
     pub fn new(reader: &'rj mut dyn Read, buf: &'rj mut [u8]) -> Self {
         let buf_alias = unsafe {
             #[allow(mutable_transmutes)]
@@ -444,11 +450,13 @@ impl<'rj> RJiter<'rj> {
 
     //  ------------------------------------------------------------
 
+    /// Get the current index of the parser.
     #[must_use]
     pub fn current_index(&self) -> usize {
         self.jiter.current_index() + self.buffer.n_shifted_out
     }
 
+    /// Get the current [LinePosition] of the parser.
     #[must_use]
     pub fn error_position(&self, index: usize) -> LinePosition {
         let index = index - self.buffer.n_shifted_out;
