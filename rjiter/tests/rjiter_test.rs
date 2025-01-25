@@ -454,12 +454,10 @@ fn skip_tokens_example_for_readme() {
     fn peek_skipping_sse(rjiter: &mut RJiter, tokens: &[&str]) -> RJiterResult<Peek> {
         'outer: loop {
             let peek = rjiter.peek();
-            if peek.is_err() {
-                for token in tokens {
-                    let found = rjiter.known_skip_token(token.as_bytes());
-                    if found.is_ok() {
-                        continue 'outer;
-                    }
+            for token in tokens {
+                let found = rjiter.known_skip_token(token.as_bytes());
+                if found.is_ok() {
+                    continue 'outer;
                 }
             }
             return peek;
