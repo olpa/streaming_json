@@ -6,6 +6,7 @@ use jiter::LazyIndexMap;
 use rjiter::NumberInt;
 use rjiter::Peek;
 use rjiter::RJiter;
+use rjiter::Result as RJiterResult;
 mod one_byte_reader;
 use crate::one_byte_reader::OneByteReader;
 
@@ -446,6 +447,37 @@ fn known_skip_token() {
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), true);
     }
+}
+
+#[test]
+fn skip_tokens_example_for_readme() {
+    fn peek_skipping_sse(rjiter: &mut RJiter, tokens: &[&str]) -> RJiterResult<Peek> {
+        'outer: loop {
+            let peek = rjiter.peek();
+            if peek.is_err() {
+                for token in tokens {
+                    let found = rjiter.known_skip_token(token.as_bytes());
+                    if found.is_ok() {
+                        continue 'outer;
+                    }
+                }
+            }
+            return peek;
+        }
+    }
+
+    let input = "event: ping\ndata: {\"type\": \"ping\"}";
+    let sse_tokens = vec!["event:", "ping", "data:"];
+
+    let mut buffer = [0u8; 10];
+    let mut reader = Cursor::new(input.as_bytes());
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    let result = peek_skipping_sse(&mut rjiter, &sse_tokens);
+    assert_eq!(result.unwrap(), Peek::Object);
+
+    let key = rjiter.next_object();
+    assert_eq!(key.unwrap(), Some("type"));
 }
 
 //
