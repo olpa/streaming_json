@@ -584,11 +584,11 @@ impl<'rj> RJiter<'rj> {
         fn write_segment(
             bytes: &mut [u8],
             quote_pos: usize,
-            escaping_bs_pos: usize,
+            end_pos: usize,
             index: usize,
             writer: &mut dyn Write,
         ) -> RJiterResult<()> {
-            let n_written = writer.write_all(&bytes[quote_pos + 1..escaping_bs_pos]);
+            let n_written = writer.write_all(&bytes[quote_pos + 1..end_pos]);
             if let Err(e) = n_written {
                 return Err(RJiterError::from_io_error(index, e));
             }
@@ -619,17 +619,17 @@ impl<'rj> RJiter<'rj> {
         fn write_segment(
             bytes: &mut [u8],
             quote_pos: usize,
-            escaping_bs_pos: usize,
+            end_pos: usize,
             index: usize,
             writer: &mut dyn Write,
         ) -> RJiterResult<()> {
-            let orig_char = bytes[escaping_bs_pos];
-            bytes[escaping_bs_pos] = b'"';
-            let sub_jiter_buf = &bytes[quote_pos..=escaping_bs_pos];
+            let orig_char = bytes[end_pos];
+            bytes[end_pos] = b'"';
+            let sub_jiter_buf = &bytes[quote_pos..=end_pos];
             let sub_jiter_buf = unsafe { std::mem::transmute::<&[u8], &[u8]>(sub_jiter_buf) };
             let mut sub_jiter = Jiter::new(sub_jiter_buf);
             let sub_result = sub_jiter.known_str();
-            bytes[escaping_bs_pos] = orig_char;
+            bytes[end_pos] = orig_char;
 
             match sub_result {
                 Ok(string) => {
