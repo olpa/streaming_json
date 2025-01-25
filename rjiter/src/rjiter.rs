@@ -473,7 +473,7 @@ impl<'rj> RJiter<'rj> {
         parser: F,
         writer: &mut dyn Write,
         write_completed: impl Fn(T, usize, &mut dyn Write) -> RJiterResult<()>,
-        write_segment: impl Fn(&mut [u8], usize, usize, usize, &mut dyn Write) -> RJiterResult<()>,
+        write_segment: impl Fn(&mut [u8], usize, usize, &mut dyn Write) -> RJiterResult<()>,
     ) -> RJiterResult<()>
     where
         F: Fn(&mut Jiter<'rj>) -> JiterResult<T>,
@@ -544,7 +544,6 @@ impl<'rj> RJiter<'rj> {
             if segment_end_pos > 1 {
                 write_segment(
                     self.buffer.buf,
-                    0,
                     segment_end_pos,
                     self.current_index(),
                     writer,
@@ -583,12 +582,11 @@ impl<'rj> RJiter<'rj> {
         }
         fn write_segment(
             bytes: &mut [u8],
-            quote_pos: usize,
             end_pos: usize,
             index: usize,
             writer: &mut dyn Write,
         ) -> RJiterResult<()> {
-            let n_written = writer.write_all(&bytes[quote_pos + 1..end_pos]);
+            let n_written = writer.write_all(&bytes[1..end_pos]);
             if let Err(e) = n_written {
                 return Err(RJiterError::from_io_error(index, e));
             }
@@ -618,14 +616,13 @@ impl<'rj> RJiter<'rj> {
         }
         fn write_segment(
             bytes: &mut [u8],
-            quote_pos: usize,
             end_pos: usize,
             index: usize,
             writer: &mut dyn Write,
         ) -> RJiterResult<()> {
             let orig_char = bytes[end_pos];
             bytes[end_pos] = b'"';
-            let sub_jiter_buf = &bytes[quote_pos..=end_pos];
+            let sub_jiter_buf = &bytes[..=end_pos];
             let sub_jiter_buf = unsafe { std::mem::transmute::<&[u8], &[u8]>(sub_jiter_buf) };
             let mut sub_jiter = Jiter::new(sub_jiter_buf);
             let sub_result = sub_jiter.known_str();
