@@ -1,4 +1,3 @@
-use std::cmp::min;
 use std::io::Read;
 use std::io::Write;
 
@@ -474,14 +473,16 @@ impl<'rj> RJiter<'rj> {
         parser: F,
         writer: &mut dyn Write,
         write_completed: impl Fn(T, usize, &mut dyn Write) -> RJiterResult<()>,
-        write_segment: impl Fn(&mut [u8], usize, usize, usize, &mut dyn Write) -> RJiterResult<()>,
+        write_segment: impl Fn(&mut [u8], usize, usize, &mut dyn Write) -> RJiterResult<()>,
     ) -> RJiterResult<()>
     where
         F: Fn(&mut Jiter<'rj>) -> JiterResult<T>,
         T: std::fmt::Debug,
     {
         loop {
-            let quote_pos = self.jiter.current_index();
+            // Handle simple cases:
+            // - The string is completed
+            // - The error is not recoverable
             let result = parser(&mut self.jiter);
             if let Ok(value) = result {
                 write_completed(value, self.current_index(), writer)?;
@@ -492,37 +493,65 @@ impl<'rj> RJiter<'rj> {
                 return Err(RJiterError::from_jiter_error(self.current_index(), err));
             }
 
-            let mut escaping_bs_pos: usize = self.buffer.n_bytes;
-            let mut i: usize = quote_pos + 1;
-            while i < self.buffer.n_bytes {
-                if self.buffer.buf[i] == b'\\' {
-                    escaping_bs_pos = i;
-                    i += 1;
-                }
-                i += 1;
+            // Move the string to the beginning of the buffer to avoid corner cases.
+            // This code runs at most once, and only on the first loop iteration.
+            if self.jiter.current_index() > 0 {
+                self.buffer.shift_buffer(0, self.jiter.current_index());
+                self.create_new_jiter();
             }
 
-            if escaping_bs_pos > 1 {
-                // To write a segment, the writer needs an extra byte to put the quote character
-                let segment_end_pos = min(escaping_bs_pos, self.buffer.n_bytes - 1);
+            // Current state: the string is not completed
+            // Find out a segment to write
 
-                if segment_end_pos > quote_pos {
-                    write_segment(
-                        self.buffer.buf,
-                        quote_pos,
-                        segment_end_pos,
-                        self.current_index(),
-                        writer,
-                    )?;
-                    self.buffer.shift_buffer(1, segment_end_pos);
-                } else {
-                    // Corner case: the quote character is the last byte of the buffer
-                    self.buffer.shift_buffer(0, segment_end_pos);
+            let bs_pos = self.buffer.buf.iter().position(|&b| b == b'\\');
+            let segment_end_pos = match bs_pos {
+                // No backslash: the segment is the whole buffer
+                // `-1`: To write a segment, the writer needs an extra byte to put the quote character
+                None => {
+                    if self.buffer.n_bytes == 0 {
+                        0
+                    } else {
+                        self.buffer.n_bytes - 1
+                    }
                 }
+                // Backslash is somewhere in the buffer
+                // The segment is the part of the buffer before the backslash
+                Some(bs_pos) if bs_pos > 1 => bs_pos,
+                // Backslash is the first byte of the buffer
+                // The segment is the escape sequence
+                Some(bs_pos) => {
+                    let buf_len = self.buffer.n_bytes;
+                    // [QUOTE, SLASH, CHAR, ....]
+                    if buf_len < 3 {
+                        bs_pos
+                    } else {
+                        let after_bs = self.buffer.buf[2];
+                        if after_bs != b'u' && after_bs != b'U' {
+                            bs_pos + 2
+                        } else {
+                            // [QUOTE, SLASH, u, HEXDEC, HEXDEC, HEXDEC, HEXDEC, ....]
+                            if buf_len < 7 {
+                                bs_pos
+                            } else {
+                                bs_pos + 6
+                            }
+                        }
+                    }
+                }
+            };
 
-                self.buffer.buf[0] = b'"';
+            // Write the segment
+            if segment_end_pos > 1 {
+                write_segment(
+                    self.buffer.buf,
+                    segment_end_pos,
+                    self.current_index(),
+                    writer,
+                )?;
+                self.buffer.shift_buffer(1, segment_end_pos);
             }
 
+            // Read more and repeat
             let n_new_bytes = self.buffer.read_more();
             if let Err(e) = n_new_bytes {
                 return Err(RJiterError::from_io_error(self.current_index(), e));
@@ -553,12 +582,11 @@ impl<'rj> RJiter<'rj> {
         }
         fn write_segment(
             bytes: &mut [u8],
-            quote_pos: usize,
-            escaping_bs_pos: usize,
+            end_pos: usize,
             index: usize,
             writer: &mut dyn Write,
         ) -> RJiterResult<()> {
-            let n_written = writer.write_all(&bytes[quote_pos + 1..escaping_bs_pos]);
+            let n_written = writer.write_all(&bytes[1..end_pos]);
             if let Err(e) = n_written {
                 return Err(RJiterError::from_io_error(index, e));
             }
@@ -588,18 +616,17 @@ impl<'rj> RJiter<'rj> {
         }
         fn write_segment(
             bytes: &mut [u8],
-            quote_pos: usize,
-            escaping_bs_pos: usize,
+            end_pos: usize,
             index: usize,
             writer: &mut dyn Write,
         ) -> RJiterResult<()> {
-            let orig_char = bytes[escaping_bs_pos];
-            bytes[escaping_bs_pos] = b'"';
-            let sub_jiter_buf = &bytes[quote_pos..=escaping_bs_pos];
+            let orig_char = bytes[end_pos];
+            bytes[end_pos] = b'"';
+            let sub_jiter_buf = &bytes[..=end_pos];
             let sub_jiter_buf = unsafe { std::mem::transmute::<&[u8], &[u8]>(sub_jiter_buf) };
             let mut sub_jiter = Jiter::new(sub_jiter_buf);
             let sub_result = sub_jiter.known_str();
-            bytes[escaping_bs_pos] = orig_char;
+            bytes[end_pos] = orig_char;
 
             match sub_result {
                 Ok(string) => {
