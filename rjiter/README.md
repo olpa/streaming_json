@@ -150,3 +150,14 @@ assert_eq!(result.unwrap(), Peek::Object);
 let key = rjiter.next_object();
 assert_eq!(key.unwrap(), Some("type"));
 ```
+
+
+# Colophon
+
+License: MIT
+
+Author: Oleg Parashchenko, olpa@ <https://uucode.com/>
+
+Contact: per email or [Ailets Discord](https://discord.gg/HEBE3gv2)
+
+`RJiter` is a part of [ailets.org](https://ailets.org) project.
