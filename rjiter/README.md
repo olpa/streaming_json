@@ -1,6 +1,6 @@
 # `RJiter`: Streaming JSON parser for Rust
 
-`RJiter` is a wrapper for [jiter](https://crates.io/crates/jiter) that allows to process a big JSON having a small buffer. "R" stands for "Reader", which fills the buffer on demand.
+`RJiter` allows processing of large JSON files using a small buffer. It is a wrapper for [Jiter](https://crates.io/crates/jiter) and "R" stands for "Reader", which fills the buffer on demand.
 
 API documentation:
 
@@ -57,21 +57,20 @@ rjiter.finish().unwrap();
 
 First, `RJiter` calls `Jiter`. If the result is ok, `RJiter` returns it. Otherwise, the logic is as follows:
 
-- Skip spaces
-- Shift the buffer
-- Read, try again, read, try again, and so on till the success or till the error can't be fixed by reading more data
+1. Skip spaces
+2. Shift the buffer
+3. Read, try again, read, try again, and so on until success or until the error can't be fixed by reading more data
 
-The buffer should be large enough to contain each complete JSON element. In the example above, if the buffer size were 12 bytes, the parsing would fail on the telefone numbers:
+The buffer should be large enough to contain each complete JSON element. In the example above, if the buffer size were 12 bytes, the parsing would fail on the telephone numbers:
 
 ```text
 called `Result::unwrap()` on an `Err` value: Error { error_type: JsonError(EofWhileParsingString), index: 79 }
 ```
 
-The functions that return pointers to bytes, they point to inside the buffer. You should copy the bytes elsewere before calling `RJiter` again, otherwise `RJiter` may shift the buffer and the pointers will become invalid.
+Functions that return pointers to bytes point inside the buffer. You should copy the bytes elsewhere before calling `RJiter` again; otherwise, `RJiter` may shift the buffer and the pointers will become invalid.
 
 
-
-## Pass-through long stings
+## Pass-through long strings
 
 Strings can be longer than the buffer, therefore the default logic doesn't work for them. `RJiter` provides a workaround: The caller provides a writer and `RJiter` writes the string to it.
 
@@ -163,6 +162,6 @@ License: MIT
 
 Author: Oleg Parashchenko, olpa@ <https://uucode.com/>
 
-Contact: per email or [Ailets Discord](https://discord.gg/HEBE3gv2)
+Contact: via email or [Ailets Discord](https://discord.gg/HEBE3gv2)
 
-`RJiter` is a part of [ailets.org](https://ailets.org) project.
+`RJiter` is a part of the [ailets.org](https://ailets.org) project.
