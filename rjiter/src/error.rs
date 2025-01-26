@@ -1,5 +1,5 @@
-use crate::rjiter::RJiter;
 use crate::jiter::{JiterError, JiterErrorType, JsonErrorType, JsonType, LinePosition};
+use crate::rjiter::RJiter;
 
 pub type Result<T> = std::result::Result<T, Error>;
 

@@ -1,7 +1,7 @@
 use std::io::Cursor;
 use std::sync::Arc;
 
-use rjiter::jiter::{LazyIndexMap, JsonValue, NumberInt, Peek};
+use rjiter::jiter::{JsonValue, LazyIndexMap, NumberInt, Peek};
 use rjiter::RJiter;
 use rjiter::Result as RJiterResult;
 mod one_byte_reader;

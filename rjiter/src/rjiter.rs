@@ -456,7 +456,7 @@ impl<'rj> RJiter<'rj> {
         self.jiter.current_index() + self.buffer.n_shifted_out
     }
 
-    /// Get the current [LinePosition] of the parser.
+    /// Get the current `LinePosition` of the parser.
     #[must_use]
     pub fn error_position(&self, index: usize) -> LinePosition {
         let index = index - self.buffer.n_shifted_out;

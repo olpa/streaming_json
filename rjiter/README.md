@@ -1,6 +1,6 @@
-# RJiter: Streaming JSON parser for Rust
+# `RJiter`: Streaming JSON parser for Rust
 
-RJiter is a wrapper for [jiter](https://crates.io/crates/jiter) that allows to process a big JSON having a small buffer. "R" stands for "Reader", which fills the buffer on demand.
+`RJiter` is a wrapper for [jiter](https://crates.io/crates/jiter) that allows to process a big JSON having a small buffer. "R" stands for "Reader", which fills the buffer on demand.
 
 API documentation:
 
@@ -8,9 +8,9 @@ API documentation:
 - [Jiter](https://docs.rs/jiter/latest/jiter/)
 
 
-## RJiter Example
+## Example
 
-The example repeats the one of Jiter. The only difference is how RJiter is constructed: To parse JSON, it uses the buffer of size 16 bytes.
+The example repeats the one of `Jiter`. The only difference is how `RJiter` is constructed: To parse JSON, it uses the buffer of size 16 bytes.
 
 ```rust
 use rjiter::{RJiter, NumberInt, Peek};
@@ -54,7 +54,7 @@ rjiter.finish().unwrap();
 
 ## Logic and limitations
 
-First, RJiter calls Jiter. If the result is ok, RJiter returns it. Otherwise, the logic is as follows:
+First, `RJiter` calls `Jiter`. If the result is ok, `RJiter` returns it. Otherwise, the logic is as follows:
 
 - Skip spaces
 - Shift the buffer
@@ -66,13 +66,13 @@ The buffer should be large enough to contain each complete JSON element. In the 
 called `Result::unwrap()` on an `Err` value: Error { error_type: JsonError(EofWhileParsingString), index: 79 }
 ```
 
-The functions that return pointers to bytes, they point to inside the buffer. You should copy the bytes elsewere before calling RJiter again, otherwise RJiter may shift the buffer and the pointers will become invalid.
+The functions that return pointers to bytes, they point to inside the buffer. You should copy the bytes elsewere before calling `RJiter` again, otherwise `RJiter` may shift the buffer and the pointers will become invalid.
 
 
 
 ## Pass-through long stings
 
-Strings can be longer than the buffer, therefore the default logic doesn't work for them. RJiter provides a workaround: The caller provides a writer and RJiter writes the string to it.
+Strings can be longer than the buffer, therefore the default logic doesn't work for them. `RJiter` provides a workaround: The caller provides a writer and `RJiter` writes the string to it.
 
 - `write_long_bytes`: Copy bytes as is, without touching escapes. Useful for json-to-json conversion.
 - `write_long_str`: Unescape the string during copying. Useful for json-to-text conversion.
