@@ -1,5 +1,5 @@
 use rjiter::buffer::Buffer;
-use rjiter::LinePosition;
+use rjiter::jiter::LinePosition;
 use std::io::Cursor;
 
 #[test]

@@ -1,11 +1,9 @@
 use std::io::Cursor;
 use std::sync::Arc;
 
-use jiter::JsonValue;
-use jiter::LazyIndexMap;
-use rjiter::NumberInt;
-use rjiter::Peek;
+use rjiter::jiter::{JsonValue, LazyIndexMap, NumberInt, Peek};
 use rjiter::RJiter;
+use rjiter::Result as RJiterResult;
 mod one_byte_reader;
 use crate::one_byte_reader::OneByteReader;
 
@@ -75,7 +73,7 @@ fn jiter_doc_example() {
         ]
     }"#;
     let mut buffer = [0u8; 16];
-    let mut reader = OneByteReader::new(json_data.bytes());
+    let mut reader = Cursor::new(json_data.as_bytes());
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
     assert_eq!(rjiter.next_object().unwrap(), Some("name"));
@@ -446,6 +444,38 @@ fn known_skip_token() {
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), true);
     }
+}
+
+#[test]
+fn skip_tokens_example_for_readme() {
+    let json_data = r#"
+        event: ping
+        data: {"type": "ping"}
+    "#;
+
+    fn peek_skipping_tokens(rjiter: &mut RJiter, tokens: &[&str]) -> RJiterResult<Peek> {
+        'outer: loop {
+            let peek = rjiter.peek();
+            for token in tokens {
+                let found = rjiter.known_skip_token(token.as_bytes());
+                if found.is_ok() {
+                    continue 'outer;
+                }
+            }
+            return peek;
+        }
+    }
+
+    let mut buffer = [0u8; 10];
+    let mut reader = Cursor::new(json_data.as_bytes());
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    let tokens = vec!["data:", "event:", "ping"];
+    let result = peek_skipping_tokens(&mut rjiter, &tokens);
+    assert_eq!(result.unwrap(), Peek::Object);
+
+    let key = rjiter.next_object();
+    assert_eq!(key.unwrap(), Some("type"));
 }
 
 //

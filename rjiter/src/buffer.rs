@@ -1,8 +1,10 @@
 use std::cmp::min;
 use std::io::Read;
 
-use crate::LinePosition;
+use crate::jiter::LinePosition;
 
+/// A buffer for reading JSON data.
+/// Is a private struct, the "pub" is only for testing.
 pub struct Buffer<'buf> {
     reader: &'buf mut dyn Read,
     pub buf: &'buf mut [u8],
@@ -36,6 +38,12 @@ impl<'buf> Buffer<'buf> {
         Ok(n_new_bytes)
     }
 
+    /// Shift the buffer to the left, and update the index and line-column position.
+    ///
+    /// # Arguments
+    ///
+    /// * `to_pos`: The position to shift to. Usually is 0 or is 1 for strings.
+    /// * `from_pos`: The position to shift from. The case of outside the buffer is handled.
     pub fn shift_buffer(&mut self, to_pos: usize, from_pos: usize) {
         let safe_from_pos = min(from_pos, self.n_bytes);
         if to_pos < safe_from_pos {
@@ -107,7 +115,9 @@ impl<'buf> std::fmt::Debug for Buffer<'buf> {
     }
 }
 
-pub struct ChangeFlag {
+/// A helper struct to check if the buffer has changed and therefore `Jiter` needs to be recreated.
+/// Is a private struct, the "pub" is only for testing.
+pub(crate) struct ChangeFlag {
     n_shifted: usize,
     n_bytes: usize,
 }

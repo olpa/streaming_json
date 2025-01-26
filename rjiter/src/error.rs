@@ -1,8 +1,9 @@
+use crate::jiter::{JiterError, JiterErrorType, JsonErrorType, JsonType, LinePosition};
 use crate::rjiter::RJiter;
-use jiter::{JiterError, JiterErrorType, JsonErrorType, JsonType, LinePosition};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// Like `Jiter::JiterErrorType`, but also with `IoError`
 #[derive(Debug)]
 #[allow(clippy::module_name_repetitions)]
 pub enum ErrorType {
@@ -26,6 +27,7 @@ impl std::fmt::Display for ErrorType {
     }
 }
 
+/// An error from the `RJiter` iterator.
 #[derive(Debug)]
 pub struct Error {
     pub error_type: ErrorType,
@@ -65,11 +67,13 @@ impl Error {
         }
     }
 
+    /// Get the position of the error in the stream.
     #[must_use]
     pub fn get_position(&self, rjiter: &RJiter) -> LinePosition {
         rjiter.error_position(self.index)
     }
 
+    /// Get the description of the error, with the position in the stream.
     #[must_use]
     pub fn description(&self, rjiter: &RJiter) -> String {
         let position = self.get_position(rjiter);
