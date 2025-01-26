@@ -13,7 +13,8 @@ API documentation:
 The example repeats the one of `Jiter`. The only difference is how `RJiter` is constructed: To parse JSON, it uses the buffer of size 16 bytes.
 
 ```rust
-use rjiter::{RJiter, NumberInt, Peek};
+use rjiter::jiter::{NumberInt, Peek};
+use rjiter::RJiter;
 use std::io::Cursor;
 
 let json_data = r#"
@@ -118,7 +119,8 @@ assert!(finish.is_ok());
 For the case when JSON fragments are mixed with known text, `RJiter` provides the function `known_skip_token`.
 
 ```rust
-use rjiter::{Peek, RJiter, Result as RJiterResult};
+use rjiter::{RJiter, Result as RJiterResult};
+use rjiter::jiter::Peek;
 use std::io::Cursor;
 
 let json_data = r#"
