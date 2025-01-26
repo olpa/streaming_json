@@ -4,7 +4,7 @@ RJiter is a wrapper for [jiter](https://crates.io/crates/jiter) that allows to p
 
 API documentation:
 
-- [RJiter](https://docs.rs/rjiter/latest/rjiter/). For most functions`, the documentation redirects to `Jiter`
+- [RJiter](https://docs.rs/rjiter/latest/rjiter/). For most functions, the documentation redirects to `Jiter`
 - [Jiter](https://docs.rs/jiter/latest/jiter/)
 
 
@@ -62,7 +62,7 @@ First, RJiter calls Jiter. If the result is ok, RJiter returns it. Otherwise, th
 
 The buffer should be large enough to contain each complete JSON element. In the example above, if the buffer size were 12 bytes, the parsing would fail on the telefone numbers:
 
-```
+```text
 called `Result::unwrap()` on an `Err` value: Error { error_type: JsonError(EofWhileParsingString), index: 79 }
 ```
 
