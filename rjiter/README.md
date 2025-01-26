@@ -82,7 +82,7 @@ Strings can be longer than the buffer, therefore the default logic doesn't work 
 use rjiter::RJiter;
 use std::io::Cursor;
 
-let cdata = r#"\"\u4F60\u597d\" \n\\\\\\\\\\\\\\\\\\\\\\\\ how can I help you today?"#;
+let cdata = r#"\"\u4F60\u597d\",\n\\\\\\\\\\\\\\\\\\\\\\\\ how can I help you today?"#;
 let input = format!("\"{cdata}\"\"{cdata}\"");
 
 let mut buffer = [0u8; 10];
@@ -106,7 +106,8 @@ let wb = rjiter.write_long_str(&mut writer);
 wb.unwrap();
 assert_eq!( // <--- escapes are decoded
     writer,
-    "\"你好\" \n\\\\\\\\\\\\\\\\\\\\\\\\ how can I help you today?".as_bytes()
+    r#""你好",
+\\\\\\\\\\\\ how can I help you today?"#.as_bytes()
 );
 
 let finish = rjiter.finish();
@@ -145,10 +146,12 @@ let mut buffer = [0u8; 10];
 let mut reader = Cursor::new(json_data.as_bytes());
 let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
+// Skip non-json
 let tokens = vec!["data:", "event:", "ping"];
 let result = peek_skipping_tokens(&mut rjiter, &tokens);
 assert_eq!(result.unwrap(), Peek::Object);
 
+// Continue with json
 let key = rjiter.next_object();
 assert_eq!(key.unwrap(), Some("type"));
 ```
