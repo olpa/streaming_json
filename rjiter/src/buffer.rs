@@ -1,7 +1,7 @@
 use std::cmp::min;
 use std::io::Read;
 
-use crate::LinePosition;
+use crate::jiter::LinePosition;
 
 /// A buffer for reading JSON data.
 /// Is a private struct, the "pub" is only for testing.

@@ -4,7 +4,7 @@ use std::io::Write;
 use crate::buffer::Buffer;
 use crate::buffer::ChangeFlag;
 use crate::error::{can_retry_if_partial, Error as RJiterError, Result as RJiterResult};
-use jiter::{
+use crate::jiter::{
     Jiter, JiterResult, JsonErrorType, JsonValue, LinePosition, NumberAny, NumberInt, Peek,
 };
 

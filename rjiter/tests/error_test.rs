@@ -1,4 +1,4 @@
-use rjiter::LinePosition;
+use rjiter::jiter::LinePosition;
 use rjiter::RJiter;
 use std::io::Cursor;
 
