@@ -17,7 +17,7 @@ impl Name {
 }
 
 impl Matcher for Name {
-    fn matches(&self, name: &str, context: &[ContextFrame]) -> bool {
+    fn matches(&self, name: &str, _context: &[ContextFrame]) -> bool {
         self.name == name
     }
 }
