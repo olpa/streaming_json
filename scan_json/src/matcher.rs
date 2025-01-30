@@ -1,10 +1,11 @@
 use crate::scan_json::ContextFrame;
 
-pub trait Matcher {
+pub trait Matcher: std::fmt::Debug {
     fn matches(&self, name: &str, context: &[ContextFrame]) -> bool;
 }
 
 
+#[derive(Debug)]
 pub struct Name {
     name: String,
 }
@@ -22,6 +23,7 @@ impl Matcher for Name {
 }
 
 
+#[derive(Debug)]
 pub struct ParentAndName {
     parent: String,
     name: String,
