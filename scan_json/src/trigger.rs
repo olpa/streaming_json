@@ -1,6 +1,8 @@
 use crate::matcher::Matcher;
 use crate::scan_json::ActionResult;
 use std::cell::RefCell;
+use rjiter::RJiter;
+use crate::scan_json::ContextFrame;
 
 pub type TriggerAction<T> = Box<dyn Fn(&RefCell<RJiter>, &RefCell<T>) -> ActionResult>;
 
@@ -54,7 +56,7 @@ trait HasMatcher<A> {
 fn find_trigger_action<'a, T, A>(
     triggers: &'a [T],
     for_key: &String,
-    context: &[Context],
+    context: &[ContextFrame],
 ) -> Option<&'a A>
 where
     T: HasMatcher<A>,
@@ -85,18 +87,18 @@ impl<T> HasMatcher<TriggerEndAction<T>> for TriggerEnd<T> {
     }
 }
 
-fn find_action<'a, T>(
+pub(crate) fn find_action<'a, T>(
     triggers: &'a [Trigger<T>],
     for_key: &String,
-    context: &[Context],
+    context: &[ContextFrame],
 ) -> Option<&'a TriggerAction<T>> {
     find_trigger_action(triggers, for_key, context)
 }
 
-fn find_end_action<'a, T>(
+pub(crate) fn find_end_action<'a, T>(
     triggers: &'a [TriggerEnd<T>],
     for_key: &String,
-    context: &[Context],
+    context: &[ContextFrame],
 ) -> Option<&'a TriggerEndAction<T>> {
     find_trigger_action(triggers, for_key, context)
 }

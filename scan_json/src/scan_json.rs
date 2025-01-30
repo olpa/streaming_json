@@ -2,6 +2,7 @@ use rjiter::jiter::Peek;
 use rjiter::RJiter;
 use std::cell::RefCell;
 use std::io;
+use crate::trigger::{Trigger, TriggerEnd, find_action, find_end_action};
 
 #[derive(Debug, PartialEq)]
 pub enum ActionResult {
@@ -10,7 +11,7 @@ pub enum ActionResult {
 }
 
 #[derive(Debug)]
-struct Context {
+pub struct ContextFrame {
     current_key: String,
     is_in_object: bool,
     is_in_array: bool,
@@ -22,9 +23,9 @@ fn handle_object<T>(
     baton_cell: &RefCell<T>,
     triggers: &[Trigger<T>],
     triggers_end: &[TriggerEnd<T>],
-    mut cur_level: Context,
-    context: &mut Vec<Context>,
-) -> (ActionResult, Context) {
+    mut cur_level: ContextFrame,
+    context: &mut Vec<ContextFrame>,
+) -> (ActionResult, ContextFrame) {
     {
         let mut rjiter = rjiter_cell.borrow_mut();
         let keyr = if cur_level.is_object_begin {
@@ -56,9 +57,9 @@ fn handle_object<T>(
 
 fn handle_array(
     rjiter: &mut RJiter,
-    mut cur_level: Context,
-    context: &mut Vec<Context>,
-) -> (Option<Peek>, Context) {
+    mut cur_level: ContextFrame,
+    context: &mut Vec<ContextFrame>,
+) -> (Option<Peek>, ContextFrame) {
     let apickedr = if cur_level.is_object_begin {
         rjiter.known_array()
     } else {
@@ -82,8 +83,8 @@ pub fn scan_json<T>(
     rjiter_cell: &RefCell<RJiter>,
     baton_cell: &RefCell<T>,
 ) {
-    let mut context: Vec<Context> = Vec::new();
-    let mut cur_level = Context {
+    let mut context: Vec<ContextFrame> = Vec::new();
+    let mut cur_level = ContextFrame {
         current_key: "#top".to_string(),
         is_object_begin: false,
         is_in_object: false,
@@ -144,7 +145,7 @@ pub fn scan_json<T>(
 
         if peeked == Peek::Array {
             context.push(cur_level);
-            cur_level = Context {
+            cur_level = ContextFrame {
                 current_key: "#array".to_string(),
                 is_in_array: true,
                 is_in_object: false,
@@ -155,7 +156,7 @@ pub fn scan_json<T>(
 
         if peeked == Peek::Object {
             context.push(cur_level);
-            cur_level = Context {
+            cur_level = ContextFrame {
                 current_key: "#object".to_string(),
                 is_in_object: true,
                 is_in_array: false,
