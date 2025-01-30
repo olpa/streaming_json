@@ -36,7 +36,7 @@ pub enum ActionResult {
 
 // ----
 
-type TriggerAction<T> = Box<dyn Fn(&RefCell<RJiter>, &RefCell<T>) -> ActionResult>;
+pub type TriggerAction<T> = Box<dyn Fn(&RefCell<RJiter>, &RefCell<T>) -> ActionResult>;
 
 pub struct Trigger<T> {
     pub matcher: Matcher,
@@ -56,7 +56,7 @@ impl<T> Trigger<T> {
     }
 }
 
-type TriggerEndAction<T> = Box<dyn Fn(&RefCell<T>)>;
+pub type TriggerEndAction<T> = Box<dyn Fn(&RefCell<T>)>;
 
 pub struct TriggerEnd<T> {
     pub matcher: Matcher,

@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 
-use gpt::scan_json::{scan_json, ActionResult, Matcher, Trigger, TriggerEnd};
+use scan_json::{scan_json, ActionResult, Matcher, Trigger, TriggerEnd};
 use rjiter::RJiter;
 
 #[test]
