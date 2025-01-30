@@ -6,32 +6,32 @@ use crate::scan_json::ContextFrame;
 
 pub type TriggerAction<T> = Box<dyn Fn(&RefCell<RJiter>, &RefCell<T>) -> ActionResult>;
 
-pub struct Trigger<T> {
-    pub matcher: Matcher,
-    pub action: TriggerAction<T>,
+pub struct Trigger<'a, 'b, T> {
+    pub matcher: &'a Matcher,
+    pub action: &'b TriggerAction<T>,
 }
 
-impl<T> std::fmt::Debug for Trigger<T> {
+impl<'a, 'b, T> std::fmt::Debug for Trigger<'a, 'b, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Trigger {{ matcher: {:?}, action: <fn> }}", self.matcher)
     }
 }
 
-impl<T> Trigger<T> {
+impl<'a, 'b, T> Trigger<'a, 'b, T> {
     #[must_use]
-    pub fn new(matcher: Matcher, action: TriggerAction<T>) -> Self {
+    pub fn new(matcher: &'a Matcher, action: &'b TriggerAction<T>) -> Self {
         Self { matcher, action }
     }
 }
 
 pub type TriggerEndAction<T> = Box<dyn Fn(&RefCell<T>)>;
 
-pub struct TriggerEnd<T> {
-    pub matcher: Matcher,
-    pub action: TriggerEndAction<T>,
+pub struct TriggerEnd<'a, 'b, T> {
+    pub matcher: &'a Matcher,
+    pub action: &'b TriggerEndAction<T>,
 }
 
-impl<T> std::fmt::Debug for TriggerEnd<T> {
+impl<'a, 'b, T> std::fmt::Debug for TriggerEnd<'a, 'b, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -41,9 +41,9 @@ impl<T> std::fmt::Debug for TriggerEnd<T> {
     }
 }
 
-impl<T> TriggerEnd<T> {
+impl<'a, 'b, T> TriggerEnd<'a, 'b, T> {
     #[must_use]
-    pub fn new(matcher: Matcher, action: TriggerEndAction<T>) -> Self {
+    pub fn new(matcher: &'a Matcher, action: &'b TriggerEndAction<T>) -> Self {
         Self { matcher, action }
     }
 }
@@ -67,7 +67,7 @@ where
         .map(HasMatcher::get_action)
 }
 
-impl<T> HasMatcher<TriggerAction<T>> for Trigger<T> {
+impl<'a, 'b, T> HasMatcher<TriggerAction<T>> for Trigger<'a, 'b, T> {
     fn get_action(&self) -> &TriggerAction<T> {
         &self.action
     }
@@ -77,7 +77,7 @@ impl<T> HasMatcher<TriggerAction<T>> for Trigger<T> {
     }
 }
 
-impl<T> HasMatcher<TriggerEndAction<T>> for TriggerEnd<T> {
+impl<'a, 'b, T> HasMatcher<TriggerEndAction<T>> for TriggerEnd<'a, 'b, T> {
     fn get_action(&self) -> &TriggerEndAction<T> {
         &self.action
     }
@@ -87,16 +87,16 @@ impl<T> HasMatcher<TriggerEndAction<T>> for TriggerEnd<T> {
     }
 }
 
-pub(crate) fn find_action<'a, T>(
-    triggers: &'a [Trigger<T>],
+pub(crate) fn find_action<'a, 'b, 'c, T>(
+    triggers: &'c [Trigger<'a, 'b, T>],
     for_key: &String,
     context: &[ContextFrame],
 ) -> Option<&'a TriggerAction<T>> {
     find_trigger_action(triggers, for_key, context)
 }
 
-pub(crate) fn find_end_action<'a, T>(
-    triggers: &'a [TriggerEnd<T>],
+pub(crate) fn find_end_action<'a, 'b, 'c, T>(
+    triggers: &'c [TriggerEnd<'a, 'b, T>],
     for_key: &String,
     context: &[ContextFrame],
 ) -> Option<&'a TriggerEndAction<T>> {
