@@ -12,7 +12,7 @@ pub enum ActionResult {
 
 #[derive(Debug)]
 pub struct ContextFrame {
-    current_key: String,
+    pub(crate) current_key: String,
     is_in_object: bool,
     is_in_array: bool,
     is_object_begin: bool,

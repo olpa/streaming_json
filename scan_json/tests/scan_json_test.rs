@@ -1,8 +1,9 @@
 use std::cell::RefCell;
 
 use rjiter::RJiter;
-use scan_json::{scan_json, ActionResult, Trigger, TriggerEnd};
-use src::matcher::{Name};
+use ::scan_json::matcher::Name;
+use scan_json::{scan_json, ActionResult};
+use ::scan_json::trigger::{Trigger, TriggerEnd};
 
 #[test]
 fn test_scan_json_empty_input() {
@@ -139,7 +140,7 @@ fn test_call_begin_dont_touch_value() {
         ActionResult::Ok
     });
     let triggers = vec![Trigger {
-        matcher: Name::new("foo".to_string()),
+        matcher: &Name::new("foo".to_string()),
         action,
     }];
 
@@ -164,7 +165,7 @@ fn test_call_begin_consume_value() {
         ActionResult::OkValueIsConsumed
     });
     let triggers = vec![Trigger {
-        matcher: Name::new("foo".to_string()),
+        matcher: &Name::new("foo".to_string()),
         action,
     }];
 
@@ -182,7 +183,7 @@ fn test_call_end() {
     let state = RefCell::new(false);
     let action = Box::new(|state: &RefCell<bool>| *state.borrow_mut() = true);
     let triggers_end = vec![TriggerEnd {
-        matcher: Name::new("foo".to_string()),
+        matcher: &Name::new("foo".to_string()),
         action,
     }];
 

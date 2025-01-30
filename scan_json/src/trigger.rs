@@ -7,7 +7,7 @@ use crate::scan_json::ContextFrame;
 pub type TriggerAction<T> = Box<dyn Fn(&RefCell<RJiter>, &RefCell<T>) -> ActionResult>;
 
 pub struct Trigger<'m, 'a, T> {
-    pub matcher: &'m Matcher,
+    pub matcher: &'m dyn Matcher,
     pub action: &'a TriggerAction<T>,
 }
 
@@ -19,7 +19,7 @@ impl<'m, 'a, T> std::fmt::Debug for Trigger<'m, 'a, T> {
 
 impl<'m, 'a, T> Trigger<'m, 'a, T> {
     #[must_use]
-    pub fn new(matcher: &'m Matcher, action: &'a TriggerAction<T>) -> Self {
+    pub fn new(matcher: &'m dyn Matcher, action: &'a TriggerAction<T>) -> Self {
         Self { matcher, action }
     }
 }
@@ -27,7 +27,7 @@ impl<'m, 'a, T> Trigger<'m, 'a, T> {
 pub type TriggerEndAction<T> = Box<dyn Fn(&RefCell<T>)>;
 
 pub struct TriggerEnd<'m, 'a, T> {
-    pub matcher: &'m Matcher,
+    pub matcher: &'m dyn Matcher,
     pub action: &'a TriggerEndAction<T>,
 }
 
@@ -43,13 +43,13 @@ impl<'m, 'a, T> std::fmt::Debug for TriggerEnd<'m, 'a, T> {
 
 impl<'m, 'a, T> TriggerEnd<'m, 'a, T> {
     #[must_use]
-    pub fn new(matcher: &'m Matcher, action: &'a TriggerEndAction<T>) -> Self {
+    pub fn new(matcher: &'m dyn Matcher, action: &'a TriggerEndAction<T>) -> Self {
         Self { matcher, action }
     }
 }
 
 trait HasMatcher<'m, 'a, A> {
-    fn get_matcher(&self) -> &'m Matcher;
+    fn get_matcher(&self) -> &'m dyn Matcher;
     fn get_action(&self) -> &'a A;
 }
 
@@ -68,7 +68,7 @@ where
 }
 
 impl<'m, 'a, T> HasMatcher<'m, 'a, TriggerAction<T>> for Trigger<'m, 'a, T> {
-    fn get_matcher(&self) -> &'m Matcher {
+    fn get_matcher(&self) -> &'m dyn Matcher {
         self.matcher
     }
 
@@ -78,7 +78,7 @@ impl<'m, 'a, T> HasMatcher<'m, 'a, TriggerAction<T>> for Trigger<'m, 'a, T> {
 }
 
 impl<'m, 'a, T> HasMatcher<'m, 'a, TriggerEndAction<T>> for TriggerEnd<'m, 'a, T> {
-    fn get_matcher(&self) -> &'m Matcher {
+    fn get_matcher(&self) -> &'m dyn Matcher {
         self.matcher
     }
 
