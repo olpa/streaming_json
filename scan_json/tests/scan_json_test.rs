@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 
-use scan_json::{scan_json, ActionResult, Matcher, Trigger, TriggerEnd};
 use rjiter::RJiter;
+use scan_json::{scan_json, ActionResult, Matcher, Trigger, TriggerEnd};
 
 #[test]
 fn test_scan_json_empty_input() {
