@@ -4,34 +4,35 @@ use crate::scan_json::ContextFrame;
 use rjiter::RJiter;
 use std::cell::RefCell;
 
-pub type TriggerAction<T> = Box<dyn Fn(&RefCell<RJiter>, &RefCell<T>) -> ActionResult>;
+pub type BoxedMatcher = Box<dyn Matcher>;
+pub type BoxedAction<T> = Box<dyn Fn(&RefCell<RJiter>, &RefCell<T>) -> ActionResult>;
 
-pub struct Trigger<'m, 'a, T> {
-    pub matcher: &'m dyn Matcher,
-    pub action: &'a TriggerAction<T>,
+pub struct Trigger<T> {
+    pub matcher: BoxedMatcher,
+    pub action: BoxedAction<T>,
 }
 
-impl<'m, 'a, T> std::fmt::Debug for Trigger<'m, 'a, T> {
+impl<T> std::fmt::Debug for Trigger<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Trigger {{ matcher: {:?}, action: <fn> }}", self.matcher)
     }
 }
 
-impl<'m, 'a, T> Trigger<'m, 'a, T> {
+impl<T> Trigger<T> {
     #[must_use]
-    pub fn new(matcher: &'m dyn Matcher, action: &'a TriggerAction<T>) -> Self {
+    pub fn new(matcher: BoxedMatcher, action: BoxedAction<T>) -> Self {
         Self { matcher, action }
     }
 }
 
-pub type TriggerEndAction<T> = Box<dyn Fn(&RefCell<T>)>;
+pub type BoxedEndAction<T> = Box<dyn Fn(&RefCell<T>)>;
 
-pub struct TriggerEnd<'m, 'a, T> {
-    pub matcher: &'m dyn Matcher,
-    pub action: &'a TriggerEndAction<T>,
+pub struct TriggerEnd<T> {
+    pub matcher: BoxedMatcher,
+    pub action: BoxedEndAction<T>,
 }
 
-impl<'m, 'a, T> std::fmt::Debug for TriggerEnd<'m, 'a, T> {
+impl<T> std::fmt::Debug for TriggerEnd<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -41,25 +42,25 @@ impl<'m, 'a, T> std::fmt::Debug for TriggerEnd<'m, 'a, T> {
     }
 }
 
-impl<'m, 'a, T> TriggerEnd<'m, 'a, T> {
+impl<T> TriggerEnd<T> {
     #[must_use]
-    pub fn new(matcher: &'m dyn Matcher, action: &'a TriggerEndAction<T>) -> Self {
+    pub fn new(matcher: BoxedMatcher, action: BoxedEndAction<T>) -> Self {
         Self { matcher, action }
     }
 }
 
-trait HasMatcher<'m, 'a, A> {
-    fn get_matcher(&self) -> &'m dyn Matcher;
-    fn get_action(&self) -> &'a A;
+trait HasMatcher<A> {
+    fn get_matcher(&self) -> &BoxedMatcher;
+    fn get_action(&self) -> &A;
 }
 
-fn find_trigger_action<'a, 't, 'm, T, A>(
-    triggers: &'t [T],
-    for_key: &String,
+fn find_trigger_action<'a, T, A>(
+    triggers: &'a [T],
+    for_key: &str,
     context: &[ContextFrame],
 ) -> Option<&'a A>
 where
-    T: HasMatcher<'m, 'a, A>,
+    T: HasMatcher<A>,
 {
     triggers
         .iter()
@@ -67,38 +68,38 @@ where
         .map(HasMatcher::get_action)
 }
 
-impl<'m, 'a, T> HasMatcher<'m, 'a, TriggerAction<T>> for Trigger<'m, 'a, T> {
-    fn get_matcher(&self) -> &'m dyn Matcher {
-        self.matcher
+impl<T> HasMatcher<BoxedAction<T>> for Trigger<T> {
+    fn get_matcher(&self) -> &BoxedMatcher {
+        &self.matcher
     }
 
-    fn get_action(&self) -> &'a TriggerAction<T> {
-        self.action
-    }
-}
-
-impl<'m, 'a, T> HasMatcher<'m, 'a, TriggerEndAction<T>> for TriggerEnd<'m, 'a, T> {
-    fn get_matcher(&self) -> &'m dyn Matcher {
-        self.matcher
-    }
-
-    fn get_action(&self) -> &'a TriggerEndAction<T> {
-        self.action
+    fn get_action(&self) -> &BoxedAction<T> {
+        &self.action
     }
 }
 
-pub(crate) fn find_action<'m, 'a, 't, T>(
-    triggers: &'t [Trigger<'m, 'a, T>],
-    for_key: &String,
+impl<T> HasMatcher<BoxedEndAction<T>> for TriggerEnd<T> {
+    fn get_matcher(&self) -> &BoxedMatcher {
+        &self.matcher
+    }
+
+    fn get_action(&self) -> &BoxedEndAction<T> {
+        &self.action
+    }
+}
+
+pub(crate) fn find_action<'a, T>(
+    triggers: &'a [Trigger<T>],
+    for_key: &str,
     context: &[ContextFrame],
-) -> Option<&'a TriggerAction<T>> {
+) -> Option<&'a BoxedAction<T>> {
     find_trigger_action(triggers, for_key, context)
 }
 
-pub(crate) fn find_end_action<'m, 'a, 't, T>(
-    triggers: &'t [TriggerEnd<'m, 'a, T>],
-    for_key: &String,
+pub(crate) fn find_end_action<'a, T>(
+    triggers: &'a [TriggerEnd<T>],
+    for_key: &str,
     context: &[ContextFrame],
-) -> Option<&'a TriggerEndAction<T>> {
+) -> Option<&'a BoxedEndAction<T>> {
     find_trigger_action(triggers, for_key, context)
 }

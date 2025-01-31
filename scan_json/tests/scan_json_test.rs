@@ -135,15 +135,12 @@ fn test_call_begin_dont_touch_value() {
     let rjiter = RJiter::new(&mut reader, &mut buffer);
 
     let state = RefCell::new(false);
-    let matcher = Name::new("foo".to_string());
+    let matcher = Box::new(Name::new("foo".to_string()));
     let action: TriggerAction<bool> = Box::new(|_: &RefCell<RJiter>, state: &RefCell<bool>| {
         *state.borrow_mut() = true;
         ActionResult::Ok
     });
-    let triggers = vec![Trigger {
-        matcher: &matcher,
-        action: &action,
-    }];
+    let triggers = vec![Trigger { matcher, action }];
 
     scan_json(&triggers, &vec![], &vec![], &RefCell::new(rjiter), &state);
     assert!(*state.borrow(), "Trigger should have been called for 'foo'");
@@ -157,7 +154,7 @@ fn test_call_begin_consume_value() {
     let rjiter = RJiter::new(&mut reader, &mut buffer);
 
     let state = RefCell::new(false);
-    let matcher = Name::new("foo".to_string());
+    let matcher = Box::new(Name::new("foo".to_string()));
     let action: TriggerAction<bool> =
         Box::new(|rjiter_cell: &RefCell<RJiter>, state: &RefCell<bool>| {
             let mut rjiter = rjiter_cell.borrow_mut();
@@ -167,10 +164,7 @@ fn test_call_begin_consume_value() {
             *state.borrow_mut() = true;
             ActionResult::OkValueIsConsumed
         });
-    let triggers = vec![Trigger {
-        matcher: &matcher,
-        action: &action,
-    }];
+    let triggers = vec![Trigger { matcher, action }];
 
     scan_json(&triggers, &vec![], &vec![], &RefCell::new(rjiter), &state);
     assert!(*state.borrow(), "Trigger should have been called for 'foo'");
@@ -184,13 +178,10 @@ fn test_call_end() {
     let rjiter = RJiter::new(&mut reader, &mut buffer);
 
     let state = RefCell::new(false);
-    let matcher = Name::new("foo".to_string());
+    let matcher = Box::new(Name::new("foo".to_string()));
     let action: TriggerEndAction<bool> =
         Box::new(|state: &RefCell<bool>| *state.borrow_mut() = true);
-    let triggers_end = vec![TriggerEnd {
-        matcher: &matcher,
-        action: &action,
-    }];
+    let triggers_end = vec![TriggerEnd { matcher, action }];
 
     scan_json(
         &vec![],

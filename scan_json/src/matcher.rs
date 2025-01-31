@@ -10,6 +10,7 @@ pub struct Name {
 }
 
 impl Name {
+    #[must_use]
     pub fn new(name: String) -> Self {
         Self { name }
     }
@@ -28,6 +29,7 @@ pub struct ParentAndName {
 }
 
 impl ParentAndName {
+    #[must_use]
     pub fn new(parent: String, name: String) -> Self {
         Self { parent, name }
     }
@@ -35,7 +37,7 @@ impl ParentAndName {
 
 impl Matcher for ParentAndName {
     fn matches(&self, name: &str, context: &[ContextFrame]) -> bool {
-        if context.len() == 0 {
+        if context.is_empty() {
             return false;
         }
         self.name == name && context[0].current_key == self.parent
