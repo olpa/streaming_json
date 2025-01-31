@@ -1,8 +1,8 @@
 use crate::matcher::Matcher;
 use crate::scan_json::ActionResult;
-use std::cell::RefCell;
-use rjiter::RJiter;
 use crate::scan_json::ContextFrame;
+use rjiter::RJiter;
+use std::cell::RefCell;
 
 pub type TriggerAction<T> = Box<dyn Fn(&RefCell<RJiter>, &RefCell<T>) -> ActionResult>;
 

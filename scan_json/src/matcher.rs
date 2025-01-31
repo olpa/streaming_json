@@ -4,7 +4,6 @@ pub trait Matcher: std::fmt::Debug {
     fn matches(&self, name: &str, context: &[ContextFrame]) -> bool;
 }
 
-
 #[derive(Debug)]
 pub struct Name {
     name: String,
@@ -21,7 +20,6 @@ impl Matcher for Name {
         self.name == name
     }
 }
-
 
 #[derive(Debug)]
 pub struct ParentAndName {

@@ -1,9 +1,9 @@
 use std::cell::RefCell;
 
-use rjiter::RJiter;
 use ::scan_json::matcher::Name;
+use ::scan_json::trigger::{Trigger, TriggerAction, TriggerEnd, TriggerEndAction};
+use rjiter::RJiter;
 use scan_json::{scan_json, ActionResult};
-use ::scan_json::trigger::{Trigger, TriggerEnd};
 
 #[test]
 fn test_scan_json_empty_input() {
@@ -135,13 +135,14 @@ fn test_call_begin_dont_touch_value() {
     let rjiter = RJiter::new(&mut reader, &mut buffer);
 
     let state = RefCell::new(false);
-    let action = Box::new(|_: &RefCell<RJiter>, state: &RefCell<bool>| {
+    let matcher = Name::new("foo".to_string());
+    let action: TriggerAction<bool> = Box::new(|_: &RefCell<RJiter>, state: &RefCell<bool>| {
         *state.borrow_mut() = true;
         ActionResult::Ok
     });
     let triggers = vec![Trigger {
-        matcher: &Name::new("foo".to_string()),
-        action,
+        matcher: &matcher,
+        action: &action,
     }];
 
     scan_json(&triggers, &vec![], &vec![], &RefCell::new(rjiter), &state);
@@ -156,17 +157,19 @@ fn test_call_begin_consume_value() {
     let rjiter = RJiter::new(&mut reader, &mut buffer);
 
     let state = RefCell::new(false);
-    let action = Box::new(|rjiter_cell: &RefCell<RJiter>, state: &RefCell<bool>| {
-        let mut rjiter = rjiter_cell.borrow_mut();
-        let next = rjiter.next_value();
-        next.unwrap();
+    let matcher = Name::new("foo".to_string());
+    let action: TriggerAction<bool> =
+        Box::new(|rjiter_cell: &RefCell<RJiter>, state: &RefCell<bool>| {
+            let mut rjiter = rjiter_cell.borrow_mut();
+            let next = rjiter.next_value();
+            next.unwrap();
 
-        *state.borrow_mut() = true;
-        ActionResult::OkValueIsConsumed
-    });
+            *state.borrow_mut() = true;
+            ActionResult::OkValueIsConsumed
+        });
     let triggers = vec![Trigger {
-        matcher: &Name::new("foo".to_string()),
-        action,
+        matcher: &matcher,
+        action: &action,
     }];
 
     scan_json(&triggers, &vec![], &vec![], &RefCell::new(rjiter), &state);
@@ -181,10 +184,12 @@ fn test_call_end() {
     let rjiter = RJiter::new(&mut reader, &mut buffer);
 
     let state = RefCell::new(false);
-    let action = Box::new(|state: &RefCell<bool>| *state.borrow_mut() = true);
+    let matcher = Name::new("foo".to_string());
+    let action: TriggerEndAction<bool> =
+        Box::new(|state: &RefCell<bool>| *state.borrow_mut() = true);
     let triggers_end = vec![TriggerEnd {
-        matcher: &Name::new("foo".to_string()),
-        action,
+        matcher: &matcher,
+        action: &action,
     }];
 
     scan_json(

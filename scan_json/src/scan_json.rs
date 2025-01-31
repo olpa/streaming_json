@@ -1,8 +1,8 @@
+use crate::trigger::{find_action, find_end_action, Trigger, TriggerEnd};
 use rjiter::jiter::Peek;
 use rjiter::RJiter;
 use std::cell::RefCell;
 use std::io;
-use crate::trigger::{Trigger, TriggerEnd, find_action, find_end_action};
 
 #[derive(Debug, PartialEq)]
 pub enum ActionResult {
