@@ -4,4 +4,4 @@ pub mod trigger;
 
 pub use matcher::{Matcher, Name, ParentAndName};
 pub use scan_json::{scan_json, ActionResult, ContextFrame};
-pub use trigger::{Trigger, BoxedAction, TriggerEnd, BoxedEndAction};
+pub use trigger::{BoxedAction, BoxedEndAction, Trigger};

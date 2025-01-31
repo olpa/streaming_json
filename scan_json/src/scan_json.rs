@@ -1,4 +1,5 @@
-use crate::trigger::{find_action, find_end_action, Trigger, TriggerEnd};
+use crate::trigger::{find_action, Trigger};
+use crate::trigger::{BoxedAction, BoxedEndAction};
 use rjiter::jiter::Peek;
 use rjiter::RJiter;
 use std::cell::RefCell;
@@ -21,8 +22,8 @@ pub struct ContextFrame {
 fn handle_object<T>(
     rjiter_cell: &RefCell<RJiter>,
     baton_cell: &RefCell<T>,
-    triggers: &[Trigger<T>],
-    triggers_end: &[TriggerEnd<T>],
+    triggers: &[Trigger<BoxedAction<T>>],
+    triggers_end: &[Trigger<BoxedEndAction<T>>],
     mut cur_level: ContextFrame,
     context: &mut Vec<ContextFrame>,
 ) -> (ActionResult, ContextFrame) {
@@ -38,8 +39,7 @@ fn handle_object<T>(
         let key = keyr.unwrap();
         if key.is_none() {
             let cur_level = context.pop().unwrap();
-            if let Some(end_action) = find_end_action(triggers_end, &cur_level.current_key, context)
-            {
+            if let Some(end_action) = find_action(triggers_end, &cur_level.current_key, context) {
                 end_action(baton_cell);
             }
             return (ActionResult::OkValueIsConsumed, cur_level);
@@ -77,8 +77,8 @@ fn handle_array(
 
 #[allow(clippy::missing_panics_doc)]
 pub fn scan_json<T>(
-    triggers: &[Trigger<T>],
-    triggers_end: &[TriggerEnd<T>],
+    triggers: &[Trigger<BoxedAction<T>>],
+    triggers_end: &[Trigger<BoxedEndAction<T>>],
     sse_tokens: &[&str],
     rjiter_cell: &RefCell<RJiter>,
     baton_cell: &RefCell<T>,
