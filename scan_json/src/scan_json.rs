@@ -1,15 +1,8 @@
-use crate::trigger::{find_action, Trigger};
-use crate::trigger::{BoxedAction, BoxedEndAction};
+use crate::action::{find_action, ActionResult, BoxedAction, BoxedEndAction, Trigger};
 use rjiter::jiter::Peek;
 use rjiter::RJiter;
 use std::cell::RefCell;
 use std::io;
-
-#[derive(Debug, PartialEq)]
-pub enum ActionResult {
-    Ok,
-    OkValueIsConsumed,
-}
 
 #[derive(Debug)]
 pub struct ContextFrame {

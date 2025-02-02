@@ -1,11 +1,21 @@
 use crate::matcher::Matcher;
-use crate::scan_json::ActionResult;
 use crate::scan_json::ContextFrame;
 use rjiter::RJiter;
 use std::cell::RefCell;
 
+#[derive(Debug, PartialEq)]
+#[allow(clippy::module_name_repetitions)]
+pub enum ActionResult {
+    Ok,
+    OkValueIsConsumed,
+}
+
 pub type BoxedMatcher = Box<dyn Matcher>;
+
+#[allow(clippy::module_name_repetitions)]
 pub type BoxedAction<T> = Box<dyn Fn(&RefCell<RJiter>, &RefCell<T>) -> ActionResult>;
+
+#[allow(clippy::module_name_repetitions)]
 pub type BoxedEndAction<T> = Box<dyn Fn(&RefCell<T>)>;
 
 #[derive(Debug)]
