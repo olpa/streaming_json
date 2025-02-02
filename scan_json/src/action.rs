@@ -1,5 +1,5 @@
 use crate::matcher::Matcher;
-use crate::scan_json::ContextFrame;
+use crate::scan::ContextFrame;
 use rjiter::RJiter;
 use std::cell::RefCell;
 

@@ -79,7 +79,7 @@ fn handle_array(
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub fn scan_json<T>(
+pub fn scan<T>(
     triggers: &[Trigger<BoxedAction<T>>],
     triggers_end: &[Trigger<BoxedEndAction<T>>],
     sse_tokens: &[&str],

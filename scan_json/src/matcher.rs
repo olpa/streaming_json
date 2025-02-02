@@ -1,4 +1,4 @@
-use crate::scan_json::ContextFrame;
+use crate::scan::ContextFrame;
 
 pub trait Matcher: std::fmt::Debug {
     fn matches(&self, name: &str, context: &[ContextFrame]) -> bool;

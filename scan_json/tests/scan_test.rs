@@ -2,7 +2,7 @@ use std::cell::RefCell;
 
 use ::scan_json::action::{BoxedAction, BoxedEndAction, StreamOp, Trigger};
 use ::scan_json::matcher::Name;
-use ::scan_json::scan_json;
+use ::scan_json::scan;
 use rjiter::RJiter;
 
 #[test]
@@ -12,7 +12,7 @@ fn test_scan_json_empty_input() {
     let rjiter = RJiter::new(&mut reader, &mut buffer);
 
     let triggers: Vec<Trigger<BoxedAction<()>>> = vec![];
-    scan_json(
+    scan(
         &triggers,
         &vec![],
         &vec![],
@@ -29,7 +29,7 @@ fn test_scan_json_top_level_types() {
     let rjiter = RJiter::new(&mut reader, &mut buffer);
 
     let triggers: Vec<Trigger<BoxedAction<()>>> = vec![];
-    scan_json(
+    scan(
         &triggers,
         &vec![],
         &vec![],
@@ -46,7 +46,7 @@ fn test_scan_json_simple_object() {
     let rjiter = RJiter::new(&mut reader, &mut buffer);
 
     let triggers: Vec<Trigger<BoxedAction<()>>> = vec![];
-    scan_json(
+    scan(
         &triggers,
         &vec![],
         &vec![],
@@ -63,7 +63,7 @@ fn test_scan_json_simple_array() {
     let rjiter = RJiter::new(&mut reader, &mut buffer);
 
     let triggers: Vec<Trigger<BoxedAction<()>>> = vec![];
-    scan_json(
+    scan(
         &triggers,
         &vec![],
         &vec![],
@@ -101,7 +101,7 @@ fn test_scan_json_nested_complex() {
     let rjiter = RJiter::new(&mut reader, &mut buffer);
 
     let triggers: Vec<Trigger<BoxedAction<()>>> = vec![];
-    scan_json(
+    scan(
         &triggers,
         &vec![],
         &vec![],
@@ -118,7 +118,7 @@ fn test_skip_sse_tokens() {
     let rjiter = RJiter::new(&mut reader, &mut buffer);
 
     let sse_tokens = vec!["data:", "DONE"];
-    scan_json(
+    scan(
         &vec![],
         &vec![],
         &sse_tokens,
@@ -142,7 +142,7 @@ fn test_call_begin_dont_touch_value() {
     });
     let triggers = vec![Trigger { matcher, action }];
 
-    scan_json(&triggers, &vec![], &vec![], &RefCell::new(rjiter), &state);
+    scan(&triggers, &vec![], &vec![], &RefCell::new(rjiter), &state);
     assert!(*state.borrow(), "Trigger should have been called for 'foo'");
 }
 
@@ -166,7 +166,7 @@ fn test_call_begin_consume_value() {
         });
     let triggers = vec![Trigger { matcher, action }];
 
-    scan_json(&triggers, &vec![], &vec![], &RefCell::new(rjiter), &state);
+    scan(&triggers, &vec![], &vec![], &RefCell::new(rjiter), &state);
     assert!(*state.borrow(), "Trigger should have been called for 'foo'");
 }
 
@@ -182,7 +182,7 @@ fn test_call_end() {
     let action: BoxedEndAction<bool> = Box::new(|state: &RefCell<bool>| *state.borrow_mut() = true);
     let triggers_end = vec![Trigger { matcher, action }];
 
-    scan_json(
+    scan(
         &vec![],
         &triggers_end,
         &vec![],

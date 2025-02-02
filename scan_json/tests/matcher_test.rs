@@ -1,5 +1,5 @@
-use ::scan_json::scan_json::mk_context_frame_for_test;
 use scan_json::matcher::{Matcher, Name, ParentAndName};
+use scan_json::scan::mk_context_frame_for_test;
 
 #[test]
 fn test_match_by_name() {
