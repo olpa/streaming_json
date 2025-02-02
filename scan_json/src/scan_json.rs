@@ -12,6 +12,18 @@ pub struct ContextFrame {
     is_object_begin: bool,
 }
 
+impl ContextFrame {
+    #[cfg(test)]
+    pub fn new(current_key: String) -> Self {
+        Self {
+            current_key,
+            is_in_object: false,
+            is_in_array: false,
+            is_object_begin: false,
+        }
+    }
+}
+
 fn handle_object<T>(
     rjiter_cell: &RefCell<RJiter>,
     baton_cell: &RefCell<T>,
