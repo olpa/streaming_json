@@ -1,4 +1,4 @@
-use crate::action::{find_action, ActionResult, BoxedAction, BoxedEndAction, Trigger};
+use crate::action::{find_action, BoxedAction, BoxedEndAction, StreamOp, Trigger};
 use rjiter::jiter::Peek;
 use rjiter::RJiter;
 use std::cell::RefCell;
@@ -19,7 +19,7 @@ fn handle_object<T>(
     triggers_end: &[Trigger<BoxedEndAction<T>>],
     mut cur_level: ContextFrame,
     context: &mut Vec<ContextFrame>,
-) -> (ActionResult, ContextFrame) {
+) -> (StreamOp, ContextFrame) {
     {
         let mut rjiter = rjiter_cell.borrow_mut();
         let keyr = if cur_level.is_object_begin {
@@ -35,7 +35,7 @@ fn handle_object<T>(
             if let Some(end_action) = find_action(triggers_end, &cur_level.current_key, context) {
                 end_action(baton_cell);
             }
-            return (ActionResult::OkValueIsConsumed, cur_level);
+            return (StreamOp::ValueIsConsumed, cur_level);
         }
 
         let key_str = key.unwrap().to_string();
@@ -45,7 +45,7 @@ fn handle_object<T>(
     if let Some(action) = find_action(triggers, &cur_level.current_key, context) {
         return (action(rjiter_cell, baton_cell), cur_level);
     }
-    (ActionResult::Ok, cur_level)
+    (StreamOp::None, cur_level)
 }
 
 fn handle_array(
@@ -98,7 +98,7 @@ pub fn scan_json<T>(
             );
             cur_level = new_cur_level;
 
-            if action_result == ActionResult::OkValueIsConsumed {
+            if action_result == StreamOp::ValueIsConsumed {
                 continue;
             }
         }

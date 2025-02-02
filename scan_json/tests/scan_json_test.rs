@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 
-use ::scan_json::action::{ActionResult, BoxedAction, BoxedEndAction, Trigger};
+use ::scan_json::action::{BoxedAction, BoxedEndAction, StreamOp, Trigger};
 use ::scan_json::matcher::Name;
 use ::scan_json::scan_json;
 use rjiter::RJiter;
@@ -138,7 +138,7 @@ fn test_call_begin_dont_touch_value() {
     let matcher = Box::new(Name::new("foo".to_string()));
     let action: BoxedAction<bool> = Box::new(|_: &RefCell<RJiter>, state: &RefCell<bool>| {
         *state.borrow_mut() = true;
-        ActionResult::Ok
+        StreamOp::None
     });
     let triggers = vec![Trigger { matcher, action }];
 
@@ -162,7 +162,7 @@ fn test_call_begin_consume_value() {
             next.unwrap();
 
             *state.borrow_mut() = true;
-            ActionResult::OkValueIsConsumed
+            StreamOp::ValueIsConsumed
         });
     let triggers = vec![Trigger { matcher, action }];
 

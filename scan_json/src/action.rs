@@ -4,16 +4,15 @@ use rjiter::RJiter;
 use std::cell::RefCell;
 
 #[derive(Debug, PartialEq)]
-#[allow(clippy::module_name_repetitions)]
-pub enum ActionResult {
-    Ok,
-    OkValueIsConsumed,
+pub enum StreamOp {
+    None,
+    ValueIsConsumed,
 }
 
 pub type BoxedMatcher = Box<dyn Matcher>;
 
 #[allow(clippy::module_name_repetitions)]
-pub type BoxedAction<T> = Box<dyn Fn(&RefCell<RJiter>, &RefCell<T>) -> ActionResult>;
+pub type BoxedAction<T> = Box<dyn Fn(&RefCell<RJiter>, &RefCell<T>) -> StreamOp>;
 
 #[allow(clippy::module_name_repetitions)]
 pub type BoxedEndAction<T> = Box<dyn Fn(&RefCell<T>)>;
