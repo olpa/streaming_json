@@ -1,5 +1,7 @@
-pub mod scan_json;
+pub mod action;
+pub mod matcher;
+pub mod scan;
 
-pub use scan_json::{
-    scan_json, ActionResult, Matcher, Trigger, TriggerAction, TriggerEnd, TriggerEndAction,
-};
+pub use action::{BoxedAction, BoxedEndAction, BoxedMatcher, StreamOp, Trigger};
+pub use matcher::{Matcher, Name, ParentAndName};
+pub use scan::{scan, ContextFrame};
