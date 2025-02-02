@@ -1,5 +1,5 @@
-use scan_json::matcher::{Matcher, Name};
-use scan_json::ContextFrame;
+use ::scan_json::scan_json::mk_context_frame_for_test;
+use scan_json::matcher::{Matcher, Name, ParentAndName};
 
 #[test]
 fn test_match_by_name() {
@@ -15,21 +15,31 @@ fn test_match_by_name() {
 
 #[test]
 fn test_match_by_parent_and_name() {
-    use scan_json::matcher::ParentAndName;
-
     let matcher = ParentAndName::new("parent".to_string(), "child".to_string());
-    
+
     let empty_context = [];
-    assert!(!matcher.matches("child", &empty_context), "Should not match without context");
+    assert!(
+        !matcher.matches("child", &empty_context),
+        "Should not match without context"
+    );
 
-    let wrong_parent_context = [ContextFrame::new("wrong".to_string())];
-    assert!(!matcher.matches("child", &wrong_parent_context), "Should not match with wrong parent");
+    let wrong_parent_context = [mk_context_frame_for_test("wrong".to_string())];
+    assert!(
+        !matcher.matches("child", &wrong_parent_context),
+        "Should not match with wrong parent"
+    );
 
-    let wrong_name_context = [ContextFrame::new("parent".to_string())];
-    assert!(!matcher.matches("wrong", &wrong_name_context), "Should not match with wrong name");
+    let wrong_name_context = [mk_context_frame_for_test("parent".to_string())];
+    assert!(
+        !matcher.matches("wrong", &wrong_name_context),
+        "Should not match with wrong name"
+    );
 
-    let matching_context = [ContextFrame::new("parent".to_string())];
-    assert!(matcher.matches("child", &matching_context), "Should match with correct parent and name");
+    let matching_context = [mk_context_frame_for_test("parent".to_string())];
+    assert!(
+        matcher.matches("child", &matching_context),
+        "Should match with correct parent and name"
+    );
 }
 
 #[test]
@@ -37,11 +47,11 @@ fn test_match_by_parent_and_name_long_context() {
     use scan_json::matcher::ParentAndName;
 
     let matcher = ParentAndName::new("parent".to_string(), "child".to_string());
-    
+
     let long_context = [
-        ContextFrame::new("grandparent".to_string()),
-        ContextFrame::new("parent".to_string()),
-        ContextFrame::new("child".to_string())
+        mk_context_frame_for_test("grandparent".to_string()),
+        mk_context_frame_for_test("parent".to_string()),
+        mk_context_frame_for_test("child".to_string()),
     ];
 
     assert!(
@@ -50,9 +60,9 @@ fn test_match_by_parent_and_name_long_context() {
     );
 
     let long_context_with_parent_first = [
-        ContextFrame::new("other".to_string()),
-        ContextFrame::new("another".to_string()),
-        ContextFrame::new("parent".to_string()),
+        mk_context_frame_for_test("other".to_string()),
+        mk_context_frame_for_test("another".to_string()),
+        mk_context_frame_for_test("parent".to_string()),
     ];
 
     assert!(

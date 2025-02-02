@@ -6,21 +6,19 @@ use std::io;
 
 #[derive(Debug)]
 pub struct ContextFrame {
-    pub(crate) current_key: String,
+    pub current_key: String,
     is_in_object: bool,
     is_in_array: bool,
     is_object_begin: bool,
 }
 
-impl ContextFrame {
-    #[cfg(test)]
-    pub fn new(current_key: String) -> Self {
-        Self {
-            current_key,
-            is_in_object: false,
-            is_in_array: false,
-            is_object_begin: false,
-        }
+#[allow(clippy::must_use_candidate)]
+pub fn mk_context_frame_for_test(current_key: String) -> ContextFrame {
+    ContextFrame {
+        current_key,
+        is_in_object: false,
+        is_in_array: false,
+        is_object_begin: false,
     }
 }
 
