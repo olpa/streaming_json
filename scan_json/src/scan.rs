@@ -85,7 +85,6 @@ fn handle_array(
     Ok((peeked, cur_level))
 }
 
-#[allow(clippy::missing_panics_doc)]
 pub fn scan<T>(
     triggers: &[Trigger<BoxedAction<T>>],
     triggers_end: &[Trigger<BoxedEndAction<T>>],
@@ -142,13 +141,17 @@ pub fn scan<T>(
                 ..
             }) = peekedr
             {
-                assert!(context.is_empty(), "scan_json: eof while inside an object");
+                if !context.is_empty() {
+                    return Err(ScanError::UnbalancedJson(rjiter.current_index()));
+                }
                 let eof = rjiter.finish();
-                eof.unwrap();
+                if let Err(e) = eof { // should never happen because we are in the arm that handles eof
+                    return Err(ScanError::RJiterError(e));
+                }
                 break;
             }
 
-            peeked = Some(peekedr.unwrap());
+            peeked = Some(peekedr?);
         };
 
         let peeked = peeked.unwrap();
