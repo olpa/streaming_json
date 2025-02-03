@@ -1,4 +1,6 @@
 use crate::action::{find_action, BoxedAction, BoxedEndAction, StreamOp, Trigger};
+use crate::error::Error as ScanError;
+use crate::error::Result as ScanResult;
 use rjiter::jiter::Peek;
 use rjiter::RJiter;
 use std::cell::RefCell;
@@ -85,7 +87,7 @@ pub fn scan<T>(
     sse_tokens: &[&str],
     rjiter_cell: &RefCell<RJiter>,
     baton_cell: &RefCell<T>,
-) {
+) -> ScanResult<()> {
     let mut context: Vec<ContextFrame> = Vec::new();
     let mut cur_level = ContextFrame {
         current_key: "#top".to_string(),
@@ -202,6 +204,8 @@ pub fn scan<T>(
             }
         }
 
-        panic!("scan_json: unhandled: peeked={peeked:?}");
+        return Err(ScanError::UnhandledPeek(peeked));
     }
+
+    Ok(())
 }
