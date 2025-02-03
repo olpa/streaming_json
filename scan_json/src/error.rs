@@ -3,6 +3,7 @@ pub enum Error {
     RJiterError(rjiter::Error),
     UnhandledPeek(rjiter::jiter::Peek),
     UnbalancedJson(usize),
+    InternalError(usize, String),
 }
 
 impl std::fmt::Display for Error {
@@ -11,6 +12,7 @@ impl std::fmt::Display for Error {
             Error::RJiterError(e) => e.fmt(f),
             Error::UnhandledPeek(p) => write!(f, "UnhandledPeek: {p:?}"),
             Error::UnbalancedJson(pos) => write!(f, "Unbalanced JSON at position: {pos}"),
+            Error::InternalError(pos, msg) => write!(f, "Internal error at position {pos}: {msg}"),
         }
     }
 }

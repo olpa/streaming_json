@@ -144,9 +144,11 @@ pub fn scan<T>(
                 if !context.is_empty() {
                     return Err(ScanError::UnbalancedJson(rjiter.current_index()));
                 }
-                let eof = rjiter.finish();
-                if let Err(e) = eof { // should never happen because we are in the arm that handles eof
-                    return Err(ScanError::RJiterError(e));
+                if rjiter.finish().is_err() {
+                    return Err(ScanError::InternalError(
+                        rjiter.current_index(),
+                        format!("not eof when should be eof"),
+                    ));
                 }
                 break;
             }
@@ -154,7 +156,10 @@ pub fn scan<T>(
             peeked = Some(peekedr?);
         };
 
-        let peeked = peeked.unwrap();
+        let peeked = peeked.ok_or(ScanError::InternalError(
+            rjiter.current_index(),
+            format!("peeked is none when it should not be"),
+        ))?;
 
         if peeked == Peek::Array {
             context.push(cur_level);
