@@ -8,4 +8,4 @@ fix:
 
 lint:
 	cargo check
-	cargo clippy -- -W clippy::pedantic
+	cargo clippy -- -W clippy::pedantic -W clippy::panic
