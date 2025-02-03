@@ -18,7 +18,8 @@ fn test_scan_json_empty_input() {
         &vec![],
         &RefCell::new(rjiter),
         &RefCell::new(()),
-    );
+    )
+    .unwrap();
 }
 
 #[test]
@@ -35,7 +36,8 @@ fn test_scan_json_top_level_types() {
         &vec![],
         &RefCell::new(rjiter),
         &RefCell::new(()),
-    );
+    )
+    .unwrap();
 }
 
 #[test]
@@ -52,7 +54,8 @@ fn test_scan_json_simple_object() {
         &vec![],
         &RefCell::new(rjiter),
         &RefCell::new(()),
-    );
+    )
+    .unwrap();
 }
 
 #[test]
@@ -69,7 +72,8 @@ fn test_scan_json_simple_array() {
         &vec![],
         &RefCell::new(rjiter),
         &RefCell::new(()),
-    );
+    )
+    .unwrap();
 }
 
 #[test]
@@ -107,7 +111,8 @@ fn test_scan_json_nested_complex() {
         &vec![],
         &RefCell::new(rjiter),
         &RefCell::new(()),
-    );
+    )
+    .unwrap();
 }
 
 #[test]
@@ -124,7 +129,8 @@ fn test_skip_sse_tokens() {
         &sse_tokens,
         &RefCell::new(rjiter),
         &RefCell::new(()),
-    );
+    )
+    .unwrap();
 }
 
 #[test]
@@ -142,7 +148,7 @@ fn test_call_begin_dont_touch_value() {
     });
     let triggers = vec![Trigger { matcher, action }];
 
-    scan(&triggers, &vec![], &vec![], &RefCell::new(rjiter), &state);
+    scan(&triggers, &vec![], &vec![], &RefCell::new(rjiter), &state).unwrap();
     assert!(*state.borrow(), "Trigger should have been called for 'foo'");
 }
 
@@ -166,7 +172,7 @@ fn test_call_begin_consume_value() {
         });
     let triggers = vec![Trigger { matcher, action }];
 
-    scan(&triggers, &vec![], &vec![], &RefCell::new(rjiter), &state);
+    scan(&triggers, &vec![], &vec![], &RefCell::new(rjiter), &state).unwrap();
     assert!(*state.borrow(), "Trigger should have been called for 'foo'");
 }
 
@@ -188,6 +194,7 @@ fn test_call_end() {
         &vec![],
         &RefCell::new(rjiter),
         &state,
-    );
+    )
+    .unwrap();
     assert!(*state.borrow(), "Trigger should have been called for 'foo'");
 }
