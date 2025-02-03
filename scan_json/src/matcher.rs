@@ -40,6 +40,7 @@ impl Matcher for ParentAndName {
         if context.is_empty() {
             return false;
         }
+        #[allow(clippy::indexing_slicing)]
         let parent = &context[context.len() - 1];
         self.name == name && parent.current_key == self.parent
     }
