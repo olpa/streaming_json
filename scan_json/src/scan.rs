@@ -170,7 +170,7 @@ pub fn scan<T>(
                 if rjiter.finish().is_err() {
                     return Err(ScanError::InternalError(
                         rjiter.current_index(),
-                        format!("not eof when should be eof"),
+                        "not eof when should be eof".to_string(),
                     ));
                 }
                 break;
@@ -181,7 +181,7 @@ pub fn scan<T>(
 
         let peeked = peeked.ok_or(ScanError::InternalError(
             rjiter.current_index(),
-            format!("peeked is none when it should not be"),
+            "peeked is none when it should not be".to_string(),
         ))?;
 
         if peeked == Peek::Array {
