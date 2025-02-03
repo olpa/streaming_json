@@ -215,7 +215,11 @@ fn max_nesting_array() {
         &RefCell::new(()),
     );
     println!("{:?}", result); // FIXME
-    assert_eq!(format!("{:?}", result), "Unbalanced JSON at position: 0");
+    let e = result.unwrap_err();
+    assert_eq!(
+        format!("{e}"),
+        "Max nesting exceeded at position 20 with level 20"
+    );
 }
 
 #[test]
@@ -234,5 +238,9 @@ fn max_nesting_object() {
         &RefCell::new(()),
     );
     println!("{:?}", result); // FIXME
-    assert_eq!(format!("{:?}", result), "Unbalanced JSON at position: 0");
+    let e = result.unwrap_err();
+    assert_eq!(
+        format!("{e}"),
+        "Max nesting exceeded at position 100 with level 20"
+    );
 }

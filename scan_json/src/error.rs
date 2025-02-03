@@ -4,6 +4,7 @@ pub enum Error {
     UnhandledPeek(rjiter::jiter::Peek),
     UnbalancedJson(usize),
     InternalError(usize, String),
+    MaxNestingExceeded(usize, usize),
 }
 
 impl std::fmt::Display for Error {
@@ -13,6 +14,10 @@ impl std::fmt::Display for Error {
             Error::UnhandledPeek(p) => write!(f, "UnhandledPeek: {p:?}"),
             Error::UnbalancedJson(pos) => write!(f, "Unbalanced JSON at position: {pos}"),
             Error::InternalError(pos, msg) => write!(f, "Internal error at position {pos}: {msg}"),
+            Error::MaxNestingExceeded(pos, level) => write!(
+                f,
+                "Max nesting exceeded at position {pos} with level {level}"
+            ),
         }
     }
 }

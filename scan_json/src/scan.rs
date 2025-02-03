@@ -6,6 +6,8 @@ use rjiter::RJiter;
 use std::cell::RefCell;
 use std::io;
 
+const MAX_NESTING: usize = 20;
+
 #[derive(Debug)]
 pub struct ContextFrame {
     pub current_key: String,
@@ -105,6 +107,21 @@ fn skip_basic_values(peeked: Peek, rjiter: &mut RJiter) -> ScanResult<()> {
     Err(ScanError::UnhandledPeek(peeked))
 }
 
+fn push_context(
+    context: &mut Vec<ContextFrame>,
+    cur_level: ContextFrame,
+    rjiter: &RJiter,
+) -> ScanResult<()> {
+    if context.len() >= MAX_NESTING {
+        return Err(ScanError::MaxNestingExceeded(
+            rjiter.current_index(),
+            context.len(),
+        ));
+    }
+    context.push(cur_level);
+    Ok(())
+}
+
 /// # Errors
 ///
 /// TODO: describe the errors
@@ -185,7 +202,7 @@ pub fn scan<T>(
         ))?;
 
         if peeked == Peek::Array {
-            context.push(cur_level);
+            push_context(&mut context, cur_level, &rjiter)?;
             cur_level = ContextFrame {
                 current_key: "#array".to_string(),
                 is_in_array: true,
@@ -196,7 +213,7 @@ pub fn scan<T>(
         }
 
         if peeked == Peek::Object {
-            context.push(cur_level);
+            push_context(&mut context, cur_level, &rjiter)?;
             cur_level = ContextFrame {
                 current_key: "#object".to_string(),
                 is_in_array: false,
