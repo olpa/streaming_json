@@ -75,10 +75,12 @@ fn handle_array(
     };
     cur_level.is_object_begin = false;
 
-    let peeked = apickedr.unwrap();
+    let peeked = apickedr?;
     if peeked.is_none() {
-        let new_cur_level = context.pop().unwrap();
-        return Ok((None, new_cur_level));
+        if let Some(new_cur_level) = context.pop() {
+            return Ok((None, new_cur_level));
+        }
+        return Err(ScanError::UnbalancedJson(rjiter.current_index()));
     }
     Ok((peeked, cur_level))
 }
