@@ -11,7 +11,7 @@ pub struct ContextFrame {
     pub current_key: String,
     is_in_object: bool,
     is_in_array: bool,
-    is_object_begin: bool,
+    is_elem_begin: bool,
 }
 
 #[allow(clippy::must_use_candidate)]
@@ -20,7 +20,7 @@ pub fn mk_context_frame_for_test(current_key: String) -> ContextFrame {
         current_key,
         is_in_object: false,
         is_in_array: false,
-        is_object_begin: false,
+        is_elem_begin: false,
     }
 }
 
@@ -34,12 +34,12 @@ fn handle_object<T>(
 ) -> ScanResult<(StreamOp, ContextFrame)> {
     {
         let mut rjiter = rjiter_cell.borrow_mut();
-        let keyr = if cur_level.is_object_begin {
+        let keyr = if cur_level.is_elem_begin {
             rjiter.next_object()
         } else {
             rjiter.next_key()
         };
-        cur_level.is_object_begin = false;
+        cur_level.is_elem_begin = false;
 
         if let Some(key) = keyr? {
             let key_str = key.to_string();
@@ -68,12 +68,12 @@ fn handle_array(
     mut cur_level: ContextFrame,
     context: &mut Vec<ContextFrame>,
 ) -> ScanResult<(Option<Peek>, ContextFrame)> {
-    let apickedr = if cur_level.is_object_begin {
+    let apickedr = if cur_level.is_elem_begin {
         rjiter.known_array()
     } else {
         rjiter.array_step()
     };
-    cur_level.is_object_begin = false;
+    cur_level.is_elem_begin = false;
 
     let peeked = apickedr?;
     if peeked.is_none() {
@@ -118,7 +118,7 @@ pub fn scan<T>(
     let mut context: Vec<ContextFrame> = Vec::new();
     let mut cur_level = ContextFrame {
         current_key: "#top".to_string(),
-        is_object_begin: false,
+        is_elem_begin: false,
         is_in_object: false,
         is_in_array: false,
     };
@@ -190,7 +190,7 @@ pub fn scan<T>(
                 current_key: "#array".to_string(),
                 is_in_array: true,
                 is_in_object: false,
-                is_object_begin: true,
+                is_elem_begin: true,
             };
             continue;
         }
@@ -199,9 +199,9 @@ pub fn scan<T>(
             context.push(cur_level);
             cur_level = ContextFrame {
                 current_key: "#object".to_string(),
-                is_in_object: true,
                 is_in_array: false,
-                is_object_begin: true,
+                is_in_object: true,
+                is_elem_begin: true,
             };
             continue;
         }
