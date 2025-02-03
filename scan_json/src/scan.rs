@@ -85,6 +85,29 @@ fn handle_array(
     Ok((peeked, cur_level))
 }
 
+fn skip_basic_values(peeked: Peek, rjiter: &mut RJiter) -> ScanResult<()> {
+    if peeked == Peek::Null {
+        rjiter.known_null()?;
+        return Ok(());
+    }
+    if peeked == Peek::True {
+        rjiter.known_bool(peeked)?;
+        return Ok(());
+    }
+    if peeked == Peek::False {
+        rjiter.known_bool(peeked)?;
+        return Ok(());
+    }
+    let maybe_number = rjiter.next_number();
+    if maybe_number.is_ok() {
+        return Ok(());
+    }
+    Err(ScanError::UnhandledPeek(peeked))
+}
+
+/// # Errors
+///
+/// TODO: describe the errors
 pub fn scan<T>(
     triggers: &[Trigger<BoxedAction<T>>],
     triggers_end: &[Trigger<BoxedEndAction<T>>],
@@ -183,25 +206,12 @@ pub fn scan<T>(
             continue;
         }
 
-        if peeked == Peek::Null {
-            rjiter.known_null().unwrap();
-            continue;
-        }
-        if peeked == Peek::True {
-            rjiter.known_bool(peeked).unwrap();
-            continue;
-        }
-        if peeked == Peek::False {
-            rjiter.known_bool(peeked).unwrap();
-            continue;
-        }
         if peeked == Peek::String {
-            rjiter.write_long_bytes(&mut io::sink()).unwrap();
+            rjiter.write_long_bytes(&mut io::sink())?;
             continue;
         }
 
-        let maybe_number = rjiter.next_number();
-        if maybe_number.is_ok() {
+        if skip_basic_values(peeked, &mut rjiter).is_ok() {
             continue;
         }
 
