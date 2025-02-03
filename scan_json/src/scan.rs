@@ -41,34 +41,33 @@ fn handle_object<T>(
         };
         cur_level.is_object_begin = false;
 
-        let key = keyr?;
-        if key.is_none() {
-            let cur_level = context.pop();
-            if cur_level.is_err() {
-                return Err(ScanError::UnbalancedJson(rjiter.current_index()));
+        if let Some(key) = keyr? {
+            let key_str = key.to_string();
+            cur_level.current_key = key_str;
+        } else {
+            // The "else" arm mutates the context and ends the function
+            if let Some(cur_level) = context.pop() {
+                if let Some(end_action) = find_action(triggers_end, &cur_level.current_key, context)
+                {
+                    end_action(baton_cell);
+                }
+                return Ok((StreamOp::ValueIsConsumed, cur_level));
             }
-            let cur_level = cur_level.unwrap();
-            if let Some(end_action) = find_action(triggers_end, &cur_level.current_key, context) {
-                end_action(baton_cell);
-            }
-            return (StreamOp::ValueIsConsumed, cur_level);
+            return Err(ScanError::UnbalancedJson(rjiter.current_index()));
         }
-
-        let key_str = key.unwrap().to_string();
-        cur_level.current_key = key_str;
     }
 
     if let Some(action) = find_action(triggers, &cur_level.current_key, context) {
-        return (action(rjiter_cell, baton_cell), cur_level);
+        return Ok((action(rjiter_cell, baton_cell), cur_level));
     }
-    (StreamOp::None, cur_level)
+    Ok((StreamOp::None, cur_level))
 }
 
 fn handle_array(
     rjiter: &mut RJiter,
     mut cur_level: ContextFrame,
     context: &mut Vec<ContextFrame>,
-) -> (Option<Peek>, ContextFrame) {
+) -> ScanResult<(Option<Peek>, ContextFrame)> {
     let apickedr = if cur_level.is_object_begin {
         rjiter.known_array()
     } else {
@@ -79,9 +78,9 @@ fn handle_array(
     let peeked = apickedr.unwrap();
     if peeked.is_none() {
         let new_cur_level = context.pop().unwrap();
-        return (None, new_cur_level);
+        return Ok((None, new_cur_level));
     }
-    (peeked, cur_level)
+    Ok((peeked, cur_level))
 }
 
 #[allow(clippy::missing_panics_doc)]
@@ -111,7 +110,7 @@ pub fn scan<T>(
                 triggers_end,
                 cur_level,
                 &mut context,
-            );
+            )?;
             cur_level = new_cur_level;
 
             if action_result == StreamOp::ValueIsConsumed {
@@ -122,7 +121,7 @@ pub fn scan<T>(
         let mut rjiter = rjiter_cell.borrow_mut();
 
         if cur_level.is_in_array {
-            let (arr_peeked, new_cur_level) = handle_array(&mut rjiter, cur_level, &mut context);
+            let (arr_peeked, new_cur_level) = handle_array(&mut rjiter, cur_level, &mut context)?;
             cur_level = new_cur_level;
 
             if arr_peeked.is_none() {
