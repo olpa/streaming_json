@@ -198,3 +198,41 @@ fn test_call_end() {
     .unwrap();
     assert!(*state.borrow(), "Trigger should have been called for 'foo'");
 }
+
+#[test]
+fn max_nesting_array() {
+    let json = "[".repeat(25);
+    let mut reader = json.as_bytes();
+    let mut buffer = vec![0u8; 16];
+    let rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    let triggers: Vec<Trigger<BoxedAction<()>>> = vec![];
+    let result = scan(
+        &triggers,
+        &vec![],
+        &vec![],
+        &RefCell::new(rjiter),
+        &RefCell::new(()),
+    );
+    println!("{:?}", result); // FIXME
+    assert_eq!(format!("{:?}", result), "Unbalanced JSON at position: 0");
+}
+
+#[test]
+fn max_nesting_object() {
+    let json = "{\"a\":".repeat(25);
+    let mut reader = json.as_bytes();
+    let mut buffer = vec![0u8; 16];
+    let rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    let triggers: Vec<Trigger<BoxedAction<()>>> = vec![];
+    let result = scan(
+        &triggers,
+        &vec![],
+        &vec![],
+        &RefCell::new(rjiter),
+        &RefCell::new(()),
+    );
+    println!("{:?}", result); // FIXME
+    assert_eq!(format!("{:?}", result), "Unbalanced JSON at position: 0");
+}
