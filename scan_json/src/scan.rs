@@ -31,7 +31,7 @@ fn handle_object<T>(
     triggers_end: &[Trigger<BoxedEndAction<T>>],
     mut cur_level: ContextFrame,
     context: &mut Vec<ContextFrame>,
-) -> (StreamOp, ContextFrame) {
+) -> ScanResult<(StreamOp, ContextFrame)> {
     {
         let mut rjiter = rjiter_cell.borrow_mut();
         let keyr = if cur_level.is_object_begin {
@@ -41,9 +41,13 @@ fn handle_object<T>(
         };
         cur_level.is_object_begin = false;
 
-        let key = keyr.unwrap();
+        let key = keyr?;
         if key.is_none() {
-            let cur_level = context.pop().unwrap();
+            let cur_level = context.pop();
+            if cur_level.is_err() {
+                return Err(ScanError::UnbalancedJson(rjiter.current_index()));
+            }
+            let cur_level = cur_level.unwrap();
             if let Some(end_action) = find_action(triggers_end, &cur_level.current_key, context) {
                 end_action(baton_cell);
             }
