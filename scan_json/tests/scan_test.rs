@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::io::Write;
 
 use ::scan_json::action::{BoxedAction, BoxedEndAction, StreamOp, Trigger};
-use ::scan_json::matcher::Name;
+use ::scan_json::matcher::{Name, ParentAndName};
 use ::scan_json::scan;
 use rjiter::RJiter;
 
@@ -286,6 +286,21 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
             StreamOp::None
         }),
     );
+    let message_content: Trigger<BoxedAction<dyn Write>> = Trigger::new(
+        Box::new(ParentAndName::new(
+            "message".to_string(),
+            "content".to_string(),
+        )),
+        Box::new(
+            |rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>| {
+                let mut rjiter = rjiter_cell.borrow_mut();
+                let mut writer = writer_cell.borrow_mut();
+                rjiter.peek().unwrap();
+                rjiter.write_long_bytes(&mut *writer).unwrap();
+                StreamOp::ValueIsConsumed
+            },
+        ),
+    );
     let end_message: Trigger<BoxedEndAction<dyn Write>> = Trigger::new(
         Box::new(Name::new("message".to_string())),
         Box::new(|writer: &RefCell<dyn Write>| {
@@ -294,7 +309,7 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
     );
 
     scan(
-        &vec![begin_message],
+        &vec![begin_message, message_content],
         &vec![end_message],
         &vec![],
         &RefCell::new(rjiter),
@@ -342,5 +357,9 @@ fn scan_basic_llm_output() {
   "system_fingerprint": "fp_0aa8d3e20b"
 }"#;
     let writer_cell = scan_llm_output(json);
-    assert_eq!(*writer_cell.borrow(), b"foofoofoo");
+    let message = String::from_utf8(writer_cell.borrow().to_vec()).unwrap();
+    assert_eq!(
+        message,
+        "(new message)\nHello! How can I assist you today?\n"
+    );
 }
