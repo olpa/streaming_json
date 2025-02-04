@@ -251,8 +251,7 @@ fn several_objects_top_level() {
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
-    let mut writer = Vec::new();
-    let state = RefCell::new(false);
+    let writer_cell = RefCell::new(Vec::new());
 
     let matcher = Box::new(Name::new("foo".to_string()));
     let action: BoxedAction<dyn Write> =
@@ -267,9 +266,9 @@ fn several_objects_top_level() {
         &vec![],
         &vec![],
         &RefCell::new(rjiter),
-        &RefCell::new(writer),
+        &writer_cell,
     )
     .unwrap();
 
-    assert_eq!(writer, b"foofoofoo");
+    assert_eq!(*writer_cell.borrow(), b"foofoofoo");
 }
