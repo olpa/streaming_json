@@ -2,9 +2,10 @@ use std::cell::RefCell;
 use std::io::Write;
 
 use ::scan_json::action::{BoxedAction, BoxedEndAction, StreamOp, Trigger};
-use ::scan_json::matcher::Name;
-use ::scan_json::scan;
+use ::scan_json::matcher::{Matcher, Name};
+use ::scan_json::{scan, ContextFrame};
 use rjiter::RJiter;
+use rjiter::jiter::Peek;
 
 #[test]
 fn test_scan_json_empty_input() {
@@ -405,23 +406,32 @@ fn test_json_to_xml() {
     ]
 }"#;
 
-    let mut reader = json.as_bytes();
+    let mut reader = json_data.as_bytes();
     let mut buffer = vec![0u8; 16];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
     let writer_cell = RefCell::new(Vec::new());
 
-    struct SideEffectMatcher {
-        tag_infix: u8,
-        writer_cell: &RefCell<dyn Write>,
+    struct SideEffectMatcher<'a> {
+        tag_infix: Option<u8>,
+        writer_cell: &'a RefCell<Vec<u8>>,
     }
 
-    impl Matcher for SideEffectMatcher {
+    impl<'a> Matcher for SideEffectMatcher<'a> {
         fn matches(&self, name: &str, _context: &[ContextFrame]) -> bool {
-            let writer = self.writer_cell.borrow_mut();
-            writer.write(b'<').unwrap();
-            writer.write(&self.tag_infix).unwrap();
-            writer.write(b'>').unwrap();
+            let mut writer = self.writer_cell.borrow_mut();
+            writer.write_all(b"<").unwrap();
+            if let Some(tag_infix) = self.tag_infix {
+                writer.write_all(&[tag_infix]).unwrap();
+            }
+            writer.write_all(name.as_bytes()).unwrap();
+            writer.write_all(b">").unwrap();
             true
+        }
+    }
+
+    impl<'a> std::fmt::Debug for SideEffectMatcher<'a> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "SideEffectMatcher {{ tag_infix: {:?} }}", self.tag_infix)
         }
     }
 
@@ -430,7 +440,7 @@ fn test_json_to_xml() {
             tag_infix: None,
             writer_cell: &writer_cell,
         }),
-        Box::new(|_: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
+        Box::new(|rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>| {
                 let mut rjiter = rjiter_cell.borrow_mut();
                 let mut writer = writer_cell.borrow_mut();
                 let peek = rjiter.peek().unwrap();
@@ -443,12 +453,12 @@ fn test_json_to_xml() {
             },
         ),
     );
-    let end_tag: Trigger<BoxedAction<dyn Write>> = Trigger::new(
+    let end_tag: Trigger<BoxedEndAction<dyn Write>> = Trigger::new(
         Box::new(SideEffectMatcher {
-            tag_infix: Some(b"/"),
+            tag_infix: Some(b'/'),
             writer_cell: &writer_cell,
         }),
-        Box::new(|_: &RefCell<RJiter>, writer: &RefCell<dyn Write>| { }),
+        Box::new(|_writer: &RefCell<dyn Write>| { }),
     );
 
     scan(
@@ -461,5 +471,9 @@ fn test_json_to_xml() {
     .unwrap();
 
     let message = String::from_utf8(writer_cell.borrow().to_vec()).unwrap();
-    assert_eq!(message, "Hello! How can I assist you today?");
+    assert_eq!(message, "<name>John Doe</name><age></age><phones></phones>");
+
+    drop(begin_tag);
+    drop(end_tag);
+    drop(writer_cell);
 }
