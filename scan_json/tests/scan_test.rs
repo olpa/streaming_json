@@ -273,23 +273,29 @@ fn several_objects_top_level() {
     assert_eq!(*writer_cell.borrow(), b"foofoofoo");
 }
 
-fn scan_llm_output(json: &str) -> RefCell<dyn Write>{
+fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
     let mut reader = json.as_bytes();
-    let mut buffer = vec![0u8; 16];
+    let mut buffer = vec![0u8; 32];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
     let writer_cell = RefCell::new(Vec::new());
 
-    let matcher = Box::new(Name::new("foo".to_string()));
-    let action: BoxedAction<dyn Write> =
+    let begin_message: Trigger<BoxedAction<dyn Write>> = Trigger::new(
+        Box::new(Name::new("message".to_string())),
         Box::new(|_: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
-            writer.borrow_mut().write_all(b"foo").unwrap();
+            writer.borrow_mut().write_all(b"(new message)\n").unwrap();
             StreamOp::None
-        });
-    let triggers = vec![Trigger { matcher, action }];
+        }),
+    );
+    let end_message: Trigger<BoxedEndAction<dyn Write>> = Trigger::new(
+        Box::new(Name::new("message".to_string())),
+        Box::new(|writer: &RefCell<dyn Write>| {
+            writer.borrow_mut().write_all(b"\n").unwrap();
+        }),
+    );
 
     scan(
-        &triggers,
-        &vec![],
+        &vec![begin_message],
+        &vec![end_message],
         &vec![],
         &RefCell::new(rjiter),
         &writer_cell,
@@ -301,7 +307,40 @@ fn scan_llm_output(json: &str) -> RefCell<dyn Write>{
 
 #[test]
 fn scan_basic_llm_output() {
-    let json = r#"{"foo":1}  {"foo":2}  {"foo":3}"#;
+    let json = r#"{
+  "id": "chatcmpl-Ahpq4nZeP9mESaKsCVdmZdK96IrUH",
+  "object": "chat.completion",
+  "created": 1735010736,
+  "model": "gpt-4o-mini-2024-07-18",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Hello! How can I assist you today?",
+        "refusal": null
+      },
+      "logprobs": null,
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 9,
+    "completion_tokens": 10,
+    "total_tokens": 19,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "audio_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 0,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    }
+  },
+  "system_fingerprint": "fp_0aa8d3e20b"
+}"#;
     let writer_cell = scan_llm_output(json);
     assert_eq!(*writer_cell.borrow(), b"foofoofoo");
 }
