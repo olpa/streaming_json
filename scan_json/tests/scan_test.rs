@@ -392,3 +392,74 @@ data: [DONE]
     let message = String::from_utf8(writer_cell.borrow().to_vec()).unwrap();
     assert_eq!(message, "Hello! How can I assist you today?");
 }
+
+#[test]
+fn test_json_to_xml() {
+    let json_data = r#"
+{
+    "name": "John Doe", 
+    "age": 43,
+    "phones": [
+        "+44 1234567",
+        "+44 2345678"
+    ]
+}"#;
+
+    let mut reader = json.as_bytes();
+    let mut buffer = vec![0u8; 16];
+    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let writer_cell = RefCell::new(Vec::new());
+
+    struct SideEffectMatcher {
+        tag_infix: u8,
+        writer_cell: &RefCell<dyn Write>,
+    }
+
+    impl Matcher for SideEffectMatcher {
+        fn matches(&self, name: &str, _context: &[ContextFrame]) -> bool {
+            let writer = self.writer_cell.borrow_mut();
+            writer.write(b'<').unwrap();
+            writer.write(&self.tag_infix).unwrap();
+            writer.write(b'>').unwrap();
+            true
+        }
+    }
+
+    let begin_tag: Trigger<BoxedAction<dyn Write>> = Trigger::new(
+        Box::new(SideEffectMatcher {
+            tag_infix: None,
+            writer_cell: &writer_cell,
+        }),
+        Box::new(|_: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
+                let mut rjiter = rjiter_cell.borrow_mut();
+                let mut writer = writer_cell.borrow_mut();
+                let peek = rjiter.peek().unwrap();
+                if peek == Peek::String {
+                    rjiter.write_long_bytes(&mut *writer).unwrap();
+                    StreamOp::ValueIsConsumed
+                } else {
+                    StreamOp::None
+                }
+            },
+        ),
+    );
+    let end_tag: Trigger<BoxedAction<dyn Write>> = Trigger::new(
+        Box::new(SideEffectMatcher {
+            tag_infix: Some(b"/"),
+            writer_cell: &writer_cell,
+        }),
+        Box::new(|_: &RefCell<RJiter>, writer: &RefCell<dyn Write>| { }),
+    );
+
+    scan(
+        &vec![begin_tag],
+        &vec![end_tag],
+        &vec![],
+        &RefCell::new(rjiter),
+        &writer_cell,
+    )
+    .unwrap();
+
+    let message = String::from_utf8(writer_cell.borrow().to_vec()).unwrap();
+    assert_eq!(message, "Hello! How can I assist you today?");
+}
