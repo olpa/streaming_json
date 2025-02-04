@@ -272,3 +272,36 @@ fn several_objects_top_level() {
 
     assert_eq!(*writer_cell.borrow(), b"foofoofoo");
 }
+
+fn scan_llm_output(json: &str) -> RefCell<dyn Write>{
+    let mut reader = json.as_bytes();
+    let mut buffer = vec![0u8; 16];
+    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let writer_cell = RefCell::new(Vec::new());
+
+    let matcher = Box::new(Name::new("foo".to_string()));
+    let action: BoxedAction<dyn Write> =
+        Box::new(|_: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
+            writer.borrow_mut().write_all(b"foo").unwrap();
+            StreamOp::None
+        });
+    let triggers = vec![Trigger { matcher, action }];
+
+    scan(
+        &triggers,
+        &vec![],
+        &vec![],
+        &RefCell::new(rjiter),
+        &writer_cell,
+    )
+    .unwrap();
+
+    writer_cell
+}
+
+#[test]
+fn scan_basic_llm_output() {
+    let json = r#"{"foo":1}  {"foo":2}  {"foo":3}"#;
+    let writer_cell = scan_llm_output(json);
+    assert_eq!(*writer_cell.borrow(), b"foofoofoo");
+}
