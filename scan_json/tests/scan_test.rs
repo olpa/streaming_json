@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::io::Write;
 
 use ::scan_json::action::{BoxedAction, BoxedEndAction, StreamOp, Trigger};
 use ::scan_json::matcher::Name;
@@ -237,10 +238,38 @@ fn max_nesting_object() {
         &RefCell::new(rjiter),
         &RefCell::new(()),
     );
-    println!("{:?}", result); // FIXME
     let e = result.unwrap_err();
     assert_eq!(
         format!("{e}"),
         "Max nesting exceeded at position 100 with level 20"
     );
+}
+
+#[test]
+fn several_objects_top_level() {
+    let json = r#"{"foo":1}  {"foo":2}  {"foo":3}"#;
+    let mut reader = json.as_bytes();
+    let mut buffer = vec![0u8; 16];
+    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut writer = Vec::new();
+    let state = RefCell::new(false);
+
+    let matcher = Box::new(Name::new("foo".to_string()));
+    let action: BoxedAction<dyn Write> =
+        Box::new(|_: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
+            writer.borrow_mut().write_all(b"foo").unwrap();
+            StreamOp::None
+        });
+    let triggers = vec![Trigger { matcher, action }];
+
+    scan(
+        &triggers,
+        &vec![],
+        &vec![],
+        &RefCell::new(rjiter),
+        &RefCell::new(writer),
+    )
+    .unwrap();
+
+    assert_eq!(writer, b"foofoofoo");
 }
