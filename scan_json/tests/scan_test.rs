@@ -232,7 +232,6 @@ fn max_nesting_array() {
         &RefCell::new(rjiter),
         &RefCell::new(()),
     );
-    println!("{:?}", result); // FIXME
     let e = result.unwrap_err();
     assert_eq!(
         format!("{e}"),
