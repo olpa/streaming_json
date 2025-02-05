@@ -196,14 +196,21 @@ fn test_call_begin_consume_value() {
 
 #[test]
 fn test_call_end() {
-    let json = r#"{"aa": "bb", "foo": {"bar": "baz"}, "baz": "qux"}"#;
+    let json = r#"{"aa": "bb",
+        "foo": {"foo is an object": true, "foo": "nested foo, string"},
+        "foo": "string",
+        "foo": ["foo is an array"],
+        "foo": 42,
+        "foo": true,
+        "foo": null
+    }"#;
     let mut reader = json.as_bytes();
-    let mut buffer = vec![0u8; 16];
+    let mut buffer = vec![0u8; 32];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
 
-    let state = RefCell::new(false);
+    let state = RefCell::new(0);
     let matcher = Box::new(Name::new("foo".to_string()));
-    let action: BoxedEndAction<bool> = Box::new(|state: &RefCell<bool>| *state.borrow_mut() = true);
+    let action: BoxedEndAction<i32> = Box::new(|state: &RefCell<i32>| *state.borrow_mut() += 1);
     let triggers_end = vec![Trigger { matcher, action }];
 
     scan(
@@ -214,7 +221,11 @@ fn test_call_end() {
         &state,
     )
     .unwrap();
-    assert!(*state.borrow(), "Trigger should have been called for 'foo'");
+    assert_eq!(
+        *state.borrow(),
+        7,
+        "Trigger should have been called for end-of-'foo' 7 times"
+    );
 }
 
 #[test]
