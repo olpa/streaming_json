@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::io::Write;
 
 use ::scan_json::action::{BoxedAction, BoxedEndAction, StreamOp, Trigger};
 use ::scan_json::matcher::Name;
@@ -116,6 +117,23 @@ fn test_scan_json_nested_complex() {
 }
 
 #[test]
+fn skip_long_string() {
+    let json = format!(r#"{{"foo": "{}", "bar": "baz"}}"#, "a".repeat(100));
+    let mut reader = json.as_bytes();
+    let mut buffer = vec![0u8; 8];
+    let rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    scan(
+        &vec![],
+        &vec![],
+        &vec![],
+        &RefCell::new(rjiter),
+        &RefCell::new(()),
+    )
+    .unwrap();
+}
+
+#[test]
 fn test_skip_sse_tokens() {
     let json = r#"data: {"foo": "bar"} [DONE] "#;
     let mut reader = json.as_bytes();
@@ -214,7 +232,6 @@ fn max_nesting_array() {
         &RefCell::new(rjiter),
         &RefCell::new(()),
     );
-    println!("{:?}", result); // FIXME
     let e = result.unwrap_err();
     assert_eq!(
         format!("{e}"),
@@ -237,10 +254,157 @@ fn max_nesting_object() {
         &RefCell::new(rjiter),
         &RefCell::new(()),
     );
-    println!("{:?}", result); // FIXME
     let e = result.unwrap_err();
     assert_eq!(
         format!("{e}"),
         "Max nesting exceeded at position 100 with level 20"
     );
+}
+
+#[test]
+fn several_objects_top_level() {
+    let json = r#"{"foo":1}  {"foo":2}  {"foo":3}"#;
+    let mut reader = json.as_bytes();
+    let mut buffer = vec![0u8; 16];
+    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let writer_cell = RefCell::new(Vec::new());
+
+    let matcher = Box::new(Name::new("foo".to_string()));
+    let action: BoxedAction<dyn Write> =
+        Box::new(|_: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
+            writer.borrow_mut().write_all(b"foo").unwrap();
+            StreamOp::None
+        });
+    let triggers = vec![Trigger { matcher, action }];
+
+    scan(
+        &triggers,
+        &vec![],
+        &vec![],
+        &RefCell::new(rjiter),
+        &writer_cell,
+    )
+    .unwrap();
+
+    assert_eq!(*writer_cell.borrow(), b"foofoofoo");
+}
+
+fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
+    let mut reader = json.as_bytes();
+    let mut buffer = vec![0u8; 32];
+    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let writer_cell = RefCell::new(Vec::new());
+
+    let begin_message: Trigger<BoxedAction<dyn Write>> = Trigger::new(
+        Box::new(Name::new("message".to_string())),
+        Box::new(|_: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
+            writer.borrow_mut().write_all(b"(new message)\n").unwrap();
+            StreamOp::None
+        }),
+    );
+    let content: Trigger<BoxedAction<dyn Write>> = Trigger::new(
+        Box::new(Name::new("content".to_string())),
+        Box::new(
+            |rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>| {
+                let mut rjiter = rjiter_cell.borrow_mut();
+                let mut writer = writer_cell.borrow_mut();
+                rjiter.peek().unwrap();
+                rjiter.write_long_bytes(&mut *writer).unwrap();
+                StreamOp::ValueIsConsumed
+            },
+        ),
+    );
+    let end_message: Trigger<BoxedEndAction<dyn Write>> = Trigger::new(
+        Box::new(Name::new("message".to_string())),
+        Box::new(|writer: &RefCell<dyn Write>| {
+            writer.borrow_mut().write_all(b"\n").unwrap();
+        }),
+    );
+
+    scan(
+        &vec![begin_message, content],
+        &vec![end_message],
+        &vec!["data:", "DONE"],
+        &RefCell::new(rjiter),
+        &writer_cell,
+    )
+    .unwrap();
+
+    writer_cell
+}
+
+#[test]
+fn scan_basic_llm_output() {
+    let json = r#"{
+  "id": "chatcmpl-Ahpq4nZeP9mESaKsCVdmZdK96IrUH",
+  "object": "chat.completion",
+  "created": 1735010736,
+  "model": "gpt-4o-mini-2024-07-18",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Hello! How can I assist you today?",
+        "refusal": null
+      },
+      "logprobs": null,
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 9,
+    "completion_tokens": 10,
+    "total_tokens": 19,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "audio_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 0,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    }
+  },
+  "system_fingerprint": "fp_0aa8d3e20b"
+}"#;
+    let writer_cell = scan_llm_output(json);
+    let message = String::from_utf8(writer_cell.borrow().to_vec()).unwrap();
+    assert_eq!(
+        message,
+        "(new message)\nHello! How can I assist you today?\n"
+    );
+}
+
+#[test]
+fn scan_streaming_llm_output() {
+    let json = r#"
+data: {"choices":[{"index":0,"delta":{"role":"assistant","content":"","refusal":null},"logprobs":null,"finish_reason":null}],"id":"chatcmpl-AgMB1khICnwswjgqIl2X2jr587Nep","object":"chat.completion.chunk","created":1734658387,"model":"gpt-4o-mini-2024-07-18","system_fingerprint":"fp_d02d531b47"}
+
+data: {"choices":[{"index":0,"delta":{"content":"Hello"},"logprobs":null,"finish_reason":null}],"id":"chatcmpl-AgMB1khICnwswjgqIl2X2jr587Nep","object":"chat.completion.chunk","created":1734658387,"model":"gpt-4o-mini-2024-07-18","system_fingerprint":"fp_d02d531b47"}
+
+data: {"choices":[{"index":0,"delta":{"content":"!"},"logprobs":null,"finish_reason":null}],"id":"chatcmpl-AgMB1khICnwswjgqIl2X2jr587Nep","object":"chat.completion.chunk","created":1734658387,"model":"gpt-4o-mini-2024-07-18","system_fingerprint":"fp_d02d531b47"}
+
+data: {"choices":[{"index":0,"delta":{"content":" How"},"logprobs":null,"finish_reason":null}],"id":"chatcmpl-AgMB1khICnwswjgqIl2X2jr587Nep","object":"chat.completion.chunk","created":1734658387,"model":"gpt-4o-mini-2024-07-18","system_fingerprint":"fp_d02d531b47"}
+
+data: {"choices":[{"index":0,"delta":{"content":" can"},"logprobs":null,"finish_reason":null}],"id":"chatcmpl-AgMB1khICnwswjgqIl2X2jr587Nep","object":"chat.completion.chunk","created":1734658387,"model":"gpt-4o-mini-2024-07-18","system_fingerprint":"fp_d02d531b47"}
+
+data: {"choices":[{"index":0,"delta":{"content":" I"},"logprobs":null,"finish_reason":null}],"id":"chatcmpl-AgMB1khICnwswjgqIl2X2jr587Nep","object":"chat.completion.chunk","created":1734658387,"model":"gpt-4o-mini-2024-07-18","system_fingerprint":"fp_d02d531b47"}
+
+data: {"choices":[{"index":0,"delta":{"content":" assist"},"logprobs":null,"finish_reason":null}],"id":"chatcmpl-AgMB1khICnwswjgqIl2X2jr587Nep","object":"chat.completion.chunk","created":1734658387,"model":"gpt-4o-mini-2024-07-18","system_fingerprint":"fp_d02d531b47"}
+
+data: {"choices":[{"index":0,"delta":{"content":" you"},"logprobs":null,"finish_reason":null}],"id":"chatcmpl-AgMB1khICnwswjgqIl2X2jr587Nep","object":"chat.completion.chunk","created":1734658387,"model":"gpt-4o-mini-2024-07-18","system_fingerprint":"fp_d02d531b47"}
+
+data: {"choices":[{"index":0,"delta":{"content":" today"},"logprobs":null,"finish_reason":null}],"id":"chatcmpl-AgMB1khICnwswjgqIl2X2jr587Nep","object":"chat.completion.chunk","created":1734658387,"model":"gpt-4o-mini-2024-07-18","system_fingerprint":"fp_d02d531b47"}
+
+data: {"choices":[{"index":0,"delta":{"content":"?"},"logprobs":null,"finish_reason":null}],"id":"chatcmpl-AgMB1khICnwswjgqIl2X2jr587Nep","object":"chat.completion.chunk","created":1734658387,"model":"gpt-4o-mini-2024-07-18","system_fingerprint":"fp_d02d531b47"}
+
+data: {"choices":[{"index":0,"delta":{},"logprobs":null,"finish_reason":"stop"}],"id":"chatcmpl-AgMB1khICnwswjgqIl2X2jr587Nep","object":"chat.completion.chunk","created":1734658387,"model":"gpt-4o-mini-2024-07-18","system_fingerprint":"fp_d02d531b47"}
+
+data: [DONE]
+"#;
+    let writer_cell = scan_llm_output(json);
+    let message = String::from_utf8(writer_cell.borrow().to_vec()).unwrap();
+    assert_eq!(message, "Hello! How can I assist you today?");
 }

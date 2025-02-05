@@ -26,7 +26,7 @@ pub fn mk_context_frame_for_test(current_key: String) -> ContextFrame {
     }
 }
 
-fn handle_object<T>(
+fn handle_object<T: ?Sized>(
     rjiter_cell: &RefCell<RJiter>,
     baton_cell: &RefCell<T>,
     triggers: &[Trigger<BoxedAction<T>>],
@@ -125,7 +125,7 @@ fn push_context(
 /// # Errors
 ///
 /// TODO: describe the errors
-pub fn scan<T>(
+pub fn scan<T: ?Sized>(
     triggers: &[Trigger<BoxedAction<T>>],
     triggers_end: &[Trigger<BoxedEndAction<T>>],
     sse_tokens: &[&str],
