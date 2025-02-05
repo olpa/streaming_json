@@ -9,3 +9,5 @@ pub use action::{BoxedAction, BoxedEndAction, BoxedMatcher, StreamOp, Trigger};
 pub use error::{Error, Result};
 pub use matcher::{Matcher, Name, ParentAndName};
 pub use scan::{scan, ContextFrame};
+
+pub use rjiter;
