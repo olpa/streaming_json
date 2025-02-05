@@ -426,10 +426,10 @@ fn test_json_to_xml() {
 {
     "name": "John Doe", 
     "age": 43,
-    "phones": [
-        "+44 1234567",
-        "+44 2345678"
-    ]
+    "phones": {
+        "phone": "+44 1234567",
+        "phone": "+44 2345678"
+    }
 }"#;
 
     let mut reader = json_data.as_bytes();
@@ -498,5 +498,5 @@ fn test_json_to_xml() {
     .unwrap();
 
     let message = String::from_utf8(writer_cell.borrow().to_vec()).unwrap();
-    assert_eq!(message, "<name>John Doe</name><age></age><phones></phones>");
+    assert_eq!(message, "<name>John Doe</name><age></age><phones><phone>+44 1234567</phone><phone>+44 2345678</phone></phones>");
 }
