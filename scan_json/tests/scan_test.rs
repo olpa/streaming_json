@@ -2,9 +2,8 @@ use std::cell::RefCell;
 use std::io::Write;
 
 use ::scan_json::action::{BoxedAction, BoxedEndAction, StreamOp, Trigger};
-use ::scan_json::matcher::{Matcher, Name};
-use ::scan_json::{scan, ContextFrame};
-use rjiter::jiter::Peek;
+use ::scan_json::matcher::Name;
+use ::scan_json::scan;
 use rjiter::RJiter;
 
 #[test]
@@ -109,6 +108,23 @@ fn test_scan_json_nested_complex() {
     let triggers: Vec<Trigger<BoxedAction<()>>> = vec![];
     scan(
         &triggers,
+        &vec![],
+        &vec![],
+        &RefCell::new(rjiter),
+        &RefCell::new(()),
+    )
+    .unwrap();
+}
+
+#[test]
+fn skip_long_string() {
+    let json = format!(r#"{{"foo": "{}", "bar": "baz"}}"#, "a".repeat(100));
+    let mut reader = json.as_bytes();
+    let mut buffer = vec![0u8; 8];
+    let rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    scan(
+        &vec![],
         &vec![],
         &vec![],
         &RefCell::new(rjiter),
