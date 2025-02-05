@@ -4,8 +4,8 @@ use std::io::Write;
 use ::scan_json::action::{BoxedAction, BoxedEndAction, StreamOp, Trigger};
 use ::scan_json::matcher::{Matcher, Name};
 use ::scan_json::{scan, ContextFrame};
-use rjiter::RJiter;
 use rjiter::jiter::Peek;
+use rjiter::RJiter;
 
 #[test]
 fn test_scan_json_empty_input() {
@@ -440,7 +440,8 @@ fn test_json_to_xml() {
             tag_infix: None,
             writer_cell: &writer_cell,
         }),
-        Box::new(|rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>| {
+        Box::new(
+            |rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>| {
                 let mut rjiter = rjiter_cell.borrow_mut();
                 let mut writer = writer_cell.borrow_mut();
                 let peek = rjiter.peek().unwrap();
@@ -458,7 +459,7 @@ fn test_json_to_xml() {
             tag_infix: Some(b'/'),
             writer_cell: &writer_cell,
         }),
-        Box::new(|_writer: &RefCell<dyn Write>| { }),
+        Box::new(|_writer: &RefCell<dyn Write>| {}),
     );
 
     scan(
@@ -472,8 +473,4 @@ fn test_json_to_xml() {
 
     let message = String::from_utf8(writer_cell.borrow().to_vec()).unwrap();
     assert_eq!(message, "<name>John Doe</name><age></age><phones></phones>");
-
-    drop(begin_tag);
-    drop(end_tag);
-    drop(writer_cell);
 }

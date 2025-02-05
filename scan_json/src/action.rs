@@ -9,23 +9,23 @@ pub enum StreamOp {
     ValueIsConsumed,
 }
 
-pub type BoxedMatcher = Box<dyn Matcher>;
+pub type BoxedMatcher<'a> = Box<dyn Matcher + 'a>;
 
 #[allow(clippy::module_name_repetitions)]
-pub type BoxedAction<T> = Box<dyn Fn(&RefCell<RJiter>, &RefCell<T>) -> StreamOp>;
+pub type BoxedAction<'a, T> = Box<dyn Fn(&RefCell<RJiter>, &RefCell<T>) -> StreamOp + 'a>;
 
 #[allow(clippy::module_name_repetitions)]
-pub type BoxedEndAction<T> = Box<dyn Fn(&RefCell<T>)>;
+pub type BoxedEndAction<'a, T> = Box<dyn Fn(&RefCell<T>) + 'a>;
 
 #[derive(Debug)]
-pub struct Trigger<BoxedActionT> {
-    pub matcher: BoxedMatcher,
+pub struct Trigger<'a, BoxedActionT> {
+    pub matcher: BoxedMatcher<'a>,
     pub action: BoxedActionT,
 }
 
-impl<BoxedActionT> Trigger<BoxedActionT> {
+impl<'a, BoxedActionT> Trigger<'a, BoxedActionT> {
     #[must_use]
-    pub fn new(matcher: BoxedMatcher, action: BoxedActionT) -> Self {
+    pub fn new(matcher: BoxedMatcher<'a>, action: BoxedActionT) -> Self {
         Self { matcher, action }
     }
 }
