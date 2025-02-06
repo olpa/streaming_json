@@ -35,6 +35,12 @@ fn handle_object<T: ?Sized>(
     context: &mut Vec<ContextFrame>,
 ) -> ScanResult<(StreamOp, ContextFrame)> {
     {
+        if !cur_level.is_elem_begin {
+            if let Some(end_action) = find_action(triggers_end, &cur_level.current_key, context) {
+                end_action(baton_cell);
+            }
+        }
+
         let mut rjiter = rjiter_cell.borrow_mut();
         let keyr = if cur_level.is_elem_begin {
             rjiter.next_object()
@@ -48,14 +54,10 @@ fn handle_object<T: ?Sized>(
             cur_level.current_key = key_str;
         } else {
             // The "else" arm mutates the context and ends the function
-            if let Some(cur_level) = context.pop() {
-                if let Some(end_action) = find_action(triggers_end, &cur_level.current_key, context)
-                {
-                    end_action(baton_cell);
-                }
-                return Ok((StreamOp::ValueIsConsumed, cur_level));
-            }
-            return Err(ScanError::UnbalancedJson(rjiter.current_index()));
+            return match context.pop() {
+                Some(cur_level) => Ok((StreamOp::ValueIsConsumed, cur_level)),
+                None => Err(ScanError::UnbalancedJson(rjiter.current_index())),
+            };
         }
     }
 
