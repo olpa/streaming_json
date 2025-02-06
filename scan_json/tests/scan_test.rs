@@ -273,6 +273,30 @@ fn max_nesting_object() {
 }
 
 #[test]
+fn error_in_begin_action() {
+    let json = r#"{"foo": 123}"#;
+    let mut reader = json.as_bytes();
+    let mut buffer = vec![0u8; 16];
+    let rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    let matcher = Box::new(Name::new("foo".to_string()));
+    let action: BoxedAction<()> =
+        Box::new(|_: &RefCell<RJiter>, _: &RefCell<()>| StreamOp::Error("Test error".into()));
+    let triggers = vec![Trigger { matcher, action }];
+
+    let result = scan(
+        &triggers,
+        &vec![],
+        &vec![],
+        &RefCell::new(rjiter),
+        &RefCell::new(()),
+    );
+
+    let err = result.unwrap_err();
+    assert_eq!(format!("{err}"), "Action error: Test error");
+}
+
+#[test]
 fn several_objects_top_level() {
     let json = r#"{"foo":1}  {"foo":2}  {"foo":3}"#;
     let mut reader = json.as_bytes();
