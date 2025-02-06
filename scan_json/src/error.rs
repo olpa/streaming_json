@@ -5,12 +5,16 @@ pub enum Error {
     UnbalancedJson(usize),
     InternalError(usize, String),
     MaxNestingExceeded(usize, usize),
+    ActionError(Box<dyn std::error::Error>),
 }
+
+impl std::error::Error for Error {}
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::RJiterError(e) => e.fmt(f),
+            Error::RJiterError(e) => write!(f, "RJiter error: {e}"),
+            Error::ActionError(e) => write!(f, "Action error: {e}"),
             Error::UnhandledPeek(p) => write!(f, "UnhandledPeek: {p:?}"),
             Error::UnbalancedJson(pos) => write!(f, "Unbalanced JSON at position: {pos}"),
             Error::InternalError(pos, msg) => write!(f, "Internal error at position {pos}: {msg}"),

@@ -210,7 +210,10 @@ fn test_call_end() {
 
     let state = RefCell::new(0);
     let matcher = Box::new(Name::new("foo".to_string()));
-    let action: BoxedEndAction<i32> = Box::new(|state: &RefCell<i32>| *state.borrow_mut() += 1);
+    let action: BoxedEndAction<i32> = Box::new(|state: &RefCell<i32>| {
+        *state.borrow_mut() += 1;
+        Ok(())
+    });
     let triggers_end = vec![Trigger { matcher, action }];
 
     scan(
@@ -273,6 +276,58 @@ fn max_nesting_object() {
 }
 
 #[test]
+fn error_in_begin_action() {
+    let json = r#"{"foo": 123}"#;
+    let mut reader = json.as_bytes();
+    let mut buffer = vec![0u8; 16];
+    let rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    let matcher = Box::new(Name::new("foo".to_string()));
+    let action: BoxedAction<()> = Box::new(|_: &RefCell<RJiter>, _: &RefCell<()>| {
+        StreamOp::Error("Test error in begin-action".into())
+    });
+    let triggers = vec![Trigger { matcher, action }];
+
+    let result = scan(
+        &triggers,
+        &vec![],
+        &vec![],
+        &RefCell::new(rjiter),
+        &RefCell::new(()),
+    );
+
+    let err = result.unwrap_err();
+    assert_eq!(format!("{err}"), "Action error: Test error in begin-action");
+}
+
+#[test]
+fn error_in_end_action() {
+    let json = r#"{"foo": 123}"#;
+    let mut reader = json.as_bytes();
+    let mut buffer = vec![0u8; 16];
+    let rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    let matcher = Box::new(Name::new("foo".to_string()));
+    let end_action: BoxedEndAction<()> =
+        Box::new(|_: &RefCell<()>| Err("Test error in end-action".into()));
+    let triggers_end = vec![Trigger {
+        matcher,
+        action: end_action,
+    }];
+
+    let result = scan(
+        &vec![],
+        &triggers_end,
+        &vec![],
+        &RefCell::new(rjiter),
+        &RefCell::new(()),
+    );
+
+    let err = result.unwrap_err();
+    assert_eq!(format!("{err}"), "Action error: Test error in end-action");
+}
+
+#[test]
 fn several_objects_top_level() {
     let json = r#"{"foo":1}  {"foo":2}  {"foo":3}"#;
     let mut reader = json.as_bytes();
@@ -309,8 +364,11 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
     let begin_message: Trigger<BoxedAction<dyn Write>> = Trigger::new(
         Box::new(Name::new("message".to_string())),
         Box::new(|_: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
-            writer.borrow_mut().write_all(b"(new message)\n").unwrap();
-            StreamOp::None
+            let result = writer.borrow_mut().write_all(b"(new message)\n");
+            match result {
+                Ok(_) => StreamOp::None,
+                Err(e) => StreamOp::Error(Box::new(e)),
+            }
         }),
     );
     let content: Trigger<BoxedAction<dyn Write>> = Trigger::new(
@@ -319,16 +377,21 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
             |rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>| {
                 let mut rjiter = rjiter_cell.borrow_mut();
                 let mut writer = writer_cell.borrow_mut();
-                rjiter.peek().unwrap();
-                rjiter.write_long_bytes(&mut *writer).unwrap();
-                StreamOp::ValueIsConsumed
+                let result = rjiter
+                    .peek()
+                    .and_then(|_| rjiter.write_long_bytes(&mut *writer));
+                match result {
+                    Ok(_) => StreamOp::ValueIsConsumed,
+                    Err(e) => StreamOp::Error(Box::new(e)),
+                }
             },
         ),
     );
     let end_message: Trigger<BoxedEndAction<dyn Write>> = Trigger::new(
         Box::new(Name::new("message".to_string())),
         Box::new(|writer: &RefCell<dyn Write>| {
-            writer.borrow_mut().write_all(b"\n").unwrap();
+            writer.borrow_mut().write_all(b"\n")?;
+            Ok(())
         }),
     );
 
@@ -485,7 +548,7 @@ fn test_json_to_xml() {
             tag_infix: Some(b'/'),
             writer_cell: &writer_cell,
         }),
-        Box::new(|_writer: &RefCell<dyn Write>| {}),
+        Box::new(|_writer: &RefCell<dyn Write>| Ok(())),
     );
 
     scan(

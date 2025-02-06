@@ -37,7 +37,9 @@ fn handle_object<T: ?Sized>(
     {
         if !cur_level.is_elem_begin {
             if let Some(end_action) = find_action(triggers_end, &cur_level.current_key, context) {
-                end_action(baton_cell);
+                if let Err(e) = end_action(baton_cell) {
+                    return Err(ScanError::ActionError(e));
+                }
             }
         }
 
@@ -156,8 +158,10 @@ pub fn scan<T: ?Sized>(
             )?;
             cur_level = new_cur_level;
 
-            if action_result == StreamOp::ValueIsConsumed {
-                continue;
+            match action_result {
+                StreamOp::ValueIsConsumed => continue,
+                StreamOp::Error(e) => return Err(ScanError::ActionError(e)),
+                StreamOp::None => (),
             }
         }
 

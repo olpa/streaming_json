@@ -3,10 +3,11 @@ use crate::scan::ContextFrame;
 use rjiter::RJiter;
 use std::cell::RefCell;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub enum StreamOp {
     None,
     ValueIsConsumed,
+    Error(Box<dyn std::error::Error>),
 }
 
 pub type BoxedMatcher<'a> = Box<dyn Matcher + 'a>;
@@ -15,7 +16,8 @@ pub type BoxedMatcher<'a> = Box<dyn Matcher + 'a>;
 pub type BoxedAction<'a, T> = Box<dyn Fn(&RefCell<RJiter>, &RefCell<T>) -> StreamOp + 'a>;
 
 #[allow(clippy::module_name_repetitions)]
-pub type BoxedEndAction<'a, T> = Box<dyn Fn(&RefCell<T>) + 'a>;
+pub type BoxedEndAction<'a, T> =
+    Box<dyn Fn(&RefCell<T>) -> std::result::Result<(), Box<dyn std::error::Error>> + 'a>;
 
 #[derive(Debug)]
 pub struct Trigger<'a, BoxedActionT> {

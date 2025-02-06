@@ -20,8 +20,11 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
     let begin_message: Trigger<BoxedAction<dyn Write>> = Trigger::new(
         Box::new(Name::new("message".to_string())),
         Box::new(|_: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
-            writer.borrow_mut().write_all(b"(new message)\n").unwrap();
-            StreamOp::None
+            let result = writer.borrow_mut().write_all(b"(new message)\n");
+            match result {
+                Ok(_) => StreamOp::None,
+                Err(e) => StreamOp::Error(Box::new(e)),
+            }
         }),
     );
     let content: Trigger<BoxedAction<dyn Write>> = Trigger::new(
@@ -30,16 +33,21 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
             |rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>| {
                 let mut rjiter = rjiter_cell.borrow_mut();
                 let mut writer = writer_cell.borrow_mut();
-                rjiter.peek().unwrap();
-                rjiter.write_long_bytes(&mut *writer).unwrap();
-                StreamOp::ValueIsConsumed
+                let result = rjiter
+                    .peek()
+                    .and_then(|_| rjiter.write_long_bytes(&mut *writer));
+                match result {
+                    Ok(_) => StreamOp::ValueIsConsumed,
+                    Err(e) => StreamOp::Error(Box::new(e)),
+                }
             },
         ),
     );
     let end_message: Trigger<BoxedEndAction<dyn Write>> = Trigger::new(
         Box::new(Name::new("message".to_string())),
         Box::new(|writer: &RefCell<dyn Write>| {
-            writer.borrow_mut().write_all(b"\n").unwrap();
+            writer.borrow_mut().write_all(b"\n")?;
+            Ok(())
         }),
     );
 
