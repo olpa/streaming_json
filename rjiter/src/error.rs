@@ -34,6 +34,8 @@ pub struct Error {
     pub index: usize,
 }
 
+impl std::error::Error for Error {}
+
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} at index {}", self.error_type, self.index)
