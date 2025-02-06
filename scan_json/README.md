@@ -1,8 +1,27 @@
-# React to events in a JSON stream
+# React to objects in a JSON stream
 
-This crate is a work in progress.
+Start processing JSON before the entire JSON document is available.
 
-## Usage
+- [crate](https://crates.io/crates/scan_json)
+- [documentation](https://docs.rs/scan_json/)
+
+
+## Concepts
+
+The library uses the streaming JSON parser [`RJiter`](https://crates.io/crates/rjiter).
+
+The `scan` function checks for registered handlers (**action**s) at the begin and end of every JSON key. The check is performed by a `Matcher` trait object. Together, a matcher plus an action form a **trigger**.
+
+An action gets two `RefCell` references as arguments:
+
+- `baton_cell`: A black box for side effects by the action
+- `rjiter_cell`: `RJiter` parser object. An action can interfere with JSON parsing by consuming the value of the current key
+
+
+## Example of a trigger
+
+
+## Complete example
 
 ```rust
 use std::cell::RefCell;
