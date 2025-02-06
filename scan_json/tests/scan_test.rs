@@ -280,8 +280,9 @@ fn error_in_begin_action() {
     let rjiter = RJiter::new(&mut reader, &mut buffer);
 
     let matcher = Box::new(Name::new("foo".to_string()));
-    let action: BoxedAction<()> =
-        Box::new(|_: &RefCell<RJiter>, _: &RefCell<()>| StreamOp::Error("Test error".into()));
+    let action: BoxedAction<()> = Box::new(|_: &RefCell<RJiter>, _: &RefCell<()>| {
+        StreamOp::Error("Test error in begin-action".into())
+    });
     let triggers = vec![Trigger { matcher, action }];
 
     let result = scan(
@@ -293,7 +294,35 @@ fn error_in_begin_action() {
     );
 
     let err = result.unwrap_err();
-    assert_eq!(format!("{err}"), "Action error: Test error");
+    assert_eq!(format!("{err}"), "Action error: Test error in begin-action");
+}
+
+#[test]
+fn error_in_end_action() {
+    let json = r#"{"foo": 123}"#;
+    let mut reader = json.as_bytes();
+    let mut buffer = vec![0u8; 16];
+    let rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    let matcher = Box::new(Name::new("foo".to_string()));
+    let end_action: BoxedEndAction<()> = Box::new(|_: &RefCell<()>| {
+        return StreamOp::Error("Test error in end-action".into());
+    });
+    let triggers_end = vec![Trigger {
+        matcher,
+        action: end_action,
+    }];
+
+    let result = scan(
+        &vec![],
+        &triggers_end,
+        &vec![],
+        &RefCell::new(rjiter),
+        &RefCell::new(()),
+    );
+
+    let err = result.unwrap_err();
+    assert_eq!(format!("{err}"), "Action error: Test error in end-action");
 }
 
 #[test]
