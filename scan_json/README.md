@@ -33,7 +33,8 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
             |rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>| {
                 let mut rjiter = rjiter_cell.borrow_mut();
                 let mut writer = writer_cell.borrow_mut();
-                let result = rjiter.peek()
+                let result = rjiter
+                    .peek()
                     .and_then(|_| rjiter.write_long_bytes(&mut *writer));
                 match result {
                     Ok(_) => StreamOp::ValueIsConsumed,
