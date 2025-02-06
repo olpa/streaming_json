@@ -2,11 +2,13 @@ use crate::matcher::Matcher;
 use crate::scan::ContextFrame;
 use rjiter::RJiter;
 use std::cell::RefCell;
+use std::error::Error;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub enum StreamOp {
     None,
     ValueIsConsumed,
+    Error(Box<dyn Error>),
 }
 
 pub type BoxedMatcher<'a> = Box<dyn Matcher + 'a>;

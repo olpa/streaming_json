@@ -156,8 +156,10 @@ pub fn scan<T: ?Sized>(
             )?;
             cur_level = new_cur_level;
 
-            if action_result == StreamOp::ValueIsConsumed {
-                continue;
+            match action_result {
+                StreamOp::ValueIsConsumed => continue,
+                StreamOp::Error(e) => return Err(ScanError::ActionError(e)),
+                StreamOp::None => (),
             }
         }
 
