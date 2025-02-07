@@ -205,3 +205,14 @@ assert_eq!(message, "Hello! How can I assist you today?");
 The library is not a generic [SAX-like interface](https://en.wikipedia.org/wiki/Simple_API_for_XML): There are no callbacks for arrays and character data.
 
 The library is not async.
+
+
+# Colophon
+
+License: MIT
+
+Author: Oleg Parashchenko, olpa@ <https://uucode.com/>
+
+Contact: via email or [Ailets Discord](https://discord.gg/HEBE3gv2)
+
+`scan_json` is a part of the [ailets.org](https://ailets.org) project.
