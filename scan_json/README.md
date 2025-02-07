@@ -20,6 +20,38 @@ An action gets two `RefCell` references as arguments:
 
 ## Example of a trigger
 
+The trigger matches the key `content` and calls the `on_content` function.
+
+The content of the action's black box is a `Write` trait object. The action writes to it the string value of the current JSON key `content`.
+
+Getting the value requires to co-use the `RJiter` parser to consume the next token. The action returns `StreamOp::ValueIsConsumed` so that the caller can update its internal state.
+
+The type annotation `Trigger<BoxedAction<dyn Write>>` is not needed in this code fragment, but it is often required when using closure handlers and several triggers.
+
+```rust
+use scan_json::{Name, Trigger, BoxedAction, StreamOp, rjiter::RJiter};
+use std::cell::RefCell;
+use std::io::Write;
+
+
+let content_trigger: Trigger<BoxedAction<dyn Write>> = Trigger::new(
+  Box::new(Name::new("content".to_string())),
+  Box::new(on_content)
+);
+
+fn on_content(rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>) -> StreamOp {
+    let mut rjiter = rjiter_cell.borrow_mut();
+    let mut writer = writer_cell.borrow_mut();
+    let result = rjiter
+        .peek()
+        .and_then(|_| rjiter.write_long_bytes(&mut *writer));
+    match result {
+        Ok(_) => StreamOp::ValueIsConsumed,
+        Err(e) => StreamOp::Error(Box::new(e)),
+    }
+}
+```
+
 
 ## Complete example
 
