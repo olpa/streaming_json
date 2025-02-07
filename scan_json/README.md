@@ -55,6 +55,18 @@ fn on_content(rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>) -
 
 ## Complete example
 
+Summary:
+
+- Initialize the parser
+- Create the black box with a `Vec`, which is used as `dyn Write` in actions
+- Create triggers for `message`, `content`, and a trigger for the end of `message`
+- Combine all together in the `scan` function
+
+The example demonstrates that `scan` can be used to handle LLM streaming output:
+
+- The input is several JSON objects on the top-level, without being wrapped in an array
+- The server-side-events tokens are ignored
+
 ```rust
 use std::cell::RefCell;
 use std::io::Write;
