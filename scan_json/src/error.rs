@@ -1,3 +1,5 @@
+//! Error types for JSON stream processing.
+
 /// Error types for the JSON stream processor
 ///
 /// - `ActionError`: Error returned from a trigger action
