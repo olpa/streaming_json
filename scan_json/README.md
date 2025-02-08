@@ -1,4 +1,4 @@
-# React to objects in a JSON stream
+# React to elements in a JSON stream
 
 Start processing JSON before the entire JSON document is available.
 
