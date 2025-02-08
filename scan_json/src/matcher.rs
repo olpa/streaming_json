@@ -53,11 +53,8 @@ impl ParentAndName {
 
 impl Matcher for ParentAndName {
     fn matches(&self, name: &str, context: &[ContextFrame]) -> bool {
-        if context.is_empty() {
-            return false;
-        }
-        #[allow(clippy::indexing_slicing)]
-        let parent = &context[context.len() - 1];
-        self.name == name && parent.current_key == self.parent
+        context.last().map_or(false, |parent| {
+            self.name == name && parent.current_key == self.parent
+        })
     }
 }

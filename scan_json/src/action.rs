@@ -60,6 +60,7 @@ impl<'a, BoxedActionT> Trigger<'a, BoxedActionT> {
 ///
 /// # Returns
 /// * `Option<&BoxedActionT>` - Reference to the matching action if found, None otherwise
+#[must_use]
 pub(crate) fn find_action<'a, BoxedActionT>(
     triggers: &'a [Trigger<BoxedActionT>],
     for_key: &str,

@@ -10,7 +10,7 @@ Start processing JSON before the entire JSON document is available.
 
 The library uses the streaming JSON parser [`RJiter`](https://crates.io/crates/rjiter).
 
-The `scan` function checks for registered handlers (**action**s) at the begin and end of every JSON key. The check is performed by a `Matcher` trait object. Together, a matcher plus an action form a **trigger**.
+The `scan` function checks for registered handlers (**actions**) at the begin and end of every JSON key. The check is performed by a **matcher**. Together, a matcher plus an action form a **trigger**.
 
 An action gets two `RefCell` references as arguments:
 
@@ -22,9 +22,9 @@ An action gets two `RefCell` references as arguments:
 
 The trigger matches the key `content` and calls the `on_content` function.
 
-The content of the action's black box is a `Write` trait object. The action writes to it the string value of the current JSON key `content`.
+The action's black box contains a `Write` trait object. The action writes the string value of the current JSON key `content` to this writer.
 
-Getting the value requires to co-use the `RJiter` parser to consume the next token. The action returns `StreamOp::ValueIsConsumed` so that the caller can update its internal state.
+Getting the value requires using the `RJiter` parser to consume the next token. The action returns `StreamOp::ValueIsConsumed` to inform the caller that it has consumed the value, so that the caller can update its internal state.
 
 The type annotation `Trigger<BoxedAction<dyn Write>>` is not needed in this code fragment, but it is often required when using closure handlers and several triggers.
 
@@ -202,9 +202,9 @@ assert_eq!(message, "Hello! How can I assist you today?");
 
 ## Limitations
 
-The library is not a generic [SAX-like interface](https://en.wikipedia.org/wiki/Simple_API_for_XML): There are no callbacks for arrays and character data.
+The library is not a generic [SAX-like interface](https://en.wikipedia.org/wiki/Simple_API_for_XML): It does not provide callbacks for arrays and character data.
 
-The library is not async.
+The library does not support async operations.
 
 
 # Colophon
