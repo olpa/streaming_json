@@ -1,3 +1,11 @@
+/// Error types for the JSON stream processor
+///
+/// - `ActionError`: Error returned from a trigger action
+/// - `RJiterError`: Wraps errors from the underlying `RJiter` parser
+/// - `UnhandledPeek`: Encountered an unexpected token type while peeking
+/// - `UnbalancedJson`: JSON structure is not properly balanced at the given position
+/// - `InternalError`: Internal processing error at the given position with message
+/// - `MaxNestingExceeded`: JSON nesting level exceeded maximum at given position
 #[derive(Debug)]
 pub enum Error {
     RJiterError(rjiter::Error),
