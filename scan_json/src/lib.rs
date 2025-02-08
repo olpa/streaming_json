@@ -11,3 +11,5 @@ pub use matcher::{Matcher, Name, ParentAndName};
 pub use scan::{scan, ContextFrame};
 
 pub use rjiter;
+pub use rjiter::jiter;
+pub use rjiter::RJiter;
