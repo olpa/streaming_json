@@ -1,3 +1,5 @@
+//! Implementation of the `scan` function to scan a JSON stream.
+
 use crate::action::{find_action, BoxedAction, BoxedEndAction, StreamOp, Trigger};
 use crate::error::Error as ScanError;
 use crate::error::Result as ScanResult;
@@ -6,8 +8,10 @@ use rjiter::RJiter;
 use std::cell::RefCell;
 use std::io;
 
+/// Maximum allowed nesting level for JSON structures
 const MAX_NESTING: usize = 20;
 
+/// Represents the current parsing context within the JSON structure
 #[derive(Debug)]
 pub struct ContextFrame {
     pub current_key: String,
@@ -16,6 +20,7 @@ pub struct ContextFrame {
     is_elem_begin: bool,
 }
 
+/// Create a new `ContextFrame` for testing purposes
 #[allow(clippy::must_use_candidate)]
 pub fn mk_context_frame_for_test(current_key: String) -> ContextFrame {
     ContextFrame {
@@ -26,6 +31,12 @@ pub fn mk_context_frame_for_test(current_key: String) -> ContextFrame {
     }
 }
 
+// Handle a JSON object key
+//
+// - Call the end-trigger for the previous key
+// - Call the action for the current key
+// - Pop the context stack if the object is ended
+// - Push the current key onto the context stack
 fn handle_object<T: ?Sized>(
     rjiter_cell: &RefCell<RJiter>,
     baton_cell: &RefCell<T>,
@@ -69,6 +80,8 @@ fn handle_object<T: ?Sized>(
     Ok((StreamOp::None, cur_level))
 }
 
+// Handle a JSON array item.
+// Pop the context stack if the array is ended.
 fn handle_array(
     rjiter: &mut RJiter,
     mut cur_level: ContextFrame,
@@ -91,6 +104,7 @@ fn handle_array(
     Ok((peeked, cur_level))
 }
 
+/// Skips over basic JSON values (null, true, false, numbers)
 fn skip_basic_values(peeked: Peek, rjiter: &mut RJiter) -> ScanResult<()> {
     if peeked == Peek::Null {
         rjiter.known_null()?;
@@ -111,6 +125,7 @@ fn skip_basic_values(peeked: Peek, rjiter: &mut RJiter) -> ScanResult<()> {
     Err(ScanError::UnhandledPeek(peeked))
 }
 
+/// Pushes a new context frame onto the context stack
 fn push_context(
     context: &mut Vec<ContextFrame>,
     cur_level: ContextFrame,
@@ -126,9 +141,23 @@ fn push_context(
     Ok(())
 }
 
+/// Scan a JSON stream, executing actions based on matched triggers and
+/// handling nested structures up to a maximum depth.
+/// It also ignores SSE tokens at the top level.
+///
+/// See the documentation in `README.md` for an example of how to use this function.
+///
+/// # Arguments
+///
+/// * `triggers` - List of action triggers to execute on matching keys
+/// * `triggers_end` - List of end action triggers to execute when a key is ended
+/// * `sse_tokens` - List of SSE tokens to ignore at the top level
+/// * `rjiter_cell` - Reference cell containing the JSON iterator
+/// * `baton_cell` - Reference cell containing the caller's state
+///
 /// # Errors
 ///
-/// TODO: describe the errors
+/// * `ScanError` - A wrapper over `Rjiter` errors, over an error from a trigger actions, or over wrong JSON structure
 pub fn scan<T: ?Sized>(
     triggers: &[Trigger<BoxedAction<T>>],
     triggers_end: &[Trigger<BoxedEndAction<T>>],
