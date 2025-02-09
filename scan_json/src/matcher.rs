@@ -1,5 +1,5 @@
-//! This module contains the `Matcher` trait and implementations for matching by name and
-//! matching by name in the parent context.
+//! This module contains the `Matcher` trait and implementations for matching by name,
+//! matching by parent-name combination, and matching by grandparent-parent-name combination.
 
 use crate::scan::ContextFrame;
 
