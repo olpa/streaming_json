@@ -232,6 +232,46 @@ fn test_call_end() {
 }
 
 #[test]
+fn notify_for_top_level_object() {
+    let json = r#"{}"#;
+    let mut reader = json.as_bytes();
+    let mut buffer = vec![0u8; 16];
+    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let state = RefCell::new((false, false)); // (begin_called, end_called)
+
+    let begin_action: BoxedAction<(bool, bool)> = Box::new(|_rjiter, state| {
+        state.borrow_mut().0 = true;
+        StreamOp::None
+    });
+    let end_action: BoxedEndAction<(bool, bool)> = Box::new(|state| {
+        state.borrow_mut().1 = true;
+        Ok(())
+    });
+
+    let triggers = vec![Trigger {
+        matcher: Box::new(Name::new("#top".to_string())),
+        action: begin_action,
+    }];
+    let triggers_end = vec![Trigger {
+        matcher: Box::new(Name::new("#top".to_string())),
+        action: end_action,
+    }];
+
+    scan(
+        &triggers,
+        &triggers_end,
+        &vec![],
+        &RefCell::new(rjiter),
+        &state,
+    )
+    .unwrap();
+
+    let final_state = state.borrow();
+    assert!(final_state.0, "Begin trigger should have been called");
+    assert!(final_state.1, "End trigger should have been called");
+}
+
+#[test]
 fn max_nesting_array() {
     let json = "[".repeat(25);
     let mut reader = json.as_bytes();
@@ -561,5 +601,5 @@ fn test_json_to_xml() {
     .unwrap();
 
     let message = String::from_utf8(writer_cell.borrow().to_vec()).unwrap();
-    assert_eq!(message, "<name>John Doe</name><age></age><phones><phone>+44 1234567</phone><phone>+44 2345678</phone></phones>");
+    assert_eq!(message, "<#top><name>John Doe</name><age></age><phones><phone>+44 1234567</phone><phone>+44 2345678</phone></phones></#top>");
 }
