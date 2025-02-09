@@ -46,6 +46,9 @@ fn handle_object<T: ?Sized>(
     context: &mut Vec<ContextFrame>,
 ) -> ScanResult<(StreamOp, ContextFrame)> {
     {
+        //
+        // Call the end-trigger for the previous key
+        //
         if !cur_level.is_elem_begin {
             if let Some(end_action) = find_action(triggers_end, &cur_level.current_key, context) {
                 if let Err(e) = end_action(baton_cell) {
@@ -54,6 +57,9 @@ fn handle_object<T: ?Sized>(
             }
         }
 
+        //
+        // Find the next key in the object or the end of the object
+        //
         let mut rjiter = rjiter_cell.borrow_mut();
         let keyr = if cur_level.is_elem_begin {
             rjiter.next_object()
@@ -62,11 +68,16 @@ fn handle_object<T: ?Sized>(
         };
         cur_level.is_elem_begin = false;
 
+        //
+        // If there is a next key, update the current key and continue
+        //
         if let Some(key) = keyr? {
             let key_str = key.to_string();
             cur_level.current_key = key_str;
         } else {
-            // The "else" arm mutates the context and ends the function
+            //
+            // End of the object: mutate the context and end the function
+            //
             return match context.pop() {
                 Some(cur_level) => Ok((StreamOp::ValueIsConsumed, cur_level)),
                 None => Err(ScanError::UnbalancedJson(rjiter.current_index())),
@@ -74,6 +85,9 @@ fn handle_object<T: ?Sized>(
         }
     }
 
+    //
+    // Execute the action for the current key
+    //
     if let Some(action) = find_action(triggers, &cur_level.current_key, context) {
         return Ok((action(rjiter_cell, baton_cell), cur_level));
     }
