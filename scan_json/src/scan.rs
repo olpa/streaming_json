@@ -47,6 +47,23 @@ fn handle_object<T: ?Sized>(
 ) -> ScanResult<(StreamOp, ContextFrame)> {
     {
         //
+        // Special case: a top-level object was started
+        //
+        if cur_level.is_elem_begin && context.len() == 1 {
+            if let Some(begin_action) = find_action(triggers, "#top", context) {
+                match begin_action(rjiter_cell, baton_cell) {
+                    StreamOp::None => (),
+                    StreamOp::Error(e) => return Err(ScanError::ActionError(e)),
+                    StreamOp::ValueIsConsumed => {
+                        return Err(ScanError::ActionError(
+                            "ValueIsConsumed is not supported for #top actions".into(),
+                        ));
+                    }
+                }
+            }
+        }
+
+        //
         // Call the end-trigger for the previous key
         //
         if !cur_level.is_elem_begin {
