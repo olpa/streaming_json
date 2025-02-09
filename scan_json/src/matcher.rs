@@ -10,11 +10,19 @@ pub trait Matcher: std::fmt::Debug {
     /// # Arguments
     ///
     /// * `name` - The name of the current node being matched
-    /// * `context` - The stack of parent contexts. The oldest frame (the root) is the first element, the latest frame (the parent) is the last element.
+    /// * `context` - The stack of parent contexts. The oldest frame (the root) is the first element,
+    ///               the latest frame (the parent) is the last element.
+    ///
+    /// Special context names:
+    /// - "#top" - The root context
+    /// - "#array" - An array context
+    ///
+    /// Note: Although arrays appear in the context stack, the library does not support array triggers.
     ///
     /// # Returns
     ///
-    /// `true` if the node matches the criteria, `false` otherwise
+    /// * `true` if the node matches the criteria
+    /// * `false` otherwise
     fn matches(&self, name: &str, context: &[ContextFrame]) -> bool;
 }
 
