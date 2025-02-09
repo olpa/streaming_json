@@ -121,7 +121,11 @@ fn handle_object<T: ?Sized>(
     // Execute the action for the current key
     //
     if let Some(action) = find_action(triggers, &cur_level.current_key, context) {
-        return Ok((action(rjiter_cell, baton_cell), cur_level));
+        let action_result = action(rjiter_cell, baton_cell);
+        return match action_result {
+            StreamOp::Error(e) => Err(ScanError::ActionError(e)),
+            StreamOp::None | StreamOp::ValueIsConsumed => Ok((action_result, cur_level)),
+        };
     }
     Ok((StreamOp::None, cur_level))
 }
