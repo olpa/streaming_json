@@ -66,3 +66,36 @@ impl Matcher for ParentAndName {
         })
     }
 }
+/// A matcher that checks for grandparent, parent and name matches.
+#[derive(Debug)]
+pub struct ParentParentAndName {
+    grandparent: String,
+    parent: String,
+    name: String,
+}
+
+impl ParentParentAndName {
+    #[must_use]
+    pub fn new(grandparent: String, parent: String, name: String) -> Self {
+        Self {
+            grandparent,
+            parent,
+            name,
+        }
+    }
+}
+
+impl Matcher for ParentParentAndName {
+    fn matches(&self, name: &str, context: &[ContextFrame]) -> bool {
+        if context.len() < 2 {
+            return false;
+        }
+        #[allow(clippy::indexing_slicing)]
+        let parent = &context[context.len() - 1];
+        #[allow(clippy::indexing_slicing)]
+        let grandparent = &context[context.len() - 2];
+        self.name == name
+            && parent.current_key == self.parent
+            && grandparent.current_key == self.grandparent
+    }
+}
