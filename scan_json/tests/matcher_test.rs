@@ -70,3 +70,60 @@ fn test_match_by_parent_and_name_long_context() {
         "Should match when parent is direct parent"
     );
 }
+#[test]
+fn match_by_parent_parent_and_name() {
+    use scan_json::matcher::ParentParentAndName;
+
+    let matcher = ParentParentAndName::new(
+        "grandparent".to_string(),
+        "parent".to_string(),
+        "child".to_string(),
+    );
+
+    assert!(
+        !matcher.matches("child", &[]),
+        "Should not match without context"
+    );
+
+    let single_context = [mk_context_frame_for_test("parent".to_string())];
+    assert!(
+        !matcher.matches("child", &single_context),
+        "Should not match with only parent context"
+    );
+
+    let wrong_grandparent_context = [
+        mk_context_frame_for_test("wrong".to_string()),
+        mk_context_frame_for_test("parent".to_string()),
+    ];
+    assert!(
+        !matcher.matches("child", &wrong_grandparent_context),
+        "Should not match with wrong grandparent"
+    );
+
+    let wrong_parent_context = [
+        mk_context_frame_for_test("grandparent".to_string()),
+        mk_context_frame_for_test("wrong".to_string()),
+    ];
+    assert!(
+        !matcher.matches("child", &wrong_parent_context),
+        "Should not match with wrong parent"
+    );
+
+    let wrong_name_context = [
+        mk_context_frame_for_test("grandparent".to_string()),
+        mk_context_frame_for_test("parent".to_string()),
+    ];
+    assert!(
+        !matcher.matches("wrong", &wrong_name_context),
+        "Should not match with wrong name"
+    );
+
+    let matching_context = [
+        mk_context_frame_for_test("grandparent".to_string()),
+        mk_context_frame_for_test("parent".to_string()),
+    ];
+    assert!(
+        matcher.matches("child", &matching_context),
+        "Should match with correct grandparent, parent and name"
+    );
+}

@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::io::Write;
 
 use ::scan_json::action::{BoxedAction, BoxedEndAction, StreamOp, Trigger};
-use ::scan_json::matcher::{Matcher, Name};
+use ::scan_json::matcher::{Matcher, Name, ParentParentAndName};
 use ::scan_json::{scan, ContextFrame};
 use rjiter::{jiter::Peek, RJiter};
 
@@ -393,6 +393,46 @@ fn several_objects_top_level() {
     .unwrap();
 
     assert_eq!(*writer_cell.borrow(), b"foofoofoo");
+}
+
+#[test]
+fn match_in_array_context() {
+    let json = r#"{"items": [{"name": "first"}, {"name": "second"}]}"#;
+    let mut reader = json.as_bytes();
+    let mut buffer = vec![0u8; 16];
+    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let writer_cell = RefCell::new(Vec::new());
+
+    let matcher = Box::new(ParentParentAndName::new(
+        "items".to_string(),
+        "#array".to_string(),
+        "name".to_string(),
+    ));
+    let action: BoxedAction<dyn Write> = Box::new(
+        |rjiter_cell: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
+            let mut rjiter = rjiter_cell.borrow_mut();
+            let mut writer = writer.borrow_mut();
+            let result = rjiter
+                .peek()
+                .and_then(|_| rjiter.write_long_bytes(&mut *writer));
+            match result {
+                Ok(_) => StreamOp::ValueIsConsumed,
+                Err(e) => StreamOp::Error(Box::new(e)),
+            }
+        },
+    );
+    let triggers = vec![Trigger { matcher, action }];
+
+    scan(
+        &triggers,
+        &vec![],
+        &vec![],
+        &RefCell::new(rjiter),
+        &writer_cell,
+    )
+    .unwrap();
+
+    assert_eq!(*writer_cell.borrow(), b"firstsecond");
 }
 
 fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
