@@ -96,7 +96,22 @@ fn handle_object<T: ?Sized>(
             // End of the object: mutate the context and end the function
             //
             return match context.pop() {
-                Some(cur_level) => Ok((StreamOp::ValueIsConsumed, cur_level)),
+                Some(cur_level) => {
+                    //
+                    // Special case: a top-level object is ended
+                    //
+                    if context.is_empty() {
+                        if let Some(end_action) = find_action(triggers_end, "#top", context) {
+                            if let Err(e) = end_action(baton_cell) {
+                                return Err(ScanError::ActionError(e));
+                            }
+                        }
+                    }
+                    //
+                    // Return the the main loop
+                    //
+                    Ok((StreamOp::ValueIsConsumed, cur_level))
+                }
                 None => Err(ScanError::UnbalancedJson(rjiter.current_index())),
             };
         }
