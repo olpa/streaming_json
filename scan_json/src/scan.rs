@@ -31,6 +31,10 @@ pub fn mk_context_frame_for_test(current_key: String) -> ContextFrame {
     }
 }
 
+fn is_array_or_top(cf: Option<&ContextFrame>) -> bool {
+    cf.map_or(false, |c| c.current_key.starts_with('#'))
+}
+
 // Handle a JSON object key
 //
 // - Call the end-trigger for the previous key
@@ -47,10 +51,10 @@ fn handle_object<T: ?Sized>(
 ) -> ScanResult<(StreamOp, ContextFrame)> {
     {
         //
-        // Special case: a top-level object was started
+        // Special case: an unnamed object was started (on the top level or in an array)
         //
-        if cur_level.is_elem_begin && context.len() == 1 {
-            if let Some(begin_action) = find_action(triggers, "#top", context) {
+        if cur_level.is_elem_begin && is_array_or_top(context.last()) {
+            if let Some(begin_action) = find_action(triggers, "#object", context) {
                 match begin_action(rjiter_cell, baton_cell) {
                     StreamOp::None => (),
                     StreamOp::Error(e) => return Err(ScanError::ActionError(e)),
@@ -93,25 +97,20 @@ fn handle_object<T: ?Sized>(
             cur_level.current_key = key_str;
         } else {
             //
+            // End of the object: special case for unnamed objects
+            //
+            if is_array_or_top(context.last()) {
+                if let Some(end_action) = find_action(triggers_end, "#object", context) {
+                    if let Err(e) = end_action(baton_cell) {
+                        return Err(ScanError::ActionError(e));
+                    }
+                }
+            }
+            //
             // End of the object: mutate the context and end the function
             //
             return match context.pop() {
-                Some(cur_level) => {
-                    //
-                    // Special case: a top-level object is ended
-                    //
-                    if context.is_empty() {
-                        if let Some(end_action) = find_action(triggers_end, "#top", context) {
-                            if let Err(e) = end_action(baton_cell) {
-                                return Err(ScanError::ActionError(e));
-                            }
-                        }
-                    }
-                    //
-                    // Return the the main loop
-                    //
-                    Ok((StreamOp::ValueIsConsumed, cur_level))
-                }
+                Some(cur_level) => Ok((StreamOp::ValueIsConsumed, cur_level)),
                 None => Err(ScanError::UnbalancedJson(rjiter.current_index())),
             };
         }

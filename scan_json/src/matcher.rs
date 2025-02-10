@@ -14,10 +14,12 @@ pub trait Matcher: std::fmt::Debug {
     ///               the latest frame (the parent) is the last element.
     ///
     /// Special context names:
-    /// - "#top" - The root context
-    /// - "#array" - An array context
+    /// - `#top` - The root context
+    /// - `#array` - An array context
+    /// - `#object` - An unnamed object inside an array or at the top level
     ///
-    /// Note: Although arrays appear in the context stack, the library does not support array triggers.
+    /// Note: Although arrays and the top level context appear in the context stack,
+    /// the library only supports triggers for `#object` nodes.
     ///
     /// # Returns
     ///
