@@ -50,24 +50,18 @@ fn handle_object<T: ?Sized>(
     context: &mut Vec<ContextFrame>,
 ) -> ScanResult<(StreamOp, ContextFrame)> {
     {
-        println!(
-            "!! handle_object: cur_level: {:?}, context: {:?}",
-            cur_level, context
-        ); // FIXME
         //
         // Special case: an unnamed object was started (on the top level or in an array)
         //
-        if cur_level.is_elem_begin {
-            if is_array_or_top(context.last()) {
-                if let Some(begin_action) = find_action(triggers, "#object", context) {
-                    match begin_action(rjiter_cell, baton_cell) {
-                        StreamOp::None => (),
-                        StreamOp::Error(e) => return Err(ScanError::ActionError(e)),
-                        StreamOp::ValueIsConsumed => {
-                            return Err(ScanError::ActionError(
-                                "ValueIsConsumed is not supported for #top actions".into(),
-                            ));
-                        }
+        if cur_level.is_elem_begin && is_array_or_top(context.last()) {
+            if let Some(begin_action) = find_action(triggers, "#object", context) {
+                match begin_action(rjiter_cell, baton_cell) {
+                    StreamOp::None => (),
+                    StreamOp::Error(e) => return Err(ScanError::ActionError(e)),
+                    StreamOp::ValueIsConsumed => {
+                        return Err(ScanError::ActionError(
+                            "ValueIsConsumed is not supported for #top actions".into(),
+                        ));
                     }
                 }
             }
