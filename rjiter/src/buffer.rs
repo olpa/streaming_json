@@ -33,6 +33,9 @@ impl<'buf> Buffer<'buf> {
     ///
     /// From the underlying reader.
     pub fn read_more(&mut self) -> std::io::Result<usize> {
+        // The only place where `n_bytes` is increased is this `read_more` function.
+        // As long as `read` works correctly, `n_bytes` is less or equal to the buffer size.
+        #[allow(clippy::indexing_slicing)]
         let n_new_bytes = self.reader.read(&mut self.buf[self.n_bytes..])?;
         self.n_bytes += n_new_bytes;
         Ok(n_new_bytes)
