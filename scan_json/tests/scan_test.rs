@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::io::Write;
 
 use ::scan_json::action::{BoxedAction, BoxedEndAction, StreamOp, Trigger};
-use ::scan_json::matcher::{Matcher, Name, ParentParentAndName};
+use ::scan_json::matcher::{Matcher, Name, ParentAndName, ParentParentAndName};
 use ::scan_json::{scan, ContextFrame};
 use rjiter::{jiter::Peek, RJiter};
 
@@ -249,11 +249,17 @@ fn notify_for_top_level_object() {
     });
 
     let triggers = vec![Trigger {
-        matcher: Box::new(Name::new("#top".to_string())),
+        matcher: Box::new(ParentAndName::new(
+            "#top".to_string(),
+            "#object".to_string(),
+        )),
         action: begin_action,
     }];
     let triggers_end = vec![Trigger {
-        matcher: Box::new(Name::new("#top".to_string())),
+        matcher: Box::new(ParentAndName::new(
+            "#top".to_string(),
+            "#object".to_string(),
+        )),
         action: end_action,
     }];
 
@@ -315,8 +321,14 @@ fn notify_for_object_in_array() {
     .unwrap();
 
     let final_state = state.borrow();
-    assert_eq!(final_state.0, 3, "Begin trigger should have been called 3 times");
-    assert_eq!(final_state.1, 3, "End trigger should have been called 3 times");
+    assert_eq!(
+        final_state.0, 3,
+        "Begin trigger should have been called 3 times"
+    );
+    assert_eq!(
+        final_state.1, 3,
+        "End trigger should have been called 3 times"
+    );
 }
 
 #[test]
