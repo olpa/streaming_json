@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::io::Write;
 
 use ::scan_json::action::{BoxedAction, BoxedEndAction, StreamOp, Trigger};
-use ::scan_json::matcher::{Matcher, Name, ParentAndName, ParentParentAndName};
+use ::scan_json::matcher::{Matcher, Name, ParentParentAndName};
 use ::scan_json::{scan, ContextFrame};
 use rjiter::{jiter::Peek, RJiter};
 
@@ -289,15 +289,17 @@ fn notify_for_object_in_array() {
     });
 
     let triggers = vec![Trigger {
-        matcher: Box::new(ParentAndName::new(
+        matcher: Box::new(ParentParentAndName::new(
             "#top".to_string(),
             "#array".to_string(),
+            "#object".to_string(),
         )),
         action: begin_action,
     }];
     let triggers_end = vec![Trigger {
-        matcher: Box::new(ParentAndName::new(
+        matcher: Box::new(ParentParentAndName::new(
             "#top".to_string(),
+            "#array".to_string(),
             "#object".to_string(),
         )),
         action: end_action,
