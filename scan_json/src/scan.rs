@@ -31,6 +31,10 @@ pub fn mk_context_frame_for_test(current_key: String) -> ContextFrame {
     }
 }
 
+fn is_array_or_top(cf: Option<&ContextFrame>) -> bool {
+    cf.map_or(false, |c| c.current_key.starts_with('#'))
+}
+
 // Handle a JSON object key
 //
 // - Call the end-trigger for the previous key
@@ -54,10 +58,7 @@ fn handle_object<T: ?Sized>(
         // Special case: an unnamed object was started (on the top level or in an array)
         //
         if cur_level.is_elem_begin {
-            let is_unnamed = context
-                .last()
-                .map_or(false, |c| c.current_key.starts_with('#'));
-            if is_unnamed {
+            if is_array_or_top(context.last()) {
                 if let Some(begin_action) = find_action(triggers, "#object", context) {
                     match begin_action(rjiter_cell, baton_cell) {
                         StreamOp::None => (),
