@@ -701,5 +701,5 @@ fn test_json_to_xml() {
     .unwrap();
 
     let message = String::from_utf8(writer_cell.borrow().to_vec()).unwrap();
-    assert_eq!(message, "<#top><name>John Doe</name><age></age><phones><phone>+44 1234567</phone><phone>+44 2345678</phone></phones></#top>");
+    assert_eq!(message, "<#object><name>John Doe</name><age></age><phones><phone>+44 1234567</phone><phone>+44 2345678</phone></phones></#object>");
 }
