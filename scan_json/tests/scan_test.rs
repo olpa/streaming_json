@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::io::Write;
 
 use ::scan_json::action::{BoxedAction, BoxedEndAction, StreamOp, Trigger};
-use ::scan_json::matcher::{Matcher, Name, ParentParentAndName};
+use ::scan_json::matcher::{Matcher, Name, ParentAndName, ParentParentAndName};
 use ::scan_json::{scan, ContextFrame};
 use rjiter::{jiter::Peek, RJiter};
 
@@ -269,6 +269,52 @@ fn notify_for_top_level_object() {
     let final_state = state.borrow();
     assert!(final_state.0, "Begin trigger should have been called");
     assert!(final_state.1, "End trigger should have been called");
+}
+
+#[test]
+fn notify_for_object_in_array() {
+    let json = r#"[{}, {}, {}]"#;
+    let mut reader = json.as_bytes();
+    let mut buffer = vec![0u8; 16];
+    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let state = RefCell::new((0, 0)); // (begin_called, end_called)
+
+    let begin_action: BoxedAction<(i32, i32)> = Box::new(|_rjiter, state| {
+        state.borrow_mut().0 += 1;
+        StreamOp::None
+    });
+    let end_action: BoxedEndAction<(i32, i32)> = Box::new(|state| {
+        state.borrow_mut().1 += 1;
+        Ok(())
+    });
+
+    let triggers = vec![Trigger {
+        matcher: Box::new(ParentAndName::new(
+            "#top".to_string(),
+            "#array".to_string(),
+        )),
+        action: begin_action,
+    }];
+    let triggers_end = vec![Trigger {
+        matcher: Box::new(ParentAndName::new(
+            "#top".to_string(),
+            "#object".to_string(),
+        )),
+        action: end_action,
+    }];
+
+    scan(
+        &triggers,
+        &triggers_end,
+        &vec![],
+        &RefCell::new(rjiter),
+        &state,
+    )
+    .unwrap();
+
+    let final_state = state.borrow();
+    assert_eq!(final_state.0, 3, "Begin trigger should have been called 3 times");
+    assert_eq!(final_state.1, 3, "End trigger should have been called 3 times");
 }
 
 #[test]
