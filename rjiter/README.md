@@ -7,6 +7,8 @@ API documentation:
 - [RJiter](https://docs.rs/rjiter/latest/rjiter/). For most functions, the documentation redirects to `Jiter`
 - [Jiter](https://docs.rs/jiter/latest/jiter/)
 
+See also [scan_json](https://crates.io/crates/scan_json) for a callback-based API built on top of `RJiter`.
+
 
 ## Example
 
