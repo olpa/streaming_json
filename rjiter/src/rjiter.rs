@@ -720,6 +720,8 @@ impl<'rj> RJiter<'rj> {
         let found = if err_flag {
             false
         } else {
+            // `pos` is `jiter.current_index()` or `0`
+            #[allow(clippy::indexing_slicing)]
             let buf_view = &mut self.buffer.buf[pos..self.buffer.n_bytes];
             buf_view.starts_with(token)
         };
