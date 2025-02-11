@@ -648,13 +648,23 @@ impl<'rj> RJiter<'rj> {
             index: usize,
             writer: &mut dyn Write,
         ) -> RJiterResult<()> {
+            // From the `write_long` contract for a big buffer: `1 < end_pos <= self.buffer.n_bytes - 1`
+            // May panic for a small buffer (less than 7 bytes)
+            #[allow(clippy::indexing_slicing)]
             let orig_char = bytes[end_pos];
-            bytes[end_pos] = b'"';
+            #[allow(clippy::indexing_slicing)]
+            {
+                bytes[end_pos] = b'"';
+            }
+            #[allow(clippy::indexing_slicing)]
             let sub_jiter_buf = &bytes[..=end_pos];
             let sub_jiter_buf = unsafe { std::mem::transmute::<&[u8], &[u8]>(sub_jiter_buf) };
             let mut sub_jiter = Jiter::new(sub_jiter_buf);
             let sub_result = sub_jiter.known_str();
-            bytes[end_pos] = orig_char;
+            #[allow(clippy::indexing_slicing)]
+            {
+                bytes[end_pos] = orig_char;
+            }
 
             match sub_result {
                 Ok(string) => {
