@@ -3,6 +3,20 @@ use rjiter::jiter::LinePosition;
 use std::io::Cursor;
 
 #[test]
+fn test_read_until_full() {
+    let input = "abcdef";
+    let mut reader = Cursor::new(input.as_bytes());
+    let mut buf = [0u8; 4];
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+
+    let n_bytes = buffer.read_more().unwrap();
+    assert_eq!(n_bytes, 4);
+
+    let n_bytes = buffer.read_more().unwrap();
+    assert_eq!(n_bytes, 0);
+}
+
+#[test]
 fn test_basic_skip_spaces() {
     let spaces = " ".repeat(4);
     let input = format!("{spaces}abc");

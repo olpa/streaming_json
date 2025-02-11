@@ -37,12 +37,16 @@ impl<'rj> RJiter<'rj> {
             std::mem::transmute::<&[u8], &'rj mut [u8]>(buf)
         };
         let buffer = Buffer::new(reader, buf_alias);
+        // `0 <= buffer.n_bytes <= buf.len()` by the `Buffer` contract
+        #[allow(clippy::indexing_slicing)]
         let jiter = Jiter::new(&buf[..buffer.n_bytes]);
 
         RJiter { jiter, buffer }
     }
 
     fn create_new_jiter(&mut self) {
+        // `0 <= buffer.n_bytes <= buf.len()` by the `Buffer` contract
+        #[allow(clippy::indexing_slicing)]
         let jiter_buffer_2 = &self.buffer.buf[..self.buffer.n_bytes];
         let jiter_buffer = unsafe { std::mem::transmute::<&[u8], &'rj [u8]>(jiter_buffer_2) };
         self.jiter = Jiter::new(jiter_buffer);
@@ -316,6 +320,9 @@ impl<'rj> RJiter<'rj> {
         F: FnMut(&mut Jiter<'rj>) -> JiterResult<T>,
         T: std::fmt::Debug,
     {
+        // Error-result makes `false`,
+        // Ok-result makes `true`, except if the grandcaller hints (`should_eager_consume`) that
+        // end of the buffer can be a false positive (e.g. when parsing a number).
         fn downgrade_ok_if_eof<T>(
             result: &JiterResult<T>,
             should_eager_consume: bool,
@@ -343,7 +350,10 @@ impl<'rj> RJiter<'rj> {
             self.buffer.n_bytes,
         );
         if is_ok {
-            return Ok(result.unwrap());
+            // `result` is always `Ok`
+            if let Ok(value) = result {
+                return Ok(value);
+            }
         }
 
         self.skip_spaces_feeding(jiter_pos, skip_spaces_token)?;
@@ -368,20 +378,26 @@ impl<'rj> RJiter<'rj> {
                     self.buffer.n_bytes,
                 );
                 if really_ok {
-                    return Ok(result.unwrap());
+                    // `result` is always `Ok`
+                    if let Ok(value) = result {
+                        return Ok(value);
+                    }
                 }
             }
 
             let n_read = self.buffer.read_more();
-            if let Err(e) = n_read {
-                return Err(RJiterError::from_io_error(self.current_index(), e));
+            match n_read {
+                Err(e) => return Err(RJiterError::from_io_error(self.current_index(), e)),
+                Ok(0) => {
+                    // EOF is reached in the error state
+                    return result
+                        .map_err(|e| RJiterError::from_jiter_error(self.current_index(), e));
+                }
+                Ok(_) => {
+                    self.create_new_jiter();
+                    continue;
+                }
             }
-            if n_read.unwrap() > 0 {
-                self.create_new_jiter();
-                continue;
-            }
-
-            return result.map_err(|e| RJiterError::from_jiter_error(self.current_index(), e));
         }
     }
 
@@ -408,6 +424,8 @@ impl<'rj> RJiter<'rj> {
                     return Err(RJiterError::from_io_error(self.current_index(), e));
                 }
             }
+            // `0 <= to_pos` (usize), `to_pos < buffer.n_bytes` (if check), `n_bytes <= buf.len()` by the `Buffer` contract
+            #[allow(clippy::indexing_slicing)]
             if to_pos < self.buffer.n_bytes && self.buffer.buf[to_pos] == transparent_token {
                 if let Err(e) = self.buffer.skip_spaces(to_pos + 1) {
                     return Err(RJiterError::from_io_error(self.current_index(), e));
@@ -469,8 +487,13 @@ impl<'rj> RJiter<'rj> {
 
     //  ------------------------------------------------------------
     // Pass-through long strings and bytes
-    //
 
+    //
+    // Contract for `write_segment`:
+    // - arg 1: `self.buffer.buf`,
+    // - arg 2: `1 < segment_end_pos <= self.buffer.n_bytes - 1 <= self.buffer.buf.len() - 1`,
+    //          or `1 < segment_end_pos <= self.buffer.n_bytes <= 7`,
+    //
     fn handle_long<F, T>(
         &mut self,
         parser: F,
@@ -491,6 +514,9 @@ impl<'rj> RJiter<'rj> {
                 write_completed(value, self.current_index(), writer)?;
                 return Ok(());
             }
+            // We need `err` in the scope later, therefore we don't use `match` for `result`
+            // The Ok-arm is handled above
+            #[allow(clippy::unwrap_used)]
             let err = result.unwrap_err();
             if !can_retry_if_partial(&err) {
                 return Err(RJiterError::from_jiter_error(self.current_index(), err));
@@ -528,6 +554,8 @@ impl<'rj> RJiter<'rj> {
                     if buf_len < 3 {
                         bs_pos
                     } else {
+                        // `buf_len >= 3` in this branch
+                        #[allow(clippy::indexing_slicing)]
                         let after_bs = self.buffer.buf[2];
                         if after_bs != b'u' && after_bs != b'U' {
                             bs_pos + 2
@@ -556,13 +584,11 @@ impl<'rj> RJiter<'rj> {
 
             // Read more and repeat
             let n_new_bytes = self.buffer.read_more();
-            if let Err(e) = n_new_bytes {
-                return Err(RJiterError::from_io_error(self.current_index(), e));
+            match n_new_bytes {
+                Err(e) => return Err(RJiterError::from_io_error(self.current_index(), e)),
+                Ok(0) => return Err(RJiterError::from_jiter_error(self.current_index(), err)),
+                Ok(1..) => self.create_new_jiter(),
             }
-            if n_new_bytes.unwrap() == 0 {
-                return Err(RJiterError::from_jiter_error(self.current_index(), err));
-            }
-            self.create_new_jiter();
         }
     }
 
@@ -589,6 +615,8 @@ impl<'rj> RJiter<'rj> {
             index: usize,
             writer: &mut dyn Write,
         ) -> RJiterResult<()> {
+            // See the `write_long` contract. May panic for a small buffer (less than 7 bytes)
+            #[allow(clippy::indexing_slicing)]
             let n_written = writer.write_all(&bytes[1..end_pos]);
             if let Err(e) = n_written {
                 return Err(RJiterError::from_io_error(index, e));
@@ -623,13 +651,23 @@ impl<'rj> RJiter<'rj> {
             index: usize,
             writer: &mut dyn Write,
         ) -> RJiterResult<()> {
+            // From the `write_long` contract for a big buffer: `1 < end_pos <= self.buffer.n_bytes - 1`
+            // May panic for a small buffer (less than 7 bytes)
+            #[allow(clippy::indexing_slicing)]
             let orig_char = bytes[end_pos];
-            bytes[end_pos] = b'"';
+            #[allow(clippy::indexing_slicing)]
+            {
+                bytes[end_pos] = b'"';
+            }
+            #[allow(clippy::indexing_slicing)]
             let sub_jiter_buf = &bytes[..=end_pos];
             let sub_jiter_buf = unsafe { std::mem::transmute::<&[u8], &[u8]>(sub_jiter_buf) };
             let mut sub_jiter = Jiter::new(sub_jiter_buf);
             let sub_result = sub_jiter.known_str();
-            bytes[end_pos] = orig_char;
+            #[allow(clippy::indexing_slicing)]
+            {
+                bytes[end_pos] = orig_char;
+            }
 
             match sub_result {
                 Ok(string) => {
@@ -685,6 +723,8 @@ impl<'rj> RJiter<'rj> {
         let found = if err_flag {
             false
         } else {
+            // `pos` is `jiter.current_index()` or `0`
+            #[allow(clippy::indexing_slicing)]
             let buf_view = &mut self.buffer.buf[pos..self.buffer.n_bytes];
             buf_view.starts_with(token)
         };

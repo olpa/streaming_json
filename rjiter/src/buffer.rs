@@ -8,8 +8,8 @@ use crate::jiter::LinePosition;
 pub struct Buffer<'buf> {
     reader: &'buf mut dyn Read,
     pub buf: &'buf mut [u8],
-    pub n_bytes: usize,            // Size of the buffer
-    pub n_shifted_out: usize,      // Number of bytes shifted out
+    pub n_bytes: usize, // Size of the buffer. Contract: `n_bytes <= buf.len()`
+    pub n_shifted_out: usize, // Number of bytes shifted out
     pub pos_shifted: LinePosition, // Correction for the error position due to shifting
 }
 
@@ -33,6 +33,9 @@ impl<'buf> Buffer<'buf> {
     ///
     /// From the underlying reader.
     pub fn read_more(&mut self) -> std::io::Result<usize> {
+        // The only place where `n_bytes` is increased is this `read_more` function.
+        // As long as `read` works correctly, `n_bytes` is less or equal to the buffer size.
+        #[allow(clippy::indexing_slicing)]
         let n_new_bytes = self.reader.read(&mut self.buf[self.n_bytes..])?;
         self.n_bytes += n_new_bytes;
         Ok(n_new_bytes)
@@ -47,6 +50,8 @@ impl<'buf> Buffer<'buf> {
     pub fn shift_buffer(&mut self, to_pos: usize, from_pos: usize) {
         let safe_from_pos = min(from_pos, self.n_bytes);
         if to_pos < safe_from_pos {
+            // `to_pos>=0` (`usize`), `to_pos < safe_from_pos` (if-branch), `safe_from_pos`<=`n_bytes <= buf.len()` (contract)
+            #[allow(clippy::indexing_slicing)]
             for ch in &self.buf[to_pos..safe_from_pos] {
                 if *ch == b'\n' {
                     self.pos_shifted.line += 1;
@@ -80,6 +85,8 @@ impl<'buf> Buffer<'buf> {
     pub fn skip_spaces(&mut self, pos: usize) -> std::io::Result<()> {
         let mut i = pos;
         loop {
+            // `i >= 0` (`usize`), `self.n_bytes <= buf.len()` (contract)
+            #[allow(clippy::indexing_slicing)]
             while i < self.n_bytes && self.buf[i].is_ascii_whitespace() {
                 i += 1;
             }
