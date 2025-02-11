@@ -484,8 +484,13 @@ impl<'rj> RJiter<'rj> {
 
     //  ------------------------------------------------------------
     // Pass-through long strings and bytes
-    //
 
+    //
+    // Contract for `write_segment`:
+    // - arg 1: `self.buffer.buf`,
+    // - arg 2: `1 < segment_end_pos <= self.buffer.n_bytes - 1 <= self.buffer.buf.len() - 1`,
+    //          or `1 < segment_end_pos <= self.buffer.n_bytes <= 7`,
+    //
     fn handle_long<F, T>(
         &mut self,
         parser: F,
@@ -607,6 +612,8 @@ impl<'rj> RJiter<'rj> {
             index: usize,
             writer: &mut dyn Write,
         ) -> RJiterResult<()> {
+            // See the `write_long` contract. May panic for a small buffer (less than 7 bytes)
+            #[allow(clippy::indexing_slicing)]
             let n_written = writer.write_all(&bytes[1..end_pos]);
             if let Err(e) = n_written {
                 return Err(RJiterError::from_io_error(index, e));
