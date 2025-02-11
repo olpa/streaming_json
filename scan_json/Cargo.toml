@@ -1,8 +1,15 @@
 [package]
 name = "scan_json"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
-
+authors = ["Oleg Parashchenko <olpa@uucode.com>"]
+description = "React to elements in a JSON stream"
+readme = "README.md"
+license = "MIT"
+homepage = "https://github.com/olpa/streaming_json"
+repository = "https://github.com/olpa/streaming_json"
+keywords = ["json"]
+categories = ["parser-implementations", "parsing"]
 [lib]
 crate-type = ["lib"]
 
