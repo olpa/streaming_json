@@ -421,6 +421,8 @@ impl<'rj> RJiter<'rj> {
                     return Err(RJiterError::from_io_error(self.current_index(), e));
                 }
             }
+            // `0 <= to_pos` (usize), `to_pos < buffer.n_bytes` (if check), `n_bytes <= buf.len()` by the `Buffer` contract
+            #[allow(clippy::indexing_slicing)]
             if to_pos < self.buffer.n_bytes && self.buffer.buf[to_pos] == transparent_token {
                 if let Err(e) = self.buffer.skip_spaces(to_pos + 1) {
                     return Err(RJiterError::from_io_error(self.current_index(), e));
