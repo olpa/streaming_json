@@ -8,8 +8,8 @@ use crate::jiter::LinePosition;
 pub struct Buffer<'buf> {
     reader: &'buf mut dyn Read,
     pub buf: &'buf mut [u8],
-    pub n_bytes: usize,            // Size of the buffer. Contract: `n_bytes <= buf.len()`
-    pub n_shifted_out: usize,      // Number of bytes shifted out
+    pub n_bytes: usize, // Size of the buffer. Contract: `n_bytes <= buf.len()`
+    pub n_shifted_out: usize, // Number of bytes shifted out
     pub pos_shifted: LinePosition, // Correction for the error position due to shifting
 }
 

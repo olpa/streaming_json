@@ -350,7 +350,8 @@ impl<'rj> RJiter<'rj> {
             self.buffer.n_bytes,
         );
         if is_ok {
-            if let Ok(value) = result { // `result` is always Ok
+            // `result` is always `Ok`
+            if let Ok(value) = result {
                 return Ok(value);
             }
         }
@@ -377,7 +378,8 @@ impl<'rj> RJiter<'rj> {
                     self.buffer.n_bytes,
                 );
                 if really_ok {
-                    if let Ok(value) = result { // `result` is always Ok
+                    // `result` is always `Ok`
+                    if let Ok(value) = result {
                         return Ok(value);
                     }
                 }
@@ -388,7 +390,8 @@ impl<'rj> RJiter<'rj> {
                 Err(e) => return Err(RJiterError::from_io_error(self.current_index(), e)),
                 Ok(0) => {
                     // EOF is reached in the error state
-                    return result.map_err(|e| RJiterError::from_jiter_error(self.current_index(), e));
+                    return result
+                        .map_err(|e| RJiterError::from_jiter_error(self.current_index(), e));
                 }
                 Ok(_) => {
                     self.create_new_jiter();
