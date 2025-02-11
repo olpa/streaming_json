@@ -384,15 +384,17 @@ impl<'rj> RJiter<'rj> {
             }
 
             let n_read = self.buffer.read_more();
-            if let Err(e) = n_read {
-                return Err(RJiterError::from_io_error(self.current_index(), e));
+            match n_read {
+                Err(e) => return Err(RJiterError::from_io_error(self.current_index(), e)),
+                Ok(0) => {
+                    // EOF is reached in the error state
+                    return result.map_err(|e| RJiterError::from_jiter_error(self.current_index(), e));
+                }
+                Ok(_) => {
+                    self.create_new_jiter();
+                    continue;
+                }
             }
-            if n_read.unwrap() > 0 {
-                self.create_new_jiter();
-                continue;
-            }
-
-            return result.map_err(|e| RJiterError::from_jiter_error(self.current_index(), e));
         }
     }
 
