@@ -576,13 +576,11 @@ impl<'rj> RJiter<'rj> {
 
             // Read more and repeat
             let n_new_bytes = self.buffer.read_more();
-            if let Err(e) = n_new_bytes {
-                return Err(RJiterError::from_io_error(self.current_index(), e));
+            match n_new_bytes {
+                Err(e) => return Err(RJiterError::from_io_error(self.current_index(), e)),
+                Ok(0) => return Err(RJiterError::from_jiter_error(self.current_index(), err)),
+                Ok(1..) => self.create_new_jiter(),
             }
-            if n_new_bytes.unwrap() == 0 {
-                return Err(RJiterError::from_jiter_error(self.current_index(), err));
-            }
-            self.create_new_jiter();
         }
     }
 
