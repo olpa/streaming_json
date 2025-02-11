@@ -320,6 +320,9 @@ impl<'rj> RJiter<'rj> {
         F: FnMut(&mut Jiter<'rj>) -> JiterResult<T>,
         T: std::fmt::Debug,
     {
+        // Error-result makes `false`,
+        // Ok-result makes `true`, except if the grandcaller hints (`should_eager_consume`) that
+        // end of the buffer can be a false positive (e.g. when parsing a number).
         fn downgrade_ok_if_eof<T>(
             result: &JiterResult<T>,
             should_eager_consume: bool,
@@ -347,7 +350,9 @@ impl<'rj> RJiter<'rj> {
             self.buffer.n_bytes,
         );
         if is_ok {
-            return Ok(result.unwrap());
+            if let Ok(value) = result { // `result` is always Ok
+                return Ok(value);
+            }
         }
 
         self.skip_spaces_feeding(jiter_pos, skip_spaces_token)?;
@@ -372,7 +377,9 @@ impl<'rj> RJiter<'rj> {
                     self.buffer.n_bytes,
                 );
                 if really_ok {
-                    return Ok(result.unwrap());
+                    if let Ok(value) = result { // `result` is always Ok
+                        return Ok(value);
+                    }
                 }
             }
 
