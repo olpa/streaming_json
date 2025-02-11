@@ -37,12 +37,16 @@ impl<'rj> RJiter<'rj> {
             std::mem::transmute::<&[u8], &'rj mut [u8]>(buf)
         };
         let buffer = Buffer::new(reader, buf_alias);
+        // `0 <= buffer.n_bytes <= buf.len()` by the `Buffer` contract
+        #[allow(clippy::indexing_slicing)]
         let jiter = Jiter::new(&buf[..buffer.n_bytes]);
 
         RJiter { jiter, buffer }
     }
 
     fn create_new_jiter(&mut self) {
+        // `0 <= buffer.n_bytes <= buf.len()` by the `Buffer` contract
+        #[allow(clippy::indexing_slicing)]
         let jiter_buffer_2 = &self.buffer.buf[..self.buffer.n_bytes];
         let jiter_buffer = unsafe { std::mem::transmute::<&[u8], &'rj [u8]>(jiter_buffer_2) };
         self.jiter = Jiter::new(jiter_buffer);
