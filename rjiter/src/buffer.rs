@@ -50,7 +50,7 @@ impl<'buf> Buffer<'buf> {
     pub fn shift_buffer(&mut self, to_pos: usize, from_pos: usize) {
         let safe_from_pos = min(from_pos, self.n_bytes);
         if to_pos < safe_from_pos {
-            // `to_pos>=0` (`usize`), `to_pos < safe_from_pos` (if-branch), `safe_from_pos`<=`n_bytes` (contract)
+            // `to_pos>=0` (`usize`), `to_pos < safe_from_pos` (if-branch), `safe_from_pos`<=`n_bytes <= buf.len()` (contract)
             #[allow(clippy::indexing_slicing)]
             for ch in &self.buf[to_pos..safe_from_pos] {
                 if *ch == b'\n' {
@@ -85,6 +85,8 @@ impl<'buf> Buffer<'buf> {
     pub fn skip_spaces(&mut self, pos: usize) -> std::io::Result<()> {
         let mut i = pos;
         loop {
+            // `i >= 0` (`usize`), `self.n_bytes <= buf.len()` (contract)
+            #[allow(clippy::indexing_slicing)]
             while i < self.n_bytes && self.buf[i].is_ascii_whitespace() {
                 i += 1;
             }
