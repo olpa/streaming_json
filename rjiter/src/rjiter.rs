@@ -546,6 +546,8 @@ impl<'rj> RJiter<'rj> {
                     if buf_len < 3 {
                         bs_pos
                     } else {
+                        // `buf_len >= 3` in this branch
+                        #[allow(clippy::indexing_slicing)]
                         let after_bs = self.buffer.buf[2];
                         if after_bs != b'u' && after_bs != b'U' {
                             bs_pos + 2
