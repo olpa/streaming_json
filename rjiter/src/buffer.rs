@@ -8,7 +8,7 @@ use crate::jiter::LinePosition;
 pub struct Buffer<'buf> {
     reader: &'buf mut dyn Read,
     pub buf: &'buf mut [u8],
-    pub n_bytes: usize,            // Size of the buffer
+    pub n_bytes: usize,            // Size of the buffer. Contract: `n_bytes <= buf.len()`
     pub n_shifted_out: usize,      // Number of bytes shifted out
     pub pos_shifted: LinePosition, // Correction for the error position due to shifting
 }
@@ -50,6 +50,8 @@ impl<'buf> Buffer<'buf> {
     pub fn shift_buffer(&mut self, to_pos: usize, from_pos: usize) {
         let safe_from_pos = min(from_pos, self.n_bytes);
         if to_pos < safe_from_pos {
+            // `to_pos>=0` (`usize`), `to_pos < safe_from_pos` (if-branch), `safe_from_pos`<=`n_bytes` (contract)
+            #[allow(clippy::indexing_slicing)]
             for ch in &self.buf[to_pos..safe_from_pos] {
                 if *ch == b'\n' {
                     self.pos_shifted.line += 1;
