@@ -506,6 +506,9 @@ impl<'rj> RJiter<'rj> {
                 write_completed(value, self.current_index(), writer)?;
                 return Ok(());
             }
+            // We need `err` in the scope later, therefore we don't use `match` for `result`
+            // The Ok-arm is handled above
+            #[allow(clippy::unwrap_used)]
             let err = result.unwrap_err();
             if !can_retry_if_partial(&err) {
                 return Err(RJiterError::from_jiter_error(self.current_index(), err));
