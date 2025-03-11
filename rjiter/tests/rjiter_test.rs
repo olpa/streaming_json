@@ -177,8 +177,8 @@ fn regression_pass_through_long_string_with_chunk_reader() {
 
 #[test]
 fn write_long_with_unicode_code_point_on_border() {
-    let input = r#""Grüße""#;
-    for buf_len in 3..9 {
+    let input = r#""Viele Grüße""#;
+    for buf_len in input.len()..input.len() + 10 {
         // Test write_long_bytes
         {
             let mut buffer = vec![0u8; buf_len];
@@ -189,7 +189,7 @@ fn write_long_with_unicode_code_point_on_border() {
             let wb = rjiter.write_long_bytes(&mut writer);
             wb.unwrap();
 
-            assert_eq!(writer, "Grüße".as_bytes());
+            assert_eq!(writer, "Viele Grüße".as_bytes());
         }
 
         // Test write_long_str
@@ -202,7 +202,7 @@ fn write_long_with_unicode_code_point_on_border() {
             let wb = rjiter.write_long_str(&mut writer);
             wb.unwrap();
 
-            assert_eq!(writer, "Grüße".as_bytes());
+            assert_eq!(writer, "Viele Grüße".as_bytes());
         }
     }
 }
