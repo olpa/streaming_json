@@ -1,3 +1,8 @@
+## [1.1.3] - 2025-03-11
+
+- Fix `InvalidUnicodeCodePoint` when the buffer border breaks a multibyte character
+
+
 ## [1.1.2] - 2025-02-11
 
 - Add missing `std::error::Error` trait implementation

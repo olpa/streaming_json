@@ -571,6 +571,15 @@ impl<'rj> RJiter<'rj> {
                 }
             };
 
+            // Correct the segment end position to not break a unicode code point
+            let segment_end_pos = (0..=segment_end_pos)
+                .rev()
+                .find(
+                    #[allow(clippy::indexing_slicing)]
+                    |&pos| self.buffer.buf[pos] < 128,
+                )
+                .unwrap_or(0);
+
             // Write the segment
             if segment_end_pos > 1 {
                 write_segment(
