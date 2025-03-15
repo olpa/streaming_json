@@ -7,7 +7,9 @@ pub mod scan;
 
 pub use action::{BoxedAction, BoxedEndAction, BoxedMatcher, StreamOp, Trigger};
 pub use error::{Error, Result};
-pub use matcher::{Matcher, Name, ParentAndName, ParentParentAndName};
+pub use matcher::{
+    DebugPrinter as MatcherDebugPrinter, Matcher, Name, ParentAndName, ParentParentAndName,
+};
 pub use scan::{scan, ContextFrame};
 
 pub use rjiter;

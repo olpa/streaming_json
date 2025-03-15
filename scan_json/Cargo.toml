@@ -1,6 +1,6 @@
 [package]
 name = "scan_json"
-version = "1.0.1"
+version = "1.0.2"
 edition = "2021"
 authors = ["Oleg Parashchenko <olpa@uucode.com>"]
 description = "React to elements in a JSON stream"
