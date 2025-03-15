@@ -1,5 +1,6 @@
 //! This module contains the `Matcher` trait and implementations for matching by name,
 //! matching by parent-name combination, and matching by grandparent-parent-name combination.
+//! There is also a debug-matcher to print the context and name of the node being matched.
 
 use crate::scan::ContextFrame;
 
@@ -99,5 +100,16 @@ impl Matcher for ParentParentAndName {
         self.name == name
             && parent.current_key == self.parent
             && grandparent.current_key == self.grandparent
+    }
+}
+
+/// A matcher that prints the context and name of the node being matched.
+#[derive(Debug)]
+pub struct DebugPrinter;
+
+impl Matcher for DebugPrinter {
+    fn matches(&self, name: &str, context: &[ContextFrame]) -> bool {
+        println!("DebugPrinter::matches: name: {name:?} context: {context:?}");
+        false
     }
 }
