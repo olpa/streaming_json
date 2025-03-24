@@ -11,11 +11,11 @@
 #[derive(Debug)]
 pub enum Error {
     RJiterError(rjiter::Error),
-    UnhandledPeek(rjiter::jiter::Peek),
+    UnhandledPeek(rjiter::jiter::Peek, usize),
     UnbalancedJson(usize),
     InternalError(usize, String),
     MaxNestingExceeded(usize, usize),
-    ActionError(Box<dyn std::error::Error>),
+    ActionError(Box<dyn std::error::Error>, usize),
 }
 
 impl std::error::Error for Error {}
@@ -23,10 +23,10 @@ impl std::error::Error for Error {}
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::RJiterError(e) => write!(f, "RJiter error: {e}"),
-            Error::ActionError(e) => write!(f, "Action error: {e}"),
-            Error::UnhandledPeek(p) => write!(f, "UnhandledPeek: {p:?}"),
-            Error::UnbalancedJson(pos) => write!(f, "Unbalanced JSON at position: {pos}"),
+            Error::RJiterError(e) => write!(f, "RJiter error: {e}"), // position is inside `e`
+            Error::ActionError(e, pos) => write!(f, "Action error: {e} at position {pos}"),
+            Error::UnhandledPeek(p, pos) => write!(f, "UnhandledPeek: {p:?} at position {pos}"),
+            Error::UnbalancedJson(pos) => write!(f, "Unbalanced JSON at position {pos}"),
             Error::InternalError(pos, msg) => write!(f, "Internal error at position {pos}: {msg}"),
             Error::MaxNestingExceeded(pos, level) => write!(
                 f,

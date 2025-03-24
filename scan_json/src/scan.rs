@@ -57,10 +57,16 @@ fn handle_object<T: ?Sized>(
             if let Some(begin_action) = find_action(triggers, "#object", context) {
                 match begin_action(rjiter_cell, baton_cell) {
                     StreamOp::None => (),
-                    StreamOp::Error(e) => return Err(ScanError::ActionError(e)),
+                    StreamOp::Error(e) => {
+                        return Err(ScanError::ActionError(
+                            e,
+                            rjiter_cell.borrow().current_index(),
+                        ))
+                    }
                     StreamOp::ValueIsConsumed => {
                         return Err(ScanError::ActionError(
                             "ValueIsConsumed is not supported for #top actions".into(),
+                            rjiter_cell.borrow().current_index(),
                         ));
                     }
                 }
@@ -73,7 +79,10 @@ fn handle_object<T: ?Sized>(
         if !cur_level.is_elem_begin {
             if let Some(end_action) = find_action(triggers_end, &cur_level.current_key, context) {
                 if let Err(e) = end_action(baton_cell) {
-                    return Err(ScanError::ActionError(e));
+                    return Err(ScanError::ActionError(
+                        e,
+                        rjiter_cell.borrow().current_index(),
+                    ));
                 }
             }
         }
@@ -102,7 +111,10 @@ fn handle_object<T: ?Sized>(
             if is_array_or_top(context.last()) {
                 if let Some(end_action) = find_action(triggers_end, "#object", context) {
                     if let Err(e) = end_action(baton_cell) {
-                        return Err(ScanError::ActionError(e));
+                        return Err(ScanError::ActionError(
+                            e,
+                            rjiter_cell.borrow().current_index(),
+                        ));
                     }
                 }
             }
@@ -122,7 +134,10 @@ fn handle_object<T: ?Sized>(
     if let Some(action) = find_action(triggers, &cur_level.current_key, context) {
         let action_result = action(rjiter_cell, baton_cell);
         return match action_result {
-            StreamOp::Error(e) => Err(ScanError::ActionError(e)),
+            StreamOp::Error(e) => Err(ScanError::ActionError(
+                e,
+                rjiter_cell.borrow().current_index(),
+            )),
             StreamOp::None | StreamOp::ValueIsConsumed => Ok((action_result, cur_level)),
         };
     }
@@ -171,7 +186,7 @@ fn skip_basic_values(peeked: Peek, rjiter: &mut RJiter) -> ScanResult<()> {
     if maybe_number.is_ok() {
         return Ok(());
     }
-    Err(ScanError::UnhandledPeek(peeked))
+    Err(ScanError::UnhandledPeek(peeked, rjiter.current_index()))
 }
 
 /// Pushes a new context frame onto the context stack
@@ -207,6 +222,7 @@ fn push_context(
 /// # Errors
 ///
 /// * `ScanError` - A wrapper over `Rjiter` errors, over an error from a trigger actions, or over wrong JSON structure
+#[allow(clippy::too_many_lines)]
 pub fn scan<T: ?Sized>(
     triggers: &[Trigger<BoxedAction<T>>],
     triggers_end: &[Trigger<BoxedEndAction<T>>],
@@ -238,7 +254,12 @@ pub fn scan<T: ?Sized>(
 
             match action_result {
                 StreamOp::ValueIsConsumed => continue,
-                StreamOp::Error(e) => return Err(ScanError::ActionError(e)),
+                StreamOp::Error(e) => {
+                    return Err(ScanError::ActionError(
+                        e,
+                        rjiter_cell.borrow().current_index(),
+                    ))
+                }
                 StreamOp::None => (),
             }
         }
@@ -328,7 +349,7 @@ pub fn scan<T: ?Sized>(
             }
         }
 
-        return Err(ScanError::UnhandledPeek(peeked));
+        return Err(ScanError::UnhandledPeek(peeked, rjiter.current_index()));
     }
 
     Ok(())
