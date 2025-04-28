@@ -579,6 +579,23 @@ fn regression_next_value_empty_object_with_extra_bracket() {
     assert_eq!(result.unwrap(), empty_object);
 }
 
+#[test]
+fn regression_oversize_string_with_long_unicode_code_point() {
+    let input = r#""AAA\n├AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA""#;
+    let mut buffer = [0u8; 16];
+    let mut reader = Cursor::new(input.as_bytes());
+    let mut writer = Vec::new();
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    let wb = rjiter.write_long_str(&mut writer);
+    wb.unwrap();
+
+    assert_eq!(
+        writer,
+        "A\n\u{2502}AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".as_bytes()
+    );
+}
+
 // ----------------------------------------------
 // Auto-generated from a template
 
