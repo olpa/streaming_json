@@ -592,7 +592,7 @@ fn regression_oversize_string_with_long_unicode_code_point() {
 
     assert_eq!(
         writer,
-        "A\n\u{2502}AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".as_bytes()
+        "AAA\n\u{251c}AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".as_bytes()
     );
 }
 
