@@ -1,3 +1,8 @@
+## [1.1.4] - 2025-04-29
+
+- Fix incorrest detection of an utf8 leading byte
+
+
 ## [1.1.3] - 2025-03-11
 
 - Fix `InvalidUnicodeCodePoint` when the buffer border breaks a multibyte character
