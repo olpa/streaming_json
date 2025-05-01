@@ -576,7 +576,7 @@ impl<'rj> RJiter<'rj> {
                 .rev()
                 .find(
                     #[allow(clippy::indexing_slicing)]
-                    |&pos| self.buffer.buf[pos] < 128,
+                    |&pos| is_utf8_leading_byte(self.buffer.buf[pos]),
                 )
                 .unwrap_or(0);
 
@@ -755,4 +755,12 @@ impl<'rj> RJiter<'rj> {
             JsonErrorType::ExpectedSomeIdent,
         ))
     }
+}
+
+fn is_utf8_leading_byte(b: u8) -> bool {
+    // Linters suggests to use `!(0b1000_0000..0b1100_0000).contains(&b)`,
+    // but for me the suggestion looks much less readable
+    #[allow(clippy::manual_range_contains)]
+    let flag = (b < 0b1000_0000) || (b >= 0b1100_0000);
+    flag
 }
