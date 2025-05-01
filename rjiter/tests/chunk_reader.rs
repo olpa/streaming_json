@@ -26,11 +26,16 @@ impl<'a> Read for ChunkReader<'a> {
         let chunk_size = remaining_data
             .iter()
             .position(|&b| b == self.interrupt)
-            .map_or(remaining_data.len(), |p| p + 1);
+            .unwrap_or(remaining_data.len());
 
         let bytes_to_write = chunk_size.min(buf.len());
         buf[..bytes_to_write].copy_from_slice(&remaining_data[..bytes_to_write]);
         self.position += bytes_to_write;
+
+        // Skip the interrupt character if we found one and haven't reached end of data
+        if bytes_to_write == chunk_size && self.position < self.data.len() {
+            self.position += 1;
+        }
 
         Ok(bytes_to_write)
     }
@@ -47,13 +52,13 @@ mod tests {
 
         let mut buf = [0u8; 10];
 
-        // First chunk: [1, 2, 3, 0]
+        // First chunk: [1, 2, 3]
         let n = reader.read(&mut buf).unwrap();
-        assert_eq!(&buf[..n], &[1, 2, 3, 0]);
+        assert_eq!(&buf[..n], &[1, 2, 3]);
 
-        // Second chunk: [4, 5, 0]
+        // Second chunk: [4, 5]
         let n = reader.read(&mut buf).unwrap();
-        assert_eq!(&buf[..n], &[4, 5, 0]);
+        assert_eq!(&buf[..n], &[4, 5]);
 
         // Third chunk: [6]
         let n = reader.read(&mut buf).unwrap();
