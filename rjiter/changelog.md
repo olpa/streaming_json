@@ -1,6 +1,7 @@
-## [1.1.4] - 2025-04-29
+## [1.1.4] - 2025-05-03
 
 - Fix incorrest detection of an utf8 leading byte
+- Fix the range to search for an escape
 
 
 ## [1.1.3] - 2025-03-11

@@ -532,7 +532,10 @@ impl<'rj> RJiter<'rj> {
             // Current state: the string is not completed
             // Find out a segment to write
 
-            let bs_pos = self.buffer.buf.iter().position(|&b| b == b'\\');
+            #[allow(clippy::indexing_slicing)]
+            let bs_pos = self.buffer.buf[..self.buffer.n_bytes]
+                .iter()
+                .position(|&b| b == b'\\');
             let segment_end_pos = match bs_pos {
                 // No backslash: the segment is the whole buffer
                 // `-1`: To write a segment, the writer needs an extra byte to put the quote character

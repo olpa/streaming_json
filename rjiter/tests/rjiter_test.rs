@@ -6,6 +6,8 @@ use rjiter::RJiter;
 use rjiter::Result as RJiterResult;
 mod one_byte_reader;
 use crate::one_byte_reader::OneByteReader;
+mod chunk_reader;
+use crate::chunk_reader::ChunkReader;
 
 #[test]
 fn sanity_check() {
@@ -594,6 +596,45 @@ fn regression_oversize_string_with_long_unicode_code_point() {
         writer,
         "AAA\n\u{251c}AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".as_bytes()
     );
+}
+
+#[test]
+fn regression_long_writer_search_escape_in_nbytes() {
+    let input_str = r#""123@456""#;
+    let input = input_str.as_bytes().to_vec();
+    let mut buffer = [b'A', b'A', b'A', b'A', b'A', b'A', b'\\', b'n'];
+
+    let mut reader = ChunkReader::new(&input, b'@');
+    let mut writer = Vec::new();
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    // Act
+    let wb = rjiter.write_long_str(&mut writer);
+    wb.unwrap();
+
+    // Assert
+    // Error was: the code searched for an escape in the whole buffer instead
+    // of limiting to `n_bytes`, so that the result was 'AAAAA123AA456'
+    assert_eq!(writer, "123456".as_bytes());
+}
+
+#[test]
+fn regression_long_writer_search_escape_in_nbytes_2() {
+    // Like `regression_long_writer_search_escape_in_nbytes`,
+    // but have the escape immediately after the n_bytes
+    let input = r#""123456""#;
+    let mut buffer = [b'"', b'*', b'\\', b'n', b'*', b'*', b'*', b'*'];
+
+    let mut reader = OneByteReader::new(input.bytes());
+    let mut writer = Vec::new();
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    // Act
+    let wb = rjiter.write_long_str(&mut writer);
+    wb.unwrap();
+
+    // Assert
+    assert_eq!(writer, "123456".as_bytes());
 }
 
 // ----------------------------------------------
