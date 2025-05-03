@@ -602,7 +602,7 @@ fn regression_oversize_string_with_long_unicode_code_point() {
 fn regression_long_writer_search_escape_in_nbytes() {
     let input_str = r#""123@456""#;
     let input = input_str.as_bytes().to_vec();
-    let mut buffer = [b'A', b'A', b'A', b'A', b'A', b'A', b'\\', b'\n'];
+    let mut buffer = [b'A', b'A', b'A', b'A', b'A', b'A', b'\\', b'n'];
 
     let mut reader = ChunkReader::new(&input, b'@');
     let mut writer = Vec::new();
@@ -619,11 +619,11 @@ fn regression_long_writer_search_escape_in_nbytes() {
 }
 
 #[test]
-fn regression_long_writer_escape_immediately_after_nbytes() {
+fn regression_long_writer_search_escape_in_nbytes_2() {
     // Like `regression_long_writer_search_escape_in_nbytes`,
     // but have the escape immediately after the n_bytes
-    let input = r#""123456"#;
-    let mut buffer = [b'"', b'*', b'\\', b'\n', b'*', b'*', b'*', b'*'];
+    let input = r#""123456""#;
+    let mut buffer = [b'"', b'*', b'\\', b'n', b'*', b'*', b'*', b'*'];
 
     let mut reader = OneByteReader::new(input.bytes());
     let mut writer = Vec::new();
