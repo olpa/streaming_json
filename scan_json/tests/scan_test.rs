@@ -397,7 +397,10 @@ fn error_in_begin_action() {
     );
 
     let err = result.unwrap_err();
-    assert_eq!(format!("{err}"), "Action error: Test error in begin-action");
+    assert_eq!(
+        format!("{err}"),
+        "Action error: Test error in begin-action at position 7"
+    );
 }
 
 #[test]
@@ -424,7 +427,10 @@ fn error_in_end_action() {
     );
 
     let err = result.unwrap_err();
-    assert_eq!(format!("{err}"), "Action error: Test error in end-action");
+    assert_eq!(
+        format!("{err}"),
+        "Action error: Test error in end-action at position 11"
+    );
 }
 
 #[test]
