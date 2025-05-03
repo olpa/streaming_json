@@ -618,6 +618,25 @@ fn regression_long_writer_search_escape_in_nbytes() {
     assert_eq!(writer, "123456".as_bytes());
 }
 
+#[test]
+fn regression_long_writer_escape_immediately_after_nbytes() {
+    // Like `regression_long_writer_search_escape_in_nbytes`,
+    // but have the escape immediately after the n_bytes
+    let input = r#""123456"#;
+    let mut buffer = [b'"', b'*', b'\\', b'\n', b'*', b'*', b'*', b'*'];
+
+    let mut reader = OneByteReader::new(input.bytes());
+    let mut writer = Vec::new();
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    // Act
+    let wb = rjiter.write_long_str(&mut writer);
+    wb.unwrap();
+
+    // Assert
+    assert_eq!(writer, "123456".as_bytes());
+}
+
 // ----------------------------------------------
 // Auto-generated from a template
 
