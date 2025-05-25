@@ -148,12 +148,28 @@ fn handle_object<T: ?Sized>(
 // Pop the context stack if the array is ended.
 fn handle_array<T: ?Sized>(
     rjiter: &mut RJiter,
+    rjiter_cell: &RefCell<RJiter>,
     baton_cell: &RefCell<T>,
+    triggers: &[Trigger<BoxedAction<T>>],
     triggers_end: &[Trigger<BoxedEndAction<T>>],
     mut cur_level: ContextFrame,
     context: &mut Vec<ContextFrame>,
 ) -> ScanResult<(Option<Peek>, ContextFrame)> {
     let apickedr = if cur_level.is_elem_begin {
+        if let Some(begin_action) = find_action(triggers, "#array", context) {
+            match begin_action(rjiter_cell, baton_cell) {
+                StreamOp::None => (),
+                StreamOp::Error(e) => {
+                    return Err(ScanError::ActionError(e, rjiter.current_index()))
+                }
+                StreamOp::ValueIsConsumed => {
+                    return Err(ScanError::ActionError(
+                        "ValueIsConsumed is not supported for #array actions".into(),
+                        rjiter.current_index(),
+                    ));
+                }
+            }
+        }
         rjiter.known_array()
     } else {
         rjiter.array_step()
@@ -276,7 +292,9 @@ pub fn scan<T: ?Sized>(
         if cur_level.is_in_array {
             let (arr_peeked, new_cur_level) = handle_array(
                 &mut rjiter,
+                rjiter_cell,
                 baton_cell,
+                triggers,
                 triggers_end,
                 cur_level,
                 &mut context,
@@ -327,23 +345,6 @@ pub fn scan<T: ?Sized>(
                 is_in_object: false,
                 is_elem_begin: true,
             };
-            if let Some(begin_action) = find_action(triggers, "#array", &context) {
-                match begin_action(rjiter_cell, baton_cell) {
-                    StreamOp::None => (),
-                    StreamOp::Error(e) => {
-                        return Err(ScanError::ActionError(
-                            e,
-                            rjiter_cell.borrow().current_index(),
-                        ))
-                    }
-                    StreamOp::ValueIsConsumed => {
-                        return Err(ScanError::ActionError(
-                            "ValueIsConsumed is not supported for #array actions".into(),
-                            rjiter_cell.borrow().current_index(),
-                        ));
-                    }
-                }
-            }
             continue;
         }
 
