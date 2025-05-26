@@ -1,3 +1,8 @@
+## [1.0.3] - 2025-05-25
+
+- Allow triggering on arrays
+
+
 ## [1.0.2] - 2025-05-03
 
 - Add input stream position to all errors

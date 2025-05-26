@@ -332,6 +332,151 @@ fn notify_for_object_in_array() {
 }
 
 #[test]
+fn notify_for_array() {
+    let json = r#"{"items": [1, 2, 3]}"#;
+    let mut reader = json.as_bytes();
+    let mut buffer = vec![0u8; 16];
+    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let state = RefCell::new((false, false)); // (begin_called, end_called)
+
+    let begin_action: BoxedAction<(bool, bool)> = Box::new(|_rjiter, state| {
+        state.borrow_mut().0 = true;
+        StreamOp::None
+    });
+    let end_action: BoxedEndAction<(bool, bool)> = Box::new(|state| {
+        state.borrow_mut().1 = true;
+        Ok(())
+    });
+
+    let triggers = vec![Trigger {
+        matcher: Box::new(ParentAndName::new(
+            "items".to_string(),
+            "#array".to_string(),
+        )),
+        action: begin_action,
+    }];
+    let triggers_end = vec![Trigger {
+        matcher: Box::new(ParentAndName::new(
+            "items".to_string(),
+            "#array".to_string(),
+        )),
+        action: end_action,
+    }];
+
+    scan(
+        &triggers,
+        &triggers_end,
+        &vec![],
+        &RefCell::new(rjiter),
+        &state,
+    )
+    .unwrap();
+
+    let final_state = state.borrow();
+    assert!(final_state.0, "Begin trigger should have been called");
+    assert!(final_state.1, "End trigger should have been called");
+}
+
+#[test]
+fn client_can_consume_array() {
+    let json = r#"{"items": [1, 2, 3]}"#;
+    let mut reader = json.as_bytes();
+    let mut buffer = vec![0u8; 16];
+    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let writer_cell = RefCell::new(Vec::new());
+
+    let begin_matcher = Box::new(ParentAndName::new(
+        "items".to_string(),
+        "#array".to_string(),
+    ));
+    let begin_action: BoxedAction<dyn Write> = Box::new(
+        |rjiter_cell: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
+            let mut rjiter = rjiter_cell.borrow_mut();
+            let mut writer = writer.borrow_mut();
+            writer.write_all(b"<array>").unwrap();
+            let value = rjiter.next_value().unwrap();
+            writer.write_all(format!("{value:?}").as_bytes()).unwrap();
+            StreamOp::ValueIsConsumed
+        },
+    );
+    let end_matcher = Box::new(ParentAndName::new(
+        "items".to_string(),
+        "#array".to_string(),
+    ));
+    let end_action: BoxedEndAction<dyn Write> = Box::new(|writer: &RefCell<dyn Write>| {
+        writer.borrow_mut().write_all(b"</array>").unwrap();
+        Ok(())
+    });
+
+    let triggers = vec![Trigger {
+        matcher: begin_matcher,
+        action: begin_action,
+    }];
+    let triggers_end = vec![Trigger {
+        matcher: end_matcher,
+        action: end_action,
+    }];
+
+    scan(
+        &triggers,
+        &triggers_end,
+        &vec![],
+        &RefCell::new(rjiter),
+        &writer_cell,
+    )
+    .unwrap();
+
+    assert_eq!(
+        String::from_utf8(writer_cell.borrow().to_vec()).unwrap(),
+        "<array>Array([Int(1), Int(2), Int(3)])</array>"
+    );
+}
+
+#[test]
+fn several_arrays_top_level() {
+    let json = r#"[1,2,3]  [4,5,6]  [7,8,9]"#;
+    let mut reader = json.as_bytes();
+    let mut buffer = vec![0u8; 16];
+    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let writer_cell = RefCell::new(Vec::new());
+
+    let begin_matcher = Box::new(ParentAndName::new("#top".to_string(), "#array".to_string()));
+    let begin_action: BoxedAction<dyn Write> =
+        Box::new(|_: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
+            writer.borrow_mut().write_all(b"<array>").unwrap();
+            StreamOp::None
+        });
+    let end_matcher = Box::new(ParentAndName::new("#top".to_string(), "#array".to_string()));
+    let end_action: BoxedEndAction<dyn Write> = Box::new(|writer: &RefCell<dyn Write>| {
+        writer.borrow_mut().write_all(b"</array>").unwrap();
+        Ok(())
+    });
+
+    let triggers = vec![Trigger {
+        matcher: begin_matcher,
+        action: begin_action,
+    }];
+    let triggers_end = vec![Trigger {
+        matcher: end_matcher,
+        action: end_action,
+    }];
+
+    scan(
+        &triggers,
+        &triggers_end,
+        &vec![],
+        &RefCell::new(rjiter),
+        &writer_cell,
+    )
+    .unwrap();
+
+    assert_eq!(
+        String::from_utf8(writer_cell.borrow().to_vec()).unwrap(),
+        "<array></array><array></array><array></array>"
+    );
+}
+
+#[test]
 fn max_nesting_array() {
     let json = "[".repeat(25);
     let mut reader = json.as_bytes();
@@ -441,24 +586,37 @@ fn several_objects_top_level() {
     let rjiter = RJiter::new(&mut reader, &mut buffer);
     let writer_cell = RefCell::new(Vec::new());
 
-    let matcher = Box::new(Name::new("foo".to_string()));
-    let action: BoxedAction<dyn Write> =
+    let begin_matcher = Box::new(Name::new("foo".to_string()));
+    let begin_action: BoxedAction<dyn Write> =
         Box::new(|_: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
-            writer.borrow_mut().write_all(b"foo").unwrap();
+            writer.borrow_mut().write_all(b"<foo>").unwrap();
             StreamOp::None
         });
-    let triggers = vec![Trigger { matcher, action }];
+    let end_matcher = Box::new(Name::new("foo".to_string()));
+    let end_action: BoxedEndAction<dyn Write> = Box::new(|writer: &RefCell<dyn Write>| {
+        writer.borrow_mut().write_all(b"</foo>").unwrap();
+        Ok(())
+    });
+
+    let triggers = vec![Trigger {
+        matcher: begin_matcher,
+        action: begin_action,
+    }];
+    let triggers_end = vec![Trigger {
+        matcher: end_matcher,
+        action: end_action,
+    }];
 
     scan(
         &triggers,
-        &vec![],
+        &triggers_end,
         &vec![],
         &RefCell::new(rjiter),
         &writer_cell,
     )
     .unwrap();
 
-    assert_eq!(*writer_cell.borrow(), b"foofoofoo");
+    assert_eq!(*writer_cell.borrow(), b"<foo></foo><foo></foo><foo></foo>");
 }
 
 #[test]
