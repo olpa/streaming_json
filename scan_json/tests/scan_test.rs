@@ -586,24 +586,37 @@ fn several_objects_top_level() {
     let rjiter = RJiter::new(&mut reader, &mut buffer);
     let writer_cell = RefCell::new(Vec::new());
 
-    let matcher = Box::new(Name::new("foo".to_string()));
-    let action: BoxedAction<dyn Write> =
+    let begin_matcher = Box::new(Name::new("foo".to_string()));
+    let begin_action: BoxedAction<dyn Write> =
         Box::new(|_: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
-            writer.borrow_mut().write_all(b"foo").unwrap();
+            writer.borrow_mut().write_all(b"<foo>").unwrap();
             StreamOp::None
         });
-    let triggers = vec![Trigger { matcher, action }];
+    let end_matcher = Box::new(Name::new("foo".to_string()));
+    let end_action: BoxedEndAction<dyn Write> = Box::new(|writer: &RefCell<dyn Write>| {
+        writer.borrow_mut().write_all(b"</foo>").unwrap();
+        Ok(())
+    });
+
+    let triggers = vec![Trigger {
+        matcher: begin_matcher,
+        action: begin_action,
+    }];
+    let triggers_end = vec![Trigger {
+        matcher: end_matcher,
+        action: end_action,
+    }];
 
     scan(
         &triggers,
-        &vec![],
+        &triggers_end,
         &vec![],
         &RefCell::new(rjiter),
         &writer_cell,
     )
     .unwrap();
 
-    assert_eq!(*writer_cell.borrow(), b"foofoofoo");
+    assert_eq!(*writer_cell.borrow(), b"<foo></foo><foo></foo><foo></foo>");
 }
 
 #[test]
