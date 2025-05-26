@@ -385,26 +385,41 @@ fn client_can_consume_array() {
     let rjiter = RJiter::new(&mut reader, &mut buffer);
     let writer_cell = RefCell::new(Vec::new());
 
-    let matcher = Box::new(ParentAndName::new(
+    let begin_matcher = Box::new(ParentAndName::new(
         "items".to_string(),
         "#array".to_string(),
     ));
-    let action: BoxedAction<dyn Write> = Box::new(
+    let begin_action: BoxedAction<dyn Write> = Box::new(
         |rjiter_cell: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
             let mut rjiter = rjiter_cell.borrow_mut();
             let mut writer = writer.borrow_mut();
-            writer.write_all(b"a:").unwrap();
+            writer.write_all(b"<array>").unwrap();
             let value = rjiter.next_value().unwrap();
             writer.write_all(format!("{value:?}").as_bytes()).unwrap();
             StreamOp::ValueIsConsumed
         },
     );
+    let end_matcher = Box::new(ParentAndName::new(
+        "items".to_string(),
+        "#array".to_string(),
+    ));
+    let end_action: BoxedEndAction<dyn Write> = Box::new(|writer: &RefCell<dyn Write>| {
+        writer.borrow_mut().write_all(b"</array>").unwrap();
+        Ok(())
+    });
 
-    let triggers = vec![Trigger { matcher, action }];
+    let triggers = vec![Trigger {
+        matcher: begin_matcher,
+        action: begin_action,
+    }];
+    let triggers_end = vec![Trigger {
+        matcher: end_matcher,
+        action: end_action,
+    }];
 
     scan(
         &triggers,
-        &vec![],
+        &triggers_end,
         &vec![],
         &RefCell::new(rjiter),
         &writer_cell,
@@ -413,7 +428,7 @@ fn client_can_consume_array() {
 
     assert_eq!(
         String::from_utf8(writer_cell.borrow().to_vec()).unwrap(),
-        "a:Array([Int(1), Int(2), Int(3)])"
+        "<array>Array([Int(1), Int(2), Int(3)])</array>"
     );
 }
 
