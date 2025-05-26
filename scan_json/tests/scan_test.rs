@@ -378,6 +378,46 @@ fn notify_for_array() {
 }
 
 #[test]
+fn client_can_consume_array() {
+    let json = r#"{"items": [1, 2, 3]}"#;
+    let mut reader = json.as_bytes();
+    let mut buffer = vec![0u8; 16];
+    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let writer_cell = RefCell::new(Vec::new());
+
+    let matcher = Box::new(ParentAndName::new(
+        "items".to_string(),
+        "#array".to_string(),
+    ));
+    let action: BoxedAction<dyn Write> = Box::new(
+        |rjiter_cell: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
+            let mut rjiter = rjiter_cell.borrow_mut();
+            let mut writer = writer.borrow_mut();
+            writer.write_all(b"a:").unwrap();
+            let value = rjiter.next_value().unwrap();
+            writer.write_all(format!("{value:?}").as_bytes()).unwrap();
+            StreamOp::ValueIsConsumed
+        },
+    );
+
+    let triggers = vec![Trigger { matcher, action }];
+
+    scan(
+        &triggers,
+        &vec![],
+        &vec![],
+        &RefCell::new(rjiter),
+        &writer_cell,
+    )
+    .unwrap();
+
+    assert_eq!(
+        String::from_utf8(writer_cell.borrow().to_vec()).unwrap(),
+        "a:Array([Int(1), Int(2), Int(3)])"
+    );
+}
+
+#[test]
 fn several_arrays_top_level() {
     let json = r#"[1,2,3]  [4,5,6]  [7,8,9]"#;
     let mut reader = json.as_bytes();

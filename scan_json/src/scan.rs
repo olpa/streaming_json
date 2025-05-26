@@ -147,7 +147,6 @@ fn handle_object<T: ?Sized>(
 // Handle a JSON array item.
 // Pop the context stack if the array is ended.
 fn handle_array<T: ?Sized>(
-    rjiter: &mut RJiter,
     rjiter_cell: &RefCell<RJiter>,
     baton_cell: &RefCell<T>,
     triggers: &[Trigger<BoxedAction<T>>],
@@ -155,37 +154,46 @@ fn handle_array<T: ?Sized>(
     mut cur_level: ContextFrame,
     context: &mut Vec<ContextFrame>,
 ) -> ScanResult<(Option<Peek>, ContextFrame)> {
-    let apickedr = if cur_level.is_elem_begin {
+    // Call the begin-trigger at the beginning of the array
+    let mut is_array_consumed = false;
+    if cur_level.is_elem_begin {
         if let Some(begin_action) = find_action(triggers, "#array", context) {
             match begin_action(rjiter_cell, baton_cell) {
                 StreamOp::None => (),
+                StreamOp::ValueIsConsumed => is_array_consumed = true,
                 StreamOp::Error(e) => {
-                    return Err(ScanError::ActionError(e, rjiter.current_index()))
-                }
-                StreamOp::ValueIsConsumed => {
-                    return Err(ScanError::ActionError(
-                        "ValueIsConsumed is not supported for #array actions".into(),
-                        rjiter.current_index(),
-                    ));
+                    let rjiter = rjiter_cell.borrow();
+                    return Err(ScanError::ActionError(e, rjiter.current_index()));
                 }
             }
         }
+    }
+
+    // Get the next item in the array
+    let apickedr = if is_array_consumed {
+        Ok(None)
+    } else if cur_level.is_elem_begin {
+        let mut rjiter = rjiter_cell.borrow_mut();
         rjiter.known_array()
     } else {
+        let mut rjiter = rjiter_cell.borrow_mut();
         rjiter.array_step()
     };
     cur_level.is_elem_begin = false;
 
+    // Call the end-trigger at the end of the array
     let peeked = apickedr?;
     if peeked.is_none() {
         if let Some(end_action) = find_action(triggers_end, "#array", context) {
             if let Err(e) = end_action(baton_cell) {
+                let rjiter = rjiter_cell.borrow();
                 return Err(ScanError::ActionError(e, rjiter.current_index()));
             }
         }
         if let Some(new_cur_level) = context.pop() {
             return Ok((None, new_cur_level));
         }
+        let rjiter = rjiter_cell.borrow();
         return Err(ScanError::UnbalancedJson(rjiter.current_index()));
     }
     Ok((peeked, cur_level))
@@ -287,11 +295,8 @@ pub fn scan<T: ?Sized>(
             }
         }
 
-        let mut rjiter = rjiter_cell.borrow_mut();
-
         if cur_level.is_in_array {
             let (arr_peeked, new_cur_level) = handle_array(
-                &mut rjiter,
                 rjiter_cell,
                 baton_cell,
                 triggers,
@@ -306,6 +311,8 @@ pub fn scan<T: ?Sized>(
             }
             peeked = arr_peeked;
         }
+
+        let mut rjiter = rjiter_cell.borrow_mut();
 
         if peeked.is_none() {
             let peekedr = rjiter.peek();
