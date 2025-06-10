@@ -2,6 +2,7 @@
 
 pub mod action;
 pub mod error;
+pub mod idtransform;
 pub mod matcher;
 pub mod scan;
 
