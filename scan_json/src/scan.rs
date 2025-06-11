@@ -371,7 +371,30 @@ pub fn scan<T: ?Sized>(
             continue;
         }
 
-        if skip_basic_values(peeked, &mut rjiter).is_ok() {
+        // Handle basic (aka atomic) values
+        let mut should_call_default_handler = true;
+        push_context(&mut context, cur_level, &rjiter)?;
+        if let Some(action) = find_action(triggers, "#atom", &context) {
+            let action_result = action(rjiter_cell, baton_cell);
+            match action_result {
+                StreamOp::Error(e) => {
+                    return Err(ScanError::ActionError(
+                        e,
+                        rjiter_cell.borrow().current_index(),
+                    ))
+                }
+                StreamOp::ValueIsConsumed => should_call_default_handler = false,
+                StreamOp::None => (),
+            }
+        }
+        cur_level = context.pop().ok_or_else(|| {
+            ScanError::InternalError(
+                rjiter.current_index(),
+                "Context stack is empty when it should not be".to_string(),
+            )
+        })?;
+
+        if should_call_default_handler && skip_basic_values(peeked, &mut rjiter).is_ok() {
             continue;
         }
 
