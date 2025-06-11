@@ -668,14 +668,15 @@ fn atoms_on_top_level() {
     let writer_cell = RefCell::new(Vec::new());
 
     let begin_matcher = Box::new(ParentAndName::new("#top".to_string(), "#atom".to_string()));
-    let begin_action: BoxedAction<dyn Write> =
-        Box::new(|rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>| {
+    let begin_action: BoxedAction<dyn Write> = Box::new(
+        |rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>| {
             let mut rjiter = rjiter_cell.borrow_mut();
             let mut writer = writer_cell.borrow_mut();
             let peek = rjiter.peek().unwrap();
             write!(writer, "(matched {:?})", peek).unwrap();
             StreamOp::None
-        });
+        },
+    );
 
     let triggers = vec![Trigger {
         matcher: begin_matcher,
@@ -710,14 +711,15 @@ fn atoms_in_array() {
         "#array".to_string(),
         "#atom".to_string(),
     ));
-    let begin_action: BoxedAction<dyn Write> =
-        Box::new(|rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>| {
+    let begin_action: BoxedAction<dyn Write> = Box::new(
+        |rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>| {
             let mut rjiter = rjiter_cell.borrow_mut();
             let mut writer = writer_cell.borrow_mut();
             let peek = rjiter.peek().unwrap();
             write!(writer, "(matched {:?})", peek).unwrap();
             StreamOp::None
-        });
+        },
+    );
 
     let triggers = vec![Trigger {
         matcher: begin_matcher,
@@ -748,34 +750,36 @@ fn atoms_in_object() {
     let rjiter = RJiter::new(&mut reader, &mut buffer);
     let writer_cell = RefCell::new(Vec::new());
 
-    let begin_matcher = Box::new(ParentAndName::new(
-        "#object".to_string(),
-        "#atom".to_string(),
-    ));
-    let begin_action: BoxedAction<dyn Write> =
-        Box::new(|_: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
-            writer.borrow_mut().write_all(b"(matched),").unwrap();
-            StreamOp::ValueIsConsumed
-        });
+    fn handle_atom(rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>) -> StreamOp {
+        let mut rjiter = rjiter_cell.borrow_mut();
+        let mut writer = writer_cell.borrow_mut();
+        let peek = rjiter.peek().unwrap();
+        write!(writer, "(matched {:?})", peek).unwrap();
+        StreamOp::None
+    }
 
-    let triggers = vec![Trigger {
-        matcher: begin_matcher,
-        action: begin_action,
-    }];
+    let triggers: Vec<Trigger<BoxedAction<dyn Write>>> = vec!['a', 'b', 'c', 'd', 'e', 'f']
+        .into_iter()
+        .map(|field| {
+            let matcher = Box::new(ParentAndName::new(field.to_string(), "#atom".to_string()));
+            let action: BoxedAction<dyn Write> = Box::new(handle_atom);
+            Trigger { matcher, action }
+        })
+        .collect();
 
-    scan(
+    let result = scan(
         &triggers,
         &vec![],
         &vec![],
         &RefCell::new(rjiter),
         &writer_cell,
-    )
-    .unwrap();
+    );
+    assert!(result.is_ok());
 
     let message = String::from_utf8(writer_cell.borrow().to_vec()).unwrap();
     assert_eq!(
         message,
-        "(matched),(matched),(matched),(matched),(matched),(matched),"
+        "(matched Null)(matched True)(matched False)(matched Peek('4'))(matched Peek('3'))(matched String)"
     );
 }
 
