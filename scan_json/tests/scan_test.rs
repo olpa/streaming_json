@@ -668,12 +668,11 @@ fn atoms_on_top_level() {
     let writer_cell = RefCell::new(Vec::new());
 
     let begin_matcher = Box::new(ParentAndName::new("#top".to_string(), "#atom".to_string()));
-    let begin_action: BoxedAction<dyn Write> = Box::new(
-        |_: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
+    let begin_action: BoxedAction<dyn Write> =
+        Box::new(|_: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
             writer.borrow_mut().write_all(b"(matched),").unwrap();
             StreamOp::ValueIsConsumed
-        },
-    );
+        });
 
     let triggers = vec![Trigger {
         matcher: begin_matcher,
@@ -690,7 +689,10 @@ fn atoms_on_top_level() {
     .unwrap();
 
     let message = String::from_utf8(writer_cell.borrow().to_vec()).unwrap();
-    assert_eq!(message, "(matched),(matched),(matched),(matched),(matched),(matched),");
+    assert_eq!(
+        message,
+        "(matched),(matched),(matched),(matched),(matched),(matched),"
+    );
 }
 
 #[test]
@@ -701,13 +703,15 @@ fn atoms_in_array() {
     let rjiter = RJiter::new(&mut reader, &mut buffer);
     let writer_cell = RefCell::new(Vec::new());
 
-    let begin_matcher = Box::new(ParentAndName::new("#array".to_string(), "#atom".to_string()));
-    let begin_action: BoxedAction<dyn Write> = Box::new(
-        |_: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
+    let begin_matcher = Box::new(ParentAndName::new(
+        "#array".to_string(),
+        "#atom".to_string(),
+    ));
+    let begin_action: BoxedAction<dyn Write> =
+        Box::new(|_: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
             writer.borrow_mut().write_all(b"(matched),").unwrap();
             StreamOp::ValueIsConsumed
-        },
-    );
+        });
 
     let triggers = vec![Trigger {
         matcher: begin_matcher,
@@ -724,7 +728,10 @@ fn atoms_in_array() {
     .unwrap();
 
     let message = String::from_utf8(writer_cell.borrow().to_vec()).unwrap();
-    assert_eq!(message, "(matched),(matched),(matched),(matched),(matched),(matched),");
+    assert_eq!(
+        message,
+        "(matched),(matched),(matched),(matched),(matched),(matched),"
+    );
 }
 
 #[test]
@@ -735,13 +742,15 @@ fn atoms_in_object() {
     let rjiter = RJiter::new(&mut reader, &mut buffer);
     let writer_cell = RefCell::new(Vec::new());
 
-    let begin_matcher = Box::new(ParentAndName::new("#object".to_string(), "#atom".to_string()));
-    let begin_action: BoxedAction<dyn Write> = Box::new(
-        |_: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
+    let begin_matcher = Box::new(ParentAndName::new(
+        "#object".to_string(),
+        "#atom".to_string(),
+    ));
+    let begin_action: BoxedAction<dyn Write> =
+        Box::new(|_: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
             writer.borrow_mut().write_all(b"(matched),").unwrap();
             StreamOp::ValueIsConsumed
-        },
-    );
+        });
 
     let triggers = vec![Trigger {
         matcher: begin_matcher,
@@ -758,7 +767,10 @@ fn atoms_in_object() {
     .unwrap();
 
     let message = String::from_utf8(writer_cell.borrow().to_vec()).unwrap();
-    assert_eq!(message, "(matched),(matched),(matched),(matched),(matched),(matched),");
+    assert_eq!(
+        message,
+        "(matched),(matched),(matched),(matched),(matched),(matched),"
+    );
 }
 
 #[test]
@@ -767,6 +779,7 @@ fn stream_op_return_values() {
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let rjiter_cell = RefCell::new(rjiter);
     let writer_cell = RefCell::new(Vec::new());
 
     let begin_matcher = Box::new(Name::new("#atom".to_string()));
@@ -774,25 +787,21 @@ fn stream_op_return_values() {
         |rjiter_cell: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
             let mut rjiter = rjiter_cell.borrow_mut();
             let mut writer = writer.borrow_mut();
-            let value = rjiter.get_value().unwrap();
-            
+            let value = rjiter.next_value().unwrap();
+
             match value {
-                Peek::Bool => {
-                    let bool_val = rjiter.next_value().unwrap();
-                    match bool_val {
-                        Peek::Bool => {
-                            writer.write_all(b"consumed,").unwrap();
-                            StreamOp::ValueIsConsumed
-                        }
-                        _ => {
-                            writer.write_all(b"not consumed,").unwrap();
-                            StreamOp::None
-                        }
+                rjiter::jiter::JsonValue::Bool(bool_val) => {
+                    if bool_val {
+                        writer.write_all(b"consumed,").unwrap();
+                        StreamOp::ValueIsConsumed
+                    } else {
+                        writer.write_all(b"not consumed,").unwrap();
+                        StreamOp::None
                     }
                 }
                 _ => {
                     writer.write_all(b"unexpected,").unwrap();
-                    StreamOp::Error("Unexpected value type".into())
+                    StreamOp::Error("Expected error for the test".into())
                 }
             }
         },
@@ -803,13 +812,7 @@ fn stream_op_return_values() {
         action: begin_action,
     }];
 
-    let result = scan(
-        &triggers,
-        &vec![],
-        &vec![],
-        &RefCell::new(rjiter),
-        &writer_cell,
-    );
+    let result = scan(&triggers, &vec![], &vec![], &rjiter_cell, &writer_cell);
 
     // Check the output
     let message = String::from_utf8(writer_cell.borrow().to_vec()).unwrap();
@@ -819,9 +822,8 @@ fn stream_op_return_values() {
     assert!(result.is_err());
 
     // Check that the next value is still 42
-    let mut rjiter = rjiter_cell.borrow_mut();
-    let peek = rjiter.peek().unwrap();
-    assert!(matches!(peek, Peek::Int));
+    let num = rjiter_cell.borrow_mut().next_int().unwrap();
+    assert!(matches!(num, rjiter::jiter::NumberInt::Int(42)));
 }
 
 fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
