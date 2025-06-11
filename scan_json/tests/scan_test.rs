@@ -711,9 +711,12 @@ fn atoms_in_array() {
         "#atom".to_string(),
     ));
     let begin_action: BoxedAction<dyn Write> =
-        Box::new(|_: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
-            writer.borrow_mut().write_all(b"(matched),").unwrap();
-            StreamOp::ValueIsConsumed
+        Box::new(|rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>| {
+            let mut rjiter = rjiter_cell.borrow_mut();
+            let mut writer = writer_cell.borrow_mut();
+            let peek = rjiter.peek().unwrap();
+            write!(writer, "(matched {:?})", peek).unwrap();
+            StreamOp::None
         });
 
     let triggers = vec![Trigger {
@@ -721,19 +724,19 @@ fn atoms_in_array() {
         action: begin_action,
     }];
 
-    scan(
+    let result = scan(
         &triggers,
         &vec![],
         &vec![],
         &RefCell::new(rjiter),
         &writer_cell,
-    )
-    .unwrap();
+    );
+    assert!(result.is_ok());
 
     let message = String::from_utf8(writer_cell.borrow().to_vec()).unwrap();
     assert_eq!(
         message,
-        "(matched),(matched),(matched),(matched),(matched),(matched),"
+        "(matched Null)(matched True)(matched False)(matched Peek('4'))(matched Peek('3'))(matched String)"
     );
 }
 
