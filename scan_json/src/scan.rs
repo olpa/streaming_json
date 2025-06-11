@@ -389,10 +389,7 @@ pub fn scan<T: ?Sized>(
 
             match action_result {
                 StreamOp::Error(e) => {
-                    return Err(ScanError::ActionError(
-                        e,
-                        rjiter_cell.borrow().current_index(),
-                    ))
+                    return Err(ScanError::ActionError(e, rjiter.current_index()))
                 }
                 StreamOp::ValueIsConsumed => continue,
                 StreamOp::None => (),
