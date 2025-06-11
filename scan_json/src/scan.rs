@@ -371,23 +371,8 @@ pub fn scan<T: ?Sized>(
         }
 
         // Handle basic (aka atomic) values
-        let mut should_call_default_handler = true;
         push_context(&mut context, cur_level, &rjiter)?;
-        if let Some(action) = find_action(triggers, "#atom", &context) {
-            drop(rjiter);
-            let action_result = action(rjiter_cell, baton_cell);
-            rjiter = rjiter_cell.borrow_mut();
-            match action_result {
-                StreamOp::Error(e) => {
-                    return Err(ScanError::ActionError(
-                        e,
-                        rjiter_cell.borrow().current_index(),
-                    ))
-                }
-                StreamOp::ValueIsConsumed => should_call_default_handler = false,
-                StreamOp::None => (),
-            }
-        }
+        let action = find_action(triggers, "#atom", &context);
         cur_level = context.pop().ok_or_else(|| {
             ScanError::InternalError(
                 rjiter.current_index(),
@@ -395,7 +380,26 @@ pub fn scan<T: ?Sized>(
             )
         })?;
 
-        if should_call_default_handler && skip_basic_values(peeked, &mut rjiter).is_ok() {
+        // Call the action for the atom, then return (error) or continue (value is consumed)
+        // or pass through to the default handler
+        if let Some(action) = action {
+            drop(rjiter);
+            let action_result = action(rjiter_cell, baton_cell);
+            rjiter = rjiter_cell.borrow_mut();
+
+            match action_result {
+                StreamOp::Error(e) => {
+                    return Err(ScanError::ActionError(
+                        e,
+                        rjiter_cell.borrow().current_index(),
+                    ))
+                }
+                StreamOp::ValueIsConsumed => continue,
+                StreamOp::None => (),
+            }
+        }
+
+        if skip_basic_values(peeked, &mut rjiter).is_ok() {
             continue;
         }
 
