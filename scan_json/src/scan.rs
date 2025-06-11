@@ -199,8 +199,12 @@ fn handle_array<T: ?Sized>(
     Ok((peeked, cur_level))
 }
 
-/// Skips over basic JSON values (null, true, false, numbers)
+/// Skips over basic JSON values (null, true, false, numbers, strings)
 fn skip_basic_values(peeked: Peek, rjiter: &mut RJiter) -> ScanResult<()> {
+    if peeked == Peek::String {
+        rjiter.write_long_bytes(&mut io::sink())?;
+        return Ok(());
+    }
     if peeked == Peek::Null {
         rjiter.known_null()?;
         return Ok(());
@@ -363,11 +367,6 @@ pub fn scan<T: ?Sized>(
                 is_in_object: true,
                 is_elem_begin: true,
             };
-            continue;
-        }
-
-        if peeked == Peek::String {
-            rjiter.write_long_bytes(&mut io::sink())?;
             continue;
         }
 
