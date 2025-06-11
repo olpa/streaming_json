@@ -669,9 +669,12 @@ fn atoms_on_top_level() {
 
     let begin_matcher = Box::new(ParentAndName::new("#top".to_string(), "#atom".to_string()));
     let begin_action: BoxedAction<dyn Write> =
-        Box::new(|_: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
-            writer.borrow_mut().write_all(b"(matched),").unwrap();
-            StreamOp::ValueIsConsumed
+        Box::new(|rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>| {
+            let mut rjiter = rjiter_cell.borrow_mut();
+            let mut writer = writer_cell.borrow_mut();
+            let peek = rjiter.peek().unwrap();
+            write!(writer, "(matched {:?})", peek).unwrap();
+            StreamOp::None
         });
 
     let triggers = vec![Trigger {
@@ -679,14 +682,16 @@ fn atoms_on_top_level() {
         action: begin_action,
     }];
 
-    scan(
+    let result = scan(
         &triggers,
         &vec![],
         &vec![],
         &RefCell::new(rjiter),
         &writer_cell,
-    )
-    .unwrap();
+    );
+    let message = String::from_utf8(writer_cell.borrow().to_vec()).unwrap(); // FIXME
+    println!("!!!!! test output: {:?}", message); // FIXME
+    assert!(result.is_ok());
 
     let message = String::from_utf8(writer_cell.borrow().to_vec()).unwrap();
     assert_eq!(
