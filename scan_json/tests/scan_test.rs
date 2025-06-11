@@ -689,14 +689,12 @@ fn atoms_on_top_level() {
         &RefCell::new(rjiter),
         &writer_cell,
     );
-    let message = String::from_utf8(writer_cell.borrow().to_vec()).unwrap(); // FIXME
-    println!("!!!!! test output: {:?}", message); // FIXME
     assert!(result.is_ok());
 
     let message = String::from_utf8(writer_cell.borrow().to_vec()).unwrap();
     assert_eq!(
         message,
-        "(matched),(matched),(matched),(matched),(matched),(matched),"
+        "(matched Null)(matched True)(matched False)(matched Peek('4'))(matched Peek('3'))(matched String)"
     );
 }
 
