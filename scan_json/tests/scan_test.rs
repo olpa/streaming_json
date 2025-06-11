@@ -784,8 +784,8 @@ fn atoms_in_object() {
 }
 
 #[test]
-fn stream_op_return_values() {
-    let json = r#"true false 42"#;
+fn atoms_stream_op_return_values() {
+    let json = r#"true false 42 777"#;
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
@@ -797,17 +797,17 @@ fn stream_op_return_values() {
         |rjiter_cell: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
             let mut rjiter = rjiter_cell.borrow_mut();
             let mut writer = writer.borrow_mut();
-            let value = rjiter.next_value().unwrap();
+            let peeked = rjiter.peek().unwrap();
 
-            match value {
-                rjiter::jiter::JsonValue::Bool(bool_val) => {
-                    if bool_val {
-                        writer.write_all(b"consumed,").unwrap();
-                        StreamOp::ValueIsConsumed
-                    } else {
-                        writer.write_all(b"not consumed,").unwrap();
-                        StreamOp::None
-                    }
+            match peeked {
+                Peek::True => {
+                    rjiter.next_value().unwrap();
+                    writer.write_all(b"consumed,").unwrap();
+                    StreamOp::ValueIsConsumed
+                }
+                Peek::False => {
+                    writer.write_all(b"not consumed,").unwrap();
+                    StreamOp::None
                 }
                 _ => {
                     writer.write_all(b"unexpected,").unwrap();
@@ -827,8 +827,6 @@ fn stream_op_return_values() {
     // Check the output
     let message = String::from_utf8(writer_cell.borrow().to_vec()).unwrap();
     assert_eq!(message, "consumed,not consumed,unexpected,");
-
-    // Check that scan returned an error
     assert!(result.is_err());
 
     // Check that the next value is still 42
