@@ -375,7 +375,9 @@ pub fn scan<T: ?Sized>(
         let mut should_call_default_handler = true;
         push_context(&mut context, cur_level, &rjiter)?;
         if let Some(action) = find_action(triggers, "#atom", &context) {
+            drop(rjiter);
             let action_result = action(rjiter_cell, baton_cell);
+            rjiter = rjiter_cell.borrow_mut();
             match action_result {
                 StreamOp::Error(e) => {
                     return Err(ScanError::ActionError(
