@@ -217,7 +217,7 @@ fn skip_basic_values(peeked: Peek, rjiter: &mut RJiter) -> ScanResult<()> {
         rjiter.known_bool(peeked)?;
         return Ok(());
     }
-    let maybe_number = rjiter.next_number();
+    let maybe_number = rjiter.next_number_bytes();
     if maybe_number.is_ok() {
         return Ok(());
     }
