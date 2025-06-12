@@ -1009,16 +1009,26 @@ fn test_json_to_xml() {
             writer_cell: &writer_cell,
         }),
         Box::new(
+            |_rjiter_cell: &RefCell<RJiter>, _writer_cell: &RefCell<dyn Write>| StreamOp::None,
+        ),
+    );
+    let on_value: Trigger<BoxedAction<dyn Write>> = Trigger::new(
+        Box::new(Name::new("#atom".to_string())),
+        Box::new(
             |rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>| {
                 let mut rjiter = rjiter_cell.borrow_mut();
                 let mut writer = writer_cell.borrow_mut();
                 let peek = rjiter.peek().unwrap();
                 if peek == Peek::String {
                     rjiter.write_long_bytes(&mut *writer).unwrap();
-                    StreamOp::ValueIsConsumed
-                } else {
-                    StreamOp::None
+                    return StreamOp::ValueIsConsumed;
                 }
+                let maybe_number = rjiter.next_number_bytes();
+                if let Ok(as_bytes) = maybe_number {
+                    writer.write_all(as_bytes).unwrap();
+                    return StreamOp::ValueIsConsumed;
+                }
+                StreamOp::None
             },
         ),
     );
@@ -1031,7 +1041,7 @@ fn test_json_to_xml() {
     );
 
     scan(
-        &vec![begin_tag],
+        &vec![on_value, begin_tag],
         &vec![end_tag],
         &vec![],
         &RefCell::new(rjiter),
@@ -1040,5 +1050,5 @@ fn test_json_to_xml() {
     .unwrap();
 
     let message = String::from_utf8(writer_cell.borrow().to_vec()).unwrap();
-    assert_eq!(message, "<#object><name>John Doe</name><age></age><phones><phone>+44 1234567</phone><phone>+44 2345678</phone></phones></#object>");
+    assert_eq!(message, "<#object><name>John Doe</name><age>43</age><phones><phone>+44 1234567</phone><phone>+44 2345678</phone></phones></#object>");
 }
