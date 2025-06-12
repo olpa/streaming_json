@@ -1,4 +1,7 @@
-use crate::{rjiter::jiter::Peek, Error as ScanError, RJiter, Result as ScanResult};
+use crate::{rjiter::jiter::Peek, Error as ScanError, RJiter, Result as ScanResult, scan};
+use crate::{BoxedAction, Name, Trigger};
+use crate::StreamOp;
+use std::cell::RefCell;
 use std::io::Write;
 
 /// Copy a JSON atom (string, number, boolean, or null) from the input to the output.
@@ -38,7 +41,38 @@ pub fn copy_atom(peeked: Peek, rjiter: &mut RJiter, writer: &mut dyn Write) -> S
     Err(ScanError::UnhandledPeek(peeked, rjiter.current_index()))
 }
 
-pub fn idtransform(_rjiter: &mut RJiter, _writer: &mut dyn Write) {
-    #[warn(clippy::needless_return)]
-    return;
+struct IdTransform<'a> {
+    writer: &'a mut dyn Write,
+}
+
+impl<'a> IdTransform<'a> {
+    fn new(writer: &'a mut dyn Write) -> Self {
+        Self { writer }
+    }
+    fn get_writer_mut(&mut self) -> &mut dyn Write {
+        self.writer
+    }
+}
+
+fn on_atom(rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform>) -> StreamOp {
+    let mut rjiter = rjiter_cell.borrow_mut();
+    let mut idt = idt_cell.borrow_mut();
+    match rjiter.peek() {
+        Ok(peeked) => match copy_atom(peeked, &mut rjiter, idt.get_writer_mut()) {
+            Ok(_) => StreamOp::ValueIsConsumed,
+            Err(e) => StreamOp::from(e),
+        },
+        Err(e) => StreamOp::from(e),
+    }
+}
+
+pub fn idtransform(rjiter_cell: &RefCell<RJiter>, writer: &mut dyn Write) -> ScanResult<()> {
+    let idt = IdTransform::new(writer);
+    let idt_cell = RefCell::new(idt);
+
+    let trigger_atom: Trigger<BoxedAction<IdTransform>> = Trigger::new(
+        Box::new(Name::new("#atom".to_string())),
+        Box::new(on_atom),
+    );
+    scan(&vec![trigger_atom], &vec![], &vec![], &rjiter_cell, &idt_cell)
 }

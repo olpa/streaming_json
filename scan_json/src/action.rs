@@ -15,6 +15,12 @@ pub enum StreamOp {
     Error(Box<dyn std::error::Error>),
 }
 
+impl<E: std::error::Error + 'static> From<E> for StreamOp {
+    fn from(error: E) -> Self {
+        StreamOp::Error(Box::new(error))
+    }
+}
+
 pub type BoxedMatcher<'a> = Box<dyn Matcher + 'a>;
 
 /// Type alias for a boxed action function

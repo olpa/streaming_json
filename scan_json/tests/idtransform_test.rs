@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+
 use rjiter::RJiter;
 use scan_json::idtransform::idtransform;
 
@@ -12,23 +14,24 @@ fn idt_atomic_on_top() {
 
     let mut reader = input.as_bytes();
     let mut buffer = vec![0u8; 16];
-    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let rjiter_cell = RefCell::new(rjiter);
     let mut writer = Vec::new();
 
     //
     // Apply
     //
-    idtransform(&mut rjiter, &mut writer); // null
+    idtransform(&rjiter_cell, &mut writer).unwrap(); // null
     writer.push(b' ');
-    idtransform(&mut rjiter, &mut writer); // true
+    idtransform(&rjiter_cell, &mut writer).unwrap(); // true
     writer.push(b' ');
-    idtransform(&mut rjiter, &mut writer); // false
+    idtransform(&rjiter_cell, &mut writer).unwrap(); // false
     writer.push(b' ');
-    idtransform(&mut rjiter, &mut writer); // 42
+    idtransform(&rjiter_cell, &mut writer).unwrap(); // 42
     writer.push(b' ');
-    idtransform(&mut rjiter, &mut writer); // 3.14
+    idtransform(&rjiter_cell, &mut writer).unwrap(); // 3.14
     writer.push(b' ');
-    idtransform(&mut rjiter, &mut writer); // "hello"
+    idtransform(&rjiter_cell, &mut writer).unwrap(); // "hello"
 
     //
     // Assert
