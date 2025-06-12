@@ -659,6 +659,181 @@ fn match_in_array_context() {
     assert_eq!(*writer_cell.borrow(), b"firstsecond");
 }
 
+#[test]
+fn atoms_on_top_level() {
+    let json = r#"null true false 42 3.14 "hello""#;
+    let mut reader = json.as_bytes();
+    let mut buffer = vec![0u8; 16];
+    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let writer_cell = RefCell::new(Vec::new());
+
+    let begin_matcher = Box::new(ParentAndName::new("#top".to_string(), "#atom".to_string()));
+    let begin_action: BoxedAction<dyn Write> = Box::new(
+        |rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>| {
+            let mut rjiter = rjiter_cell.borrow_mut();
+            let mut writer = writer_cell.borrow_mut();
+            let peek = rjiter.peek().unwrap();
+            write!(writer, "(matched {:?})", peek).unwrap();
+            StreamOp::None
+        },
+    );
+
+    let triggers = vec![Trigger {
+        matcher: begin_matcher,
+        action: begin_action,
+    }];
+
+    let result = scan(
+        &triggers,
+        &vec![],
+        &vec![],
+        &RefCell::new(rjiter),
+        &writer_cell,
+    );
+    assert!(result.is_ok());
+
+    let message = String::from_utf8(writer_cell.borrow().to_vec()).unwrap();
+    assert_eq!(
+        message,
+        "(matched Null)(matched True)(matched False)(matched Peek('4'))(matched Peek('3'))(matched String)"
+    );
+}
+
+#[test]
+fn atoms_in_array() {
+    let json = r#"[null, true, false, 42, 3.14, "hello"]"#;
+    let mut reader = json.as_bytes();
+    let mut buffer = vec![0u8; 16];
+    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let writer_cell = RefCell::new(Vec::new());
+
+    let begin_matcher = Box::new(ParentAndName::new(
+        "#array".to_string(),
+        "#atom".to_string(),
+    ));
+    let begin_action: BoxedAction<dyn Write> = Box::new(
+        |rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>| {
+            let mut rjiter = rjiter_cell.borrow_mut();
+            let mut writer = writer_cell.borrow_mut();
+            let peek = rjiter.peek().unwrap();
+            write!(writer, "(matched {:?})", peek).unwrap();
+            StreamOp::None
+        },
+    );
+
+    let triggers = vec![Trigger {
+        matcher: begin_matcher,
+        action: begin_action,
+    }];
+
+    let result = scan(
+        &triggers,
+        &vec![],
+        &vec![],
+        &RefCell::new(rjiter),
+        &writer_cell,
+    );
+    assert!(result.is_ok());
+
+    let message = String::from_utf8(writer_cell.borrow().to_vec()).unwrap();
+    assert_eq!(
+        message,
+        "(matched Null)(matched True)(matched False)(matched Peek('4'))(matched Peek('3'))(matched String)"
+    );
+}
+
+#[test]
+fn atoms_in_object() {
+    let json = r#"{"a": null, "b": true, "c": false, "d": 42, "e": 3.14, "f": "hello"}"#;
+    let mut reader = json.as_bytes();
+    let mut buffer = vec![0u8; 16];
+    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let writer_cell = RefCell::new(Vec::new());
+
+    fn handle_atom(rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>) -> StreamOp {
+        let mut rjiter = rjiter_cell.borrow_mut();
+        let mut writer = writer_cell.borrow_mut();
+        let peek = rjiter.peek().unwrap();
+        write!(writer, "(matched {:?})", peek).unwrap();
+        StreamOp::None
+    }
+
+    let triggers: Vec<Trigger<BoxedAction<dyn Write>>> = vec!['a', 'b', 'c', 'd', 'e', 'f']
+        .into_iter()
+        .map(|field| {
+            let matcher = Box::new(ParentAndName::new(field.to_string(), "#atom".to_string()));
+            let action: BoxedAction<dyn Write> = Box::new(handle_atom);
+            Trigger { matcher, action }
+        })
+        .collect();
+
+    let result = scan(
+        &triggers,
+        &vec![],
+        &vec![],
+        &RefCell::new(rjiter),
+        &writer_cell,
+    );
+    assert!(result.is_ok());
+
+    let message = String::from_utf8(writer_cell.borrow().to_vec()).unwrap();
+    assert_eq!(
+        message,
+        "(matched Null)(matched True)(matched False)(matched Peek('4'))(matched Peek('3'))(matched String)"
+    );
+}
+
+#[test]
+fn atoms_stream_op_return_values() {
+    let json = r#"true false 42 777"#;
+    let mut reader = json.as_bytes();
+    let mut buffer = vec![0u8; 16];
+    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let rjiter_cell = RefCell::new(rjiter);
+    let writer_cell = RefCell::new(Vec::new());
+
+    let begin_matcher = Box::new(Name::new("#atom".to_string()));
+    let begin_action: BoxedAction<dyn Write> = Box::new(
+        |rjiter_cell: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
+            let mut rjiter = rjiter_cell.borrow_mut();
+            let mut writer = writer.borrow_mut();
+            let peeked = rjiter.peek().unwrap();
+
+            match peeked {
+                Peek::True => {
+                    rjiter.next_value().unwrap();
+                    writer.write_all(b"consumed,").unwrap();
+                    StreamOp::ValueIsConsumed
+                }
+                Peek::False => {
+                    writer.write_all(b"not consumed,").unwrap();
+                    StreamOp::None
+                }
+                _ => {
+                    writer.write_all(b"unexpected,").unwrap();
+                    StreamOp::Error("Expected error for the test".into())
+                }
+            }
+        },
+    );
+
+    let triggers = vec![Trigger {
+        matcher: begin_matcher,
+        action: begin_action,
+    }];
+
+    let result = scan(&triggers, &vec![], &vec![], &rjiter_cell, &writer_cell);
+
+    // Check the output
+    let message = String::from_utf8(writer_cell.borrow().to_vec()).unwrap();
+    assert_eq!(message, "consumed,not consumed,unexpected,");
+    assert!(result.is_err());
+
+    // Check that the next value is still 42
+    let num = rjiter_cell.borrow_mut().next_int().unwrap();
+    assert!(matches!(num, rjiter::jiter::NumberInt::Int(42)));
+}
+
 fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 32];
@@ -834,16 +1009,26 @@ fn test_json_to_xml() {
             writer_cell: &writer_cell,
         }),
         Box::new(
+            |_rjiter_cell: &RefCell<RJiter>, _writer_cell: &RefCell<dyn Write>| StreamOp::None,
+        ),
+    );
+    let on_value: Trigger<BoxedAction<dyn Write>> = Trigger::new(
+        Box::new(Name::new("#atom".to_string())),
+        Box::new(
             |rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>| {
                 let mut rjiter = rjiter_cell.borrow_mut();
                 let mut writer = writer_cell.borrow_mut();
                 let peek = rjiter.peek().unwrap();
                 if peek == Peek::String {
                     rjiter.write_long_bytes(&mut *writer).unwrap();
-                    StreamOp::ValueIsConsumed
-                } else {
-                    StreamOp::None
+                    return StreamOp::ValueIsConsumed;
                 }
+                let maybe_number = rjiter.next_number_bytes();
+                if let Ok(as_bytes) = maybe_number {
+                    writer.write_all(as_bytes).unwrap();
+                    return StreamOp::ValueIsConsumed;
+                }
+                StreamOp::None
             },
         ),
     );
@@ -856,7 +1041,7 @@ fn test_json_to_xml() {
     );
 
     scan(
-        &vec![begin_tag],
+        &vec![on_value, begin_tag],
         &vec![end_tag],
         &vec![],
         &RefCell::new(rjiter),
@@ -865,5 +1050,5 @@ fn test_json_to_xml() {
     .unwrap();
 
     let message = String::from_utf8(writer_cell.borrow().to_vec()).unwrap();
-    assert_eq!(message, "<#object><name>John Doe</name><age></age><phones><phone>+44 1234567</phone><phone>+44 2345678</phone></phones></#object>");
+    assert_eq!(message, "<#object><name>John Doe</name><age>43</age><phones><phone>+44 1234567</phone><phone>+44 2345678</phone></phones></#object>");
 }

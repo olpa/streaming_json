@@ -199,8 +199,12 @@ fn handle_array<T: ?Sized>(
     Ok((peeked, cur_level))
 }
 
-/// Skips over basic JSON values (null, true, false, numbers)
+/// Skips over basic JSON values (null, true, false, numbers, strings)
 fn skip_basic_values(peeked: Peek, rjiter: &mut RJiter) -> ScanResult<()> {
+    if peeked == Peek::String {
+        rjiter.write_long_bytes(&mut io::sink())?;
+        return Ok(());
+    }
     if peeked == Peek::Null {
         rjiter.known_null()?;
         return Ok(());
@@ -213,7 +217,7 @@ fn skip_basic_values(peeked: Peek, rjiter: &mut RJiter) -> ScanResult<()> {
         rjiter.known_bool(peeked)?;
         return Ok(());
     }
-    let maybe_number = rjiter.next_number();
+    let maybe_number = rjiter.next_number_bytes();
     if maybe_number.is_ok() {
         return Ok(());
     }
@@ -366,9 +370,30 @@ pub fn scan<T: ?Sized>(
             continue;
         }
 
-        if peeked == Peek::String {
-            rjiter.write_long_bytes(&mut io::sink())?;
-            continue;
+        // Handle basic (aka atomic) values
+        push_context(&mut context, cur_level, &rjiter)?;
+        let action = find_action(triggers, "#atom", &context);
+        cur_level = context.pop().ok_or_else(|| {
+            ScanError::InternalError(
+                rjiter.current_index(),
+                "Context stack is empty when it should not be".to_string(),
+            )
+        })?;
+
+        // Call the action for the atom, then return (error) or continue (value is consumed)
+        // or pass through to the default handler
+        if let Some(action) = action {
+            drop(rjiter);
+            let action_result = action(rjiter_cell, baton_cell);
+            rjiter = rjiter_cell.borrow_mut();
+
+            match action_result {
+                StreamOp::Error(e) => {
+                    return Err(ScanError::ActionError(e, rjiter.current_index()))
+                }
+                StreamOp::ValueIsConsumed => continue,
+                StreamOp::None => (),
+            }
         }
 
         if skip_basic_values(peeked, &mut rjiter).is_ok() {
