@@ -200,13 +200,6 @@ assert_eq!(message, "Hello! How can I assist you today?");
 ```
 
 
-## Limitations
-
-The library is not a generic [SAX-like interface](https://en.wikipedia.org/wiki/Simple_API_for_XML): It does not provide callbacks for character data.
-
-The library does not support async operations.
-
-
 # Colophon
 
 License: MIT

@@ -14,13 +14,11 @@ pub trait Matcher: std::fmt::Debug {
     /// * `context` - The stack of parent contexts. The oldest frame (the root) is the first element,
     ///               the latest frame (the parent) is the last element.
     ///
-    /// Special context names:
-    /// - `#top` - The root context
-    /// - `#array` - An array context
+    /// Special names:
+    /// - `#top` - The top level context
+    /// - `#array` - An array
     /// - `#object` - An unnamed object inside an array or at the top level
-    ///
-    /// Note: Although arrays and the top level context appear in the context stack,
-    /// the library only supports triggers for `#object` nodes.
+    /// - `#atom` - Anything what is not an object or array
     ///
     /// # Returns
     ///
