@@ -1,9 +1,10 @@
 use crate::matcher::Matcher;
 use crate::StreamOp;
 use crate::{
-    rjiter::jiter::Peek, scan, scan::ContextFrame, Error as ScanError, RJiter, Result as ScanResult,
+    rjiter::jiter::Peek, scan, scan::ContextFrame, Error as ScanError, Name as NameMatcher, RJiter,
+    Result as ScanResult,
 };
-use crate::{BoxedAction, Trigger};
+use crate::{BoxedAction, BoxedEndAction, Trigger};
 use std::cell::RefCell;
 use std::io::Write;
 
@@ -156,6 +157,13 @@ fn on_array(_rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform>) -> 
     StreamOp::None
 }
 
+fn on_array_end(idt_cell: &RefCell<IdTransform>) -> Result<(), Box<dyn std::error::Error>> {
+    let mut idt = idt_cell.borrow_mut();
+    idt.divider = IdtSequencePos::InMiddle;
+    idt.writer.write_all(b"]")?;
+    Ok(())
+}
+
 ///
 /// # Errors
 ///
@@ -178,10 +186,15 @@ pub fn idtransform(rjiter_cell: &RefCell<RJiter>, writer: &mut dyn Write) -> Sca
         Box::new(on_array),
     );
 
+    let trigger_array_end: Trigger<BoxedEndAction<IdTransform>> = Trigger::new(
+        Box::new(NameMatcher::new("#array".to_string())),
+        Box::new(on_array_end),
+    );
+
     // Have an intermediate result to avoid: borrowed value does not live long enough
     let result = scan(
         &[trigger_atom, trigger_array],
-        &[],
+        &[trigger_array_end],
         &[],
         rjiter_cell,
         &idt_cell,
