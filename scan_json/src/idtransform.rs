@@ -131,7 +131,7 @@ impl<'a> Matcher for IdtMatcher<'a> {
             return false;
         }
         let mut matcher_to_handler = self.matcher_to_handler.borrow_mut();
-        matcher_to_handler.is_top_level = context.is_empty();
+        matcher_to_handler.is_top_level = context.len() < 2;
         true
     }
 }
