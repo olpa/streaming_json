@@ -1,6 +1,9 @@
+use crate::matcher::Matcher;
 use crate::StreamOp;
-use crate::{rjiter::jiter::Peek, scan, Error as ScanError, RJiter, Result as ScanResult};
-use crate::{BoxedAction, Name, Trigger};
+use crate::{
+    rjiter::jiter::Peek, scan, scan::ContextFrame, Error as ScanError, RJiter, Result as ScanResult,
+};
+use crate::{BoxedAction, Trigger};
 use std::cell::RefCell;
 use std::io::Write;
 
@@ -49,20 +52,35 @@ enum IdtSequencePos {
     InMiddle,
 }
 
+#[derive(Debug)]
+struct IdtMatcherToHandler {
+    is_top_level: bool,
+}
+
 struct IdTransform<'a> {
     writer: &'a mut dyn Write,
     divider: IdtSequencePos,
+    matcher_to_handler: &'a RefCell<IdtMatcherToHandler>,
 }
 
 impl<'a> IdTransform<'a> {
-    fn new(writer: &'a mut dyn Write) -> Self {
+    fn new(
+        writer: &'a mut dyn Write,
+        matcher_to_handler: &'a RefCell<IdtMatcherToHandler>,
+    ) -> Self {
         Self {
             writer,
             divider: IdtSequencePos::AtBeginning,
+            matcher_to_handler,
         }
     }
+
     fn get_writer_mut(&mut self) -> &mut dyn Write {
         self.writer
+    }
+
+    fn is_top_level(&self) -> bool {
+        self.matcher_to_handler.borrow().is_top_level
     }
 }
 
@@ -75,9 +93,11 @@ fn on_atom(rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform>) -> St
             idt.divider = IdtSequencePos::InMiddle;
         }
         IdtSequencePos::InMiddle => {
-            if let Err(e) = idt.writer.write_all(b",") {
+            let divider = if idt.is_top_level() { b" " } else { b"," };
+            if let Err(e) = idt.writer.write_all(divider) {
                 return StreamOp::from(e);
             }
+            idt.divider = IdtSequencePos::InMiddle;
         }
     }
 
@@ -90,6 +110,32 @@ fn on_atom(rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform>) -> St
     }
 }
 
+#[derive(Debug)]
+struct IdtMatcher<'a> {
+    name: String,
+    matcher_to_handler: &'a RefCell<IdtMatcherToHandler>,
+}
+
+impl<'a> IdtMatcher<'a> {
+    fn new(name: String, matcher_to_handler: &'a RefCell<IdtMatcherToHandler>) -> Self {
+        Self {
+            name,
+            matcher_to_handler,
+        }
+    }
+}
+
+impl<'a> Matcher for IdtMatcher<'a> {
+    fn matches(&self, name: &str, context: &[ContextFrame]) -> bool {
+        if name != self.name {
+            return false;
+        }
+        let mut matcher_to_handler = self.matcher_to_handler.borrow_mut();
+        matcher_to_handler.is_top_level = context.is_empty();
+        true
+    }
+}
+
 /// Do ID transform on the input JSON.
 ///
 /// # Errors
@@ -99,10 +145,17 @@ fn on_atom(rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform>) -> St
 /// * Nesting is too deep
 /// * An IO error occurs while writing to the output
 pub fn idtransform(rjiter_cell: &RefCell<RJiter>, writer: &mut dyn Write) -> ScanResult<()> {
-    let idt = IdTransform::new(writer);
+    let matcher_to_handler = RefCell::new(IdtMatcherToHandler { is_top_level: true });
+    let idt = IdTransform::new(writer, &matcher_to_handler);
     let idt_cell = RefCell::new(idt);
 
-    let trigger_atom: Trigger<BoxedAction<IdTransform>> =
-        Trigger::new(Box::new(Name::new("#atom".to_string())), Box::new(on_atom));
-    scan(&[trigger_atom], &[], &[], rjiter_cell, &idt_cell)
+    let trigger_atom: Trigger<BoxedAction<IdTransform>> = Trigger::new(
+        Box::new(IdtMatcher::new("#atom".to_string(), &matcher_to_handler)),
+        Box::new(on_atom),
+    );
+
+    // Have an intermediate result to avoid: borrowed value does not live long enough
+    let result = scan(&[trigger_atom], &[], &[], rjiter_cell, &idt_cell);
+    #[allow(clippy::let_and_return)]
+    result
 }
