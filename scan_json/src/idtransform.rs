@@ -82,31 +82,20 @@ impl<'a> IdTransform<'a> {
     fn is_top_level(&self) -> bool {
         self.matcher_to_handler.borrow().is_top_level
     }
-}
 
-fn on_atom(rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform>) -> StreamOp {
-    let mut rjiter = rjiter_cell.borrow_mut();
-    let mut idt = idt_cell.borrow_mut();
-
-    match idt.divider {
-        IdtSequencePos::AtBeginning => {
-            idt.divider = IdtSequencePos::InMiddle;
-        }
-        IdtSequencePos::InMiddle => {
-            let divider = if idt.is_top_level() { b" " } else { b"," };
-            if let Err(e) = idt.writer.write_all(divider) {
-                return StreamOp::from(e);
+    fn write_divider(&mut self) -> Result<(), std::io::Error> {
+        match self.divider {
+            IdtSequencePos::AtBeginning => {
+                self.divider = IdtSequencePos::InMiddle;
+                Ok(())
             }
-            idt.divider = IdtSequencePos::InMiddle;
+            IdtSequencePos::InMiddle => {
+                let divider = if self.is_top_level() { b" " } else { b"," };
+                self.writer.write_all(divider)?;
+                self.divider = IdtSequencePos::InMiddle;
+                Ok(())
+            }
         }
-    }
-
-    match rjiter.peek() {
-        Ok(peeked) => match copy_atom(peeked, &mut rjiter, idt.get_writer_mut()) {
-            Ok(()) => StreamOp::ValueIsConsumed,
-            Err(e) => StreamOp::from(e),
-        },
-        Err(e) => StreamOp::from(e),
     }
 }
 
@@ -136,7 +125,37 @@ impl<'a> Matcher for IdtMatcher<'a> {
     }
 }
 
-/// Do ID transform on the input JSON.
+fn on_atom(rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform>) -> StreamOp {
+    let mut rjiter = rjiter_cell.borrow_mut();
+    let mut idt = idt_cell.borrow_mut();
+
+    if let Err(e) = idt.write_divider() {
+        return StreamOp::from(e);
+    }
+
+    match rjiter.peek() {
+        Ok(peeked) => match copy_atom(peeked, &mut rjiter, idt.get_writer_mut()) {
+            Ok(()) => StreamOp::ValueIsConsumed,
+            Err(e) => StreamOp::from(e),
+        },
+        Err(e) => StreamOp::from(e),
+    }
+}
+
+fn on_array(_rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform>) -> StreamOp {
+    let mut idt = idt_cell.borrow_mut();
+
+    if let Err(e) = idt.write_divider() {
+        return StreamOp::from(e);
+    }
+
+    if let Err(e) = idt.writer.write_all(b"[") {
+        return StreamOp::from(e);
+    }
+    idt.divider = IdtSequencePos::AtBeginning;
+    StreamOp::None
+}
+
 ///
 /// # Errors
 ///
@@ -154,8 +173,19 @@ pub fn idtransform(rjiter_cell: &RefCell<RJiter>, writer: &mut dyn Write) -> Sca
         Box::new(on_atom),
     );
 
+    let trigger_array: Trigger<BoxedAction<IdTransform>> = Trigger::new(
+        Box::new(IdtMatcher::new("#array".to_string(), &matcher_to_handler)),
+        Box::new(on_array),
+    );
+
     // Have an intermediate result to avoid: borrowed value does not live long enough
-    let result = scan(&[trigger_atom], &[], &[], rjiter_cell, &idt_cell);
+    let result = scan(
+        &[trigger_atom, trigger_array],
+        &[],
+        &[],
+        rjiter_cell,
+        &idt_cell,
+    );
     #[allow(clippy::let_and_return)]
     result
 }
