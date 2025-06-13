@@ -1,7 +1,6 @@
-use std::cell::RefCell;
-
 use rjiter::RJiter;
 use scan_json::idtransform::idtransform;
+use std::cell::RefCell;
 
 #[test]
 fn idt_atomic_on_top() {
@@ -19,23 +18,9 @@ fn idt_atomic_on_top() {
     let mut writer = Vec::new();
 
     //
-    // Apply
+    // Apply and assert
     //
-    idtransform(&rjiter_cell, &mut writer).unwrap(); // null
-    writer.push(b' ');
-    idtransform(&rjiter_cell, &mut writer).unwrap(); // true
-    writer.push(b' ');
-    idtransform(&rjiter_cell, &mut writer).unwrap(); // false
-    writer.push(b' ');
-    idtransform(&rjiter_cell, &mut writer).unwrap(); // 42
-    writer.push(b' ');
-    idtransform(&rjiter_cell, &mut writer).unwrap(); // 3.14
-    writer.push(b' ');
-    idtransform(&rjiter_cell, &mut writer).unwrap(); // "hello"
-
-    //
-    // Assert
-    //
+    idtransform(&rjiter_cell, &mut writer).unwrap();
     let output = String::from_utf8(writer).unwrap();
     let expected = input.split_whitespace().collect::<Vec<&str>>().join(" ");
     assert_eq!(
