@@ -43,13 +43,23 @@ pub fn copy_atom(peeked: Peek, rjiter: &mut RJiter, writer: &mut dyn Write) -> S
     Err(ScanError::UnhandledPeek(peeked, rjiter.current_index()))
 }
 
+#[derive(Debug, PartialEq)]
+enum IdtDivider {
+    Comma,
+    None,
+}
+
 struct IdTransform<'a> {
     writer: &'a mut dyn Write,
+    divider: IdtDivider,
 }
 
 impl<'a> IdTransform<'a> {
     fn new(writer: &'a mut dyn Write) -> Self {
-        Self { writer }
+        Self {
+            writer,
+            divider: IdtDivider::None,
+        }
     }
     fn get_writer_mut(&mut self) -> &mut dyn Write {
         self.writer
@@ -59,6 +69,14 @@ impl<'a> IdTransform<'a> {
 fn on_atom(rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform>) -> StreamOp {
     let mut rjiter = rjiter_cell.borrow_mut();
     let mut idt = idt_cell.borrow_mut();
+
+    if idt.divider == IdtDivider::Comma {
+        if let Err(e) = idt.writer.write_all(b",") {
+            return StreamOp::from(e);
+        }
+    }
+    idt.divider = IdtDivider::Comma;
+
     match rjiter.peek() {
         Ok(peeked) => match copy_atom(peeked, &mut rjiter, idt.get_writer_mut()) {
             Ok(()) => StreamOp::ValueIsConsumed,
