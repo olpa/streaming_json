@@ -44,21 +44,21 @@ pub fn copy_atom(peeked: Peek, rjiter: &mut RJiter, writer: &mut dyn Write) -> S
 }
 
 #[derive(Debug, PartialEq)]
-enum IdtDivider {
-    Comma,
-    None,
+enum IdtSequencePos {
+    AtBeginning,
+    InMiddle,
 }
 
 struct IdTransform<'a> {
     writer: &'a mut dyn Write,
-    divider: IdtDivider,
+    divider: IdtSequencePos,
 }
 
 impl<'a> IdTransform<'a> {
     fn new(writer: &'a mut dyn Write) -> Self {
         Self {
             writer,
-            divider: IdtDivider::None,
+            divider: IdtSequencePos::AtBeginning,
         }
     }
     fn get_writer_mut(&mut self) -> &mut dyn Write {
@@ -70,12 +70,16 @@ fn on_atom(rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform>) -> St
     let mut rjiter = rjiter_cell.borrow_mut();
     let mut idt = idt_cell.borrow_mut();
 
-    if idt.divider == IdtDivider::Comma {
-        if let Err(e) = idt.writer.write_all(b",") {
-            return StreamOp::from(e);
+    match idt.divider {
+        IdtSequencePos::AtBeginning => {
+            idt.divider = IdtSequencePos::InMiddle;
+        }
+        IdtSequencePos::InMiddle => {
+            if let Err(e) = idt.writer.write_all(b",") {
+                return StreamOp::from(e);
+            }
         }
     }
-    idt.divider = IdtDivider::Comma;
 
     match rjiter.peek() {
         Ok(peeked) => match copy_atom(peeked, &mut rjiter, idt.get_writer_mut()) {
