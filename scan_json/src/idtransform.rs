@@ -143,25 +143,44 @@ fn on_atom(rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform>) -> St
     }
 }
 
-fn on_array(_rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform>) -> StreamOp {
+fn on_struct(bytes: &[u8], idt_cell: &RefCell<IdTransform>) -> StreamOp {
     let mut idt = idt_cell.borrow_mut();
 
     if let Err(e) = idt.write_divider() {
         return StreamOp::from(e);
     }
 
-    if let Err(e) = idt.writer.write_all(b"[") {
+    if let Err(e) = idt.writer.write_all(bytes) {
         return StreamOp::from(e);
     }
     idt.divider = IdtSequencePos::AtBeginning;
     StreamOp::None
 }
 
-fn on_array_end(idt_cell: &RefCell<IdTransform>) -> Result<(), Box<dyn std::error::Error>> {
+fn on_struct_end(
+    bytes: &[u8],
+    idt_cell: &RefCell<IdTransform>,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut idt = idt_cell.borrow_mut();
     idt.divider = IdtSequencePos::InMiddle;
-    idt.writer.write_all(b"]")?;
+    idt.writer.write_all(bytes)?;
     Ok(())
+}
+
+fn on_array(_rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform>) -> StreamOp {
+    on_struct(b"[", idt_cell)
+}
+
+fn on_array_end(idt_cell: &RefCell<IdTransform>) -> Result<(), Box<dyn std::error::Error>> {
+    on_struct_end(b"]", idt_cell)
+}
+
+fn on_object(_rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform>) -> StreamOp {
+    on_struct(b"{", idt_cell)
+}
+
+fn on_object_end(idt_cell: &RefCell<IdTransform>) -> Result<(), Box<dyn std::error::Error>> {
+    on_struct_end(b"}", idt_cell)
 }
 
 ///
@@ -185,16 +204,24 @@ pub fn idtransform(rjiter_cell: &RefCell<RJiter>, writer: &mut dyn Write) -> Sca
         Box::new(IdtMatcher::new("#array".to_string(), &matcher_to_handler)),
         Box::new(on_array),
     );
-
     let trigger_array_end: Trigger<BoxedEndAction<IdTransform>> = Trigger::new(
         Box::new(NameMatcher::new("#array".to_string())),
         Box::new(on_array_end),
     );
 
+    let trigger_object: Trigger<BoxedAction<IdTransform>> = Trigger::new(
+        Box::new(IdtMatcher::new("#object".to_string(), &matcher_to_handler)),
+        Box::new(on_object),
+    );
+    let trigger_object_end: Trigger<BoxedEndAction<IdTransform>> = Trigger::new(
+        Box::new(NameMatcher::new("#object".to_string())),
+        Box::new(on_object_end),
+    );
+
     // Have an intermediate result to avoid: borrowed value does not live long enough
     let result = scan(
-        &[trigger_atom, trigger_array],
-        &[trigger_array_end],
+        &[trigger_atom, trigger_object, trigger_array],
+        &[trigger_object_end, trigger_array_end],
         &[],
         rjiter_cell,
         &idt_cell,
