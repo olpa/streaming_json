@@ -51,8 +51,8 @@ pub fn copy_atom(peeked: Peek, rjiter: &mut RJiter, writer: &mut dyn Write) -> S
 enum IdtSequencePos {
     AtBeginning,
     InMiddle,
-    AfterKey,
-    Error(Box<dyn std::error::Error>),
+    AtBeginningKey(String),
+    InMiddleKey(String),
 }
 
 struct IdTransform<'a> {
@@ -79,14 +79,8 @@ impl<'a> IdTransform<'a> {
     }
 
     fn write_seqpos(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        if let IdtSequencePos::Error(ebox) = &mut self.seqpos {
-            let replacement_error = std::io::Error::new(std::io::ErrorKind::Other, "error moved");
-            let err = std::mem::replace(ebox, Box::new(replacement_error));
-            return Err(err);
-        }
-
         match &self.seqpos {
-            IdtSequencePos::AfterKey | IdtSequencePos::AtBeginning => {
+            IdtSequencePos::AtBeginning => {
                 self.seqpos = IdtSequencePos::InMiddle;
                 Ok(())
             }
@@ -96,7 +90,20 @@ impl<'a> IdTransform<'a> {
                 self.seqpos = IdtSequencePos::InMiddle;
                 Ok(())
             }
-            IdtSequencePos::Error(_) => unreachable!(),
+            IdtSequencePos::AtBeginningKey(key) => {
+                self.writer.write_all(b"\"")?;
+                self.writer.write_all(key.as_bytes())?;
+                self.writer.write_all(b"\":")?;
+                self.seqpos = IdtSequencePos::InMiddle;
+                Ok(())
+            }
+            IdtSequencePos::InMiddleKey(key) => {
+                self.writer.write_all(b",\"")?;
+                self.writer.write_all(key.as_bytes())?;
+                self.writer.write_all(b"\":")?;
+                self.seqpos = IdtSequencePos::InMiddle;
+                Ok(())
+            }
         }
     }
 }
@@ -131,42 +138,29 @@ impl<'a> Matcher for IdtMatcher<'a> {
     }
 }
 
-struct IdtMatcherWithSideEffectWriteKey<'a> {
+struct IdtMatcherForKey<'a> {
     idt: &'a RefCell<IdTransform<'a>>,
 }
 
-impl<'a> std::fmt::Debug for IdtMatcherWithSideEffectWriteKey<'a> {
+impl<'a> std::fmt::Debug for IdtMatcherForKey<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("IdtMatcherWithSideEffectWriteKey").finish()
+        f.debug_struct("IdtMatcherForKey").finish()
     }
 }
 
-impl<'a> IdtMatcherWithSideEffectWriteKey<'a> {
+impl<'a> IdtMatcherForKey<'a> {
     fn new(idt: &'a RefCell<IdTransform<'a>>) -> Self {
         Self { idt }
     }
 }
 
-impl<'a> Matcher for IdtMatcherWithSideEffectWriteKey<'a> {
+impl<'a> Matcher for IdtMatcherForKey<'a> {
     fn matches(&self, name: &str, _context: &[ContextFrame]) -> bool {
         let mut idt = self.idt.borrow_mut();
-        if let Err(e) = idt.write_seqpos() {
-            idt.seqpos = IdtSequencePos::Error(e);
-            return true;
-        }
-        if let Err(e) = idt.writer.write_all(b"\"") {
-            idt.seqpos = IdtSequencePos::Error(Box::new(e));
-            return true;
-        }
-        if let Err(e) = idt.writer.write_all(name.as_bytes()) {
-            idt.seqpos = IdtSequencePos::Error(Box::new(e));
-            return true;
-        }
-        if let Err(e) = idt.writer.write_all(b"\":") {
-            idt.seqpos = IdtSequencePos::Error(Box::new(e));
-            return true;
-        }
-        idt.seqpos = IdtSequencePos::AfterKey;
+        idt.seqpos = match &idt.seqpos {
+            IdtSequencePos::AtBeginning => IdtSequencePos::AtBeginningKey(name.to_string()),
+            _ => IdtSequencePos::InMiddleKey(name.to_string()),
+        };
         true
     }
 }
@@ -263,7 +257,7 @@ pub fn idtransform(rjiter_cell: &RefCell<RJiter>, writer: &mut dyn Write) -> Sca
     );
 
     let trigger_key: Trigger<BoxedAction<IdTransform>> = Trigger::new(
-        Box::new(IdtMatcherWithSideEffectWriteKey::new(&idt_cell)),
+        Box::new(IdtMatcherForKey::new(&idt_cell)),
         Box::new(|_, _| StreamOp::None),
     );
 
