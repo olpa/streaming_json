@@ -53,26 +53,18 @@ enum IdtSequencePos {
     InMiddle,
 }
 
-#[derive(Debug)]
-struct IdtMatcherToHandler {
-    is_top_level: bool,
-}
-
 struct IdTransform<'a> {
     writer: &'a mut dyn Write,
     divider: IdtSequencePos,
-    matcher_to_handler: &'a RefCell<IdtMatcherToHandler>,
+    is_top_level: bool,
 }
 
 impl<'a> IdTransform<'a> {
-    fn new(
-        writer: &'a mut dyn Write,
-        matcher_to_handler: &'a RefCell<IdtMatcherToHandler>,
-    ) -> Self {
+    fn new(writer: &'a mut dyn Write) -> Self {
         Self {
             writer,
             divider: IdtSequencePos::AtBeginning,
-            matcher_to_handler,
+            is_top_level: true,
         }
     }
 
@@ -81,7 +73,7 @@ impl<'a> IdTransform<'a> {
     }
 
     fn is_top_level(&self) -> bool {
-        self.matcher_to_handler.borrow().is_top_level
+        self.is_top_level
     }
 
     fn write_divider(&mut self) -> Result<(), std::io::Error> {
@@ -100,18 +92,22 @@ impl<'a> IdTransform<'a> {
     }
 }
 
-#[derive(Debug)]
 struct IdtMatcher<'a> {
     name: String,
-    matcher_to_handler: &'a RefCell<IdtMatcherToHandler>,
+    idt: &'a RefCell<IdTransform<'a>>,
+}
+
+impl<'a> std::fmt::Debug for IdtMatcher<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IdtMatcher")
+            .field("name", &self.name)
+            .finish()
+    }
 }
 
 impl<'a> IdtMatcher<'a> {
-    fn new(name: String, matcher_to_handler: &'a RefCell<IdtMatcherToHandler>) -> Self {
-        Self {
-            name,
-            matcher_to_handler,
-        }
+    fn new(name: String, idt: &'a RefCell<IdTransform<'a>>) -> Self {
+        Self { name, idt }
     }
 }
 
@@ -120,10 +116,15 @@ impl<'a> Matcher for IdtMatcher<'a> {
         if name != self.name {
             return false;
         }
-        let mut matcher_to_handler = self.matcher_to_handler.borrow_mut();
-        matcher_to_handler.is_top_level = context.len() < 2;
+        let mut idt = self.idt.borrow_mut();
+        idt.is_top_level = context.len() < 2;
         true
     }
+}
+
+#[derive(Debug)]
+struct IdtMatcherWithSideEffectWriteKey {
+    name: String,
 }
 
 fn on_atom(rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform>) -> StreamOp {
@@ -191,17 +192,16 @@ fn on_object_end(idt_cell: &RefCell<IdTransform>) -> Result<(), Box<dyn std::err
 /// * Nesting is too deep
 /// * An IO error occurs while writing to the output
 pub fn idtransform(rjiter_cell: &RefCell<RJiter>, writer: &mut dyn Write) -> ScanResult<()> {
-    let matcher_to_handler = RefCell::new(IdtMatcherToHandler { is_top_level: true });
-    let idt = IdTransform::new(writer, &matcher_to_handler);
+    let idt = IdTransform::new(writer);
     let idt_cell = RefCell::new(idt);
 
     let trigger_atom: Trigger<BoxedAction<IdTransform>> = Trigger::new(
-        Box::new(IdtMatcher::new("#atom".to_string(), &matcher_to_handler)),
+        Box::new(IdtMatcher::new("#atom".to_string(), &idt_cell)),
         Box::new(on_atom),
     );
 
     let trigger_array: Trigger<BoxedAction<IdTransform>> = Trigger::new(
-        Box::new(IdtMatcher::new("#array".to_string(), &matcher_to_handler)),
+        Box::new(IdtMatcher::new("#array".to_string(), &idt_cell)),
         Box::new(on_array),
     );
     let trigger_array_end: Trigger<BoxedEndAction<IdTransform>> = Trigger::new(
@@ -210,7 +210,7 @@ pub fn idtransform(rjiter_cell: &RefCell<RJiter>, writer: &mut dyn Write) -> Sca
     );
 
     let trigger_object: Trigger<BoxedAction<IdTransform>> = Trigger::new(
-        Box::new(IdtMatcher::new("#object".to_string(), &matcher_to_handler)),
+        Box::new(IdtMatcher::new("#object".to_string(), &idt_cell)),
         Box::new(on_object),
     );
     let trigger_object_end: Trigger<BoxedEndAction<IdTransform>> = Trigger::new(
