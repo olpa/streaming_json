@@ -55,7 +55,7 @@ enum IdtSequencePos {
 
 struct IdTransform<'a> {
     writer: &'a mut dyn Write,
-    divider: IdtSequencePos,
+    seqpos: IdtSequencePos,
     is_top_level: bool,
 }
 
@@ -63,7 +63,7 @@ impl<'a> IdTransform<'a> {
     fn new(writer: &'a mut dyn Write) -> Self {
         Self {
             writer,
-            divider: IdtSequencePos::AtBeginning,
+            seqpos: IdtSequencePos::AtBeginning,
             is_top_level: true,
         }
     }
@@ -76,16 +76,16 @@ impl<'a> IdTransform<'a> {
         self.is_top_level
     }
 
-    fn write_divider(&mut self) -> Result<(), std::io::Error> {
-        match self.divider {
+    fn write_seqpos(&mut self) -> Result<(), std::io::Error> {
+        match self.seqpos {
             IdtSequencePos::AtBeginning => {
-                self.divider = IdtSequencePos::InMiddle;
+                self.seqpos = IdtSequencePos::InMiddle;
                 Ok(())
             }
             IdtSequencePos::InMiddle => {
-                let divider = if self.is_top_level() { b" " } else { b"," };
-                self.writer.write_all(divider)?;
-                self.divider = IdtSequencePos::InMiddle;
+                let seqpos = if self.is_top_level() { b" " } else { b"," };
+                self.writer.write_all(seqpos)?;
+                self.seqpos = IdtSequencePos::InMiddle;
                 Ok(())
             }
         }
@@ -131,7 +131,7 @@ fn on_atom(rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform>) -> St
     let mut rjiter = rjiter_cell.borrow_mut();
     let mut idt = idt_cell.borrow_mut();
 
-    if let Err(e) = idt.write_divider() {
+    if let Err(e) = idt.write_seqpos() {
         return StreamOp::from(e);
     }
 
@@ -147,14 +147,14 @@ fn on_atom(rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform>) -> St
 fn on_struct(bytes: &[u8], idt_cell: &RefCell<IdTransform>) -> StreamOp {
     let mut idt = idt_cell.borrow_mut();
 
-    if let Err(e) = idt.write_divider() {
+    if let Err(e) = idt.write_seqpos() {
         return StreamOp::from(e);
     }
 
     if let Err(e) = idt.writer.write_all(bytes) {
         return StreamOp::from(e);
     }
-    idt.divider = IdtSequencePos::AtBeginning;
+    idt.seqpos = IdtSequencePos::AtBeginning;
     StreamOp::None
 }
 
@@ -163,7 +163,7 @@ fn on_struct_end(
     idt_cell: &RefCell<IdTransform>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut idt = idt_cell.borrow_mut();
-    idt.divider = IdtSequencePos::InMiddle;
+    idt.seqpos = IdtSequencePos::InMiddle;
     idt.writer.write_all(bytes)?;
     Ok(())
 }
