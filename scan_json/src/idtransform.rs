@@ -47,11 +47,12 @@ pub fn copy_atom(peeked: Peek, rjiter: &mut RJiter, writer: &mut dyn Write) -> S
     Err(ScanError::UnhandledPeek(peeked, rjiter.current_index()))
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 enum IdtSequencePos {
     AtBeginning,
     InMiddle,
     AfterKey,
+    Error(Box<dyn std::error::Error>),
 }
 
 struct IdTransform<'a> {
@@ -77,9 +78,15 @@ impl<'a> IdTransform<'a> {
         self.is_top_level
     }
 
-    fn write_seqpos(&mut self) -> Result<(), std::io::Error> {
-        match self.seqpos {
-            IdtSequencePos::AtBeginning => {
+    fn write_seqpos(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        if let IdtSequencePos::Error(ebox) = &mut self.seqpos {
+            let replacement_error = std::io::Error::new(std::io::ErrorKind::Other, "error moved");
+            let err = std::mem::replace(ebox, Box::new(replacement_error));
+            return Err(err);
+        }
+
+        match &self.seqpos {
+            IdtSequencePos::AfterKey | IdtSequencePos::AtBeginning => {
                 self.seqpos = IdtSequencePos::InMiddle;
                 Ok(())
             }
@@ -89,10 +96,7 @@ impl<'a> IdTransform<'a> {
                 self.seqpos = IdtSequencePos::InMiddle;
                 Ok(())
             }
-            IdtSequencePos::AfterKey => {
-                self.seqpos = IdtSequencePos::InMiddle;
-                Ok(())
-            }
+            IdtSequencePos::Error(_) => unreachable!(),
         }
     }
 }
@@ -147,11 +151,21 @@ impl<'a> Matcher for IdtMatcherWithSideEffectWriteKey<'a> {
     fn matches(&self, name: &str, _context: &[ContextFrame]) -> bool {
         let mut idt = self.idt.borrow_mut();
         if let Err(e) = idt.write_seqpos() {
-            return false;
+            idt.seqpos = IdtSequencePos::Error(e);
+            return true;
         }
-        idt.writer.write_all(b"\"")?;
-        idt.writer.write_all(name.as_bytes())?;
-        idt.writer.write_all(b"\":")?;
+        if let Err(e) = idt.writer.write_all(b"\"") {
+            idt.seqpos = IdtSequencePos::Error(Box::new(e));
+            return true;
+        }
+        if let Err(e) = idt.writer.write_all(name.as_bytes()) {
+            idt.seqpos = IdtSequencePos::Error(Box::new(e));
+            return true;
+        }
+        if let Err(e) = idt.writer.write_all(b"\":") {
+            idt.seqpos = IdtSequencePos::Error(Box::new(e));
+            return true;
+        }
         idt.seqpos = IdtSequencePos::AfterKey;
         true
     }
@@ -162,15 +176,15 @@ fn on_atom(rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform>) -> St
     let mut idt = idt_cell.borrow_mut();
 
     if let Err(e) = idt.write_seqpos() {
-        return StreamOp::from(e);
+        return StreamOp::Error(e);
     }
 
     match rjiter.peek() {
         Ok(peeked) => match copy_atom(peeked, &mut rjiter, idt.get_writer_mut()) {
             Ok(()) => StreamOp::ValueIsConsumed,
-            Err(e) => StreamOp::from(e),
+            Err(e) => StreamOp::Error(Box::new(e)),
         },
-        Err(e) => StreamOp::from(e),
+        Err(e) => StreamOp::Error(Box::new(e)),
     }
 }
 
@@ -178,11 +192,11 @@ fn on_struct(bytes: &[u8], idt_cell: &RefCell<IdTransform>) -> StreamOp {
     let mut idt = idt_cell.borrow_mut();
 
     if let Err(e) = idt.write_seqpos() {
-        return StreamOp::from(e);
+        return StreamOp::Error(e);
     }
 
     if let Err(e) = idt.writer.write_all(bytes) {
-        return StreamOp::from(e);
+        return StreamOp::Error(Box::new(e));
     }
     idt.seqpos = IdtSequencePos::AtBeginning;
     StreamOp::None
