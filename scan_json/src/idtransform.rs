@@ -51,6 +51,7 @@ pub fn copy_atom(peeked: Peek, rjiter: &mut RJiter, writer: &mut dyn Write) -> S
 enum IdtSequencePos {
     AtBeginning,
     InMiddle,
+    AfterKey,
 }
 
 struct IdTransform<'a> {
@@ -88,6 +89,10 @@ impl<'a> IdTransform<'a> {
                 self.seqpos = IdtSequencePos::InMiddle;
                 Ok(())
             }
+            IdtSequencePos::AfterKey => {
+                self.seqpos = IdtSequencePos::InMiddle;
+                Ok(())
+            }
         }
     }
 }
@@ -122,9 +127,34 @@ impl<'a> Matcher for IdtMatcher<'a> {
     }
 }
 
-#[derive(Debug)]
-struct IdtMatcherWithSideEffectWriteKey {
-    name: String,
+struct IdtMatcherWithSideEffectWriteKey<'a> {
+    idt: &'a RefCell<IdTransform<'a>>,
+}
+
+impl<'a> std::fmt::Debug for IdtMatcherWithSideEffectWriteKey<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IdtMatcherWithSideEffectWriteKey").finish()
+    }
+}
+
+impl<'a> IdtMatcherWithSideEffectWriteKey<'a> {
+    fn new(idt: &'a RefCell<IdTransform<'a>>) -> Self {
+        Self { idt }
+    }
+}
+
+impl<'a> Matcher for IdtMatcherWithSideEffectWriteKey<'a> {
+    fn matches(&self, name: &str, _context: &[ContextFrame]) -> bool {
+        let mut idt = self.idt.borrow_mut();
+        if let Err(e) = idt.write_seqpos() {
+            return false;
+        }
+        idt.writer.write_all(b"\"")?;
+        idt.writer.write_all(name.as_bytes())?;
+        idt.writer.write_all(b"\":")?;
+        idt.seqpos = IdtSequencePos::AfterKey;
+        true
+    }
 }
 
 fn on_atom(rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform>) -> StreamOp {
@@ -218,9 +248,14 @@ pub fn idtransform(rjiter_cell: &RefCell<RJiter>, writer: &mut dyn Write) -> Sca
         Box::new(on_object_end),
     );
 
+    let trigger_key: Trigger<BoxedAction<IdTransform>> = Trigger::new(
+        Box::new(IdtMatcherWithSideEffectWriteKey::new(&idt_cell)),
+        Box::new(|_, _| StreamOp::None),
+    );
+
     // Have an intermediate result to avoid: borrowed value does not live long enough
     let result = scan(
-        &[trigger_atom, trigger_object, trigger_array],
+        &[trigger_atom, trigger_object, trigger_array, trigger_key],
         &[trigger_object_end, trigger_array_end],
         &[],
         rjiter_cell,
