@@ -52,8 +52,15 @@ fn on_content(rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>) -
 }
 ```
 
+## Complete example: Identity transformation
 
-## Complete example
+The identity transformation copies JSON input to output, retaining the original structure.
+
+The function [`crate::idtransform::idtransform()`] is not just a library function,
+but also an example of advanced `scan` use. Read the source code for details.
+
+
+## Complete example: LLM output
 
 Summary:
 
