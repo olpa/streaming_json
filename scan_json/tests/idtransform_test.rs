@@ -151,7 +151,7 @@ fn idt_deeply_nested() {
             "name": "John",
             "age": 42,
             "address": {
-                "street": "123 Main St",
+                "street": "123_Main_St",
                 "city": "Anytown",
                 "country": "USA",
                 "coordinates": {
