@@ -31,10 +31,6 @@ pub fn mk_context_frame_for_test(current_key: String) -> ContextFrame {
     }
 }
 
-fn is_array_or_top(cf: Option<&ContextFrame>) -> bool {
-    cf.map_or(false, |c| c.current_key.starts_with('#'))
-}
-
 // Handle a JSON object key
 //
 // - Call the end-trigger for the previous key
@@ -51,9 +47,9 @@ fn handle_object<T: ?Sized>(
 ) -> ScanResult<(StreamOp, ContextFrame)> {
     {
         //
-        // Special case: an unnamed object was started (on the top level or in an array)
+        // Call the begin-trigger for the object
         //
-        if cur_level.is_elem_begin && is_array_or_top(context.last()) {
+        if cur_level.is_elem_begin {
             if let Some(begin_action) = find_action(triggers, "#object", context) {
                 match begin_action(rjiter_cell, baton_cell) {
                     StreamOp::None => (),
@@ -106,16 +102,14 @@ fn handle_object<T: ?Sized>(
             cur_level.current_key = key_str;
         } else {
             //
-            // End of the object: special case for unnamed objects
+            // Call the end-trigger for the object
             //
-            if is_array_or_top(context.last()) {
-                if let Some(end_action) = find_action(triggers_end, "#object", context) {
-                    if let Err(e) = end_action(baton_cell) {
-                        return Err(ScanError::ActionError(
-                            e,
-                            rjiter_cell.borrow().current_index(),
-                        ));
-                    }
+            if let Some(end_action) = find_action(triggers_end, "#object", context) {
+                if let Err(e) = end_action(baton_cell) {
+                    return Err(ScanError::ActionError(
+                        e,
+                        rjiter_cell.borrow().current_index(),
+                    ));
                 }
             }
             //
