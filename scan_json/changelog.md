@@ -3,6 +3,7 @@
 - Allow triggering on arrays
 - Allow triggering on basic values (strings, numbers, booleans, null)
 - Trigger on all objects, not only on unnamed in array context
+- Add `IOError` to `ScanError`
 
 
 ## [1.0.2] - 2025-05-03
