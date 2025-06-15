@@ -53,6 +53,7 @@ enum IdtSequencePos {
     InMiddle,
     AtBeginningKey(String),
     InMiddleKey(String),
+    AfterKey,
 }
 
 struct IdTransform<'a> {
@@ -79,6 +80,7 @@ impl<'a> IdTransform<'a> {
     }
 
     fn write_seqpos(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        println!("write_seqpos: seqpos: {:?}", self.seqpos); // FIXME
         match &self.seqpos {
             IdtSequencePos::AtBeginning => {
                 self.seqpos = IdtSequencePos::InMiddle;
@@ -104,6 +106,7 @@ impl<'a> IdTransform<'a> {
                 self.seqpos = IdtSequencePos::InMiddle;
                 Ok(())
             }
+            IdtSequencePos::AfterKey => Ok(()),
         }
     }
 }
@@ -157,12 +160,24 @@ impl<'a> IdtMatcherForKey<'a> {
 impl<'a> Matcher for IdtMatcherForKey<'a> {
     fn matches(&self, name: &str, _context: &[ContextFrame]) -> bool {
         let mut idt = self.idt.borrow_mut();
+        println!("matches: name: {:?}, seqpos: {:?}", name, idt.seqpos); // FIXME
         idt.seqpos = match &idt.seqpos {
             IdtSequencePos::AtBeginning => IdtSequencePos::AtBeginningKey(name.to_string()),
             _ => IdtSequencePos::InMiddleKey(name.to_string()),
         };
         true
     }
+}
+
+fn on_key(_rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform>) -> StreamOp {
+    let mut idt = idt_cell.borrow_mut();
+
+    if let Err(e) = idt.write_seqpos() {
+        return StreamOp::Error(e);
+    }
+    idt.seqpos = IdtSequencePos::AfterKey;
+
+    StreamOp::None
 }
 
 fn on_atom(rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform>) -> StreamOp {
@@ -172,6 +187,12 @@ fn on_atom(rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform>) -> St
     if let Err(e) = idt.write_seqpos() {
         return StreamOp::Error(e);
     }
+
+    println!(
+        "!!! on_atom: seqpos: {:?}, peeked: {:?}",
+        idt.seqpos,
+        rjiter.peek()
+    ); // FIXME
 
     match rjiter.peek() {
         Ok(peeked) => match copy_atom(peeked, &mut rjiter, idt.get_writer_mut()) {
@@ -184,6 +205,8 @@ fn on_atom(rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform>) -> St
 
 fn on_struct(bytes: &[u8], idt_cell: &RefCell<IdTransform>) -> StreamOp {
     let mut idt = idt_cell.borrow_mut();
+
+    println!("!!! on_struct: seqpos: {:?}", idt.seqpos); // FIXME
 
     if let Err(e) = idt.write_seqpos() {
         return StreamOp::Error(e);
@@ -256,10 +279,8 @@ pub fn idtransform(rjiter_cell: &RefCell<RJiter>, writer: &mut dyn Write) -> Sca
         Box::new(on_object_end),
     );
 
-    let trigger_key: Trigger<BoxedAction<IdTransform>> = Trigger::new(
-        Box::new(IdtMatcherForKey::new(&idt_cell)),
-        Box::new(|_, _| StreamOp::None),
-    );
+    let trigger_key: Trigger<BoxedAction<IdTransform>> =
+        Trigger::new(Box::new(IdtMatcherForKey::new(&idt_cell)), Box::new(on_key));
 
     // Have an intermediate result to avoid: borrowed value does not live long enough
     let result = scan(
