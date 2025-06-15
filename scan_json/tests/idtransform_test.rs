@@ -215,7 +215,7 @@ fn idt_deeply_nested() {
 }
 
 #[test]
-fn test_idtransform_long_strings() {
+fn idt_long_strings() {
     let input = r#"
         {
             "long_key": "this_is_a_much_longer_string_value_that_spans_multiple_words_and_includes_punctuation!",
@@ -227,6 +227,35 @@ fn test_idtransform_long_strings() {
 
     let mut reader = input.as_bytes();
     let mut buffer = vec![0u8; 16];
+    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let rjiter_cell = RefCell::new(rjiter);
+    let mut writer = Vec::new();
+
+    idtransform(&rjiter_cell, &mut writer).unwrap();
+
+    let output = String::from_utf8(writer).unwrap();
+    let expected = input.split_whitespace().collect::<Vec<&str>>().join("");
+    assert_eq!(
+        output.trim(),
+        expected,
+        "Output should match input after idtransform. Output: {output}"
+    );
+}
+
+#[test]
+fn idt_special_symbols() {
+    let input = r#"
+        {
+            "key!@#$%": "value!@#$%",
+            "unicode★": "symbols★",
+            "escaped\"quotes\"": "with\"quotes\"",
+            "back\\slash": "with\\slash",
+            "control\n\t\r": "chars\n\t\r"
+        }
+    "#;
+
+    let mut reader = input.as_bytes();
+    let mut buffer = vec![0u8; 32];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
     let rjiter_cell = RefCell::new(rjiter);
     let mut writer = Vec::new();
