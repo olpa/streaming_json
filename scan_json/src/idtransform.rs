@@ -8,6 +8,23 @@ use crate::{BoxedAction, BoxedEndAction, Trigger};
 use std::cell::RefCell;
 use std::io::Write;
 
+fn write_escaped_json_string(
+    writer: &mut dyn Write,
+    s: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    for byte in s.bytes() {
+        match byte {
+            b'"' => writer.write_all(b"\\\"")?,
+            b'\\' => writer.write_all(b"\\\\")?,
+            b'\n' => writer.write_all(b"\\n")?,
+            b'\r' => writer.write_all(b"\\r")?,
+            b'\t' => writer.write_all(b"\\t")?,
+            b => writer.write_all(&[b])?,
+        }
+    }
+    Ok(())
+}
+
 /// Copy a JSON atom (string, number, boolean, or null) from the input to the output.
 /// Advances the input iterator to the next token.
 ///
@@ -93,14 +110,14 @@ impl<'a> IdTransform<'a> {
             }
             IdtSequencePos::AtBeginningKey(key) => {
                 self.writer.write_all(b"\"")?;
-                self.writer.write_all(key.as_bytes())?;
+                write_escaped_json_string(self.writer, key)?;
                 self.writer.write_all(b"\":")?;
                 self.seqpos = IdtSequencePos::InMiddle;
                 Ok(())
             }
             IdtSequencePos::InMiddleKey(key) => {
                 self.writer.write_all(b",\"")?;
-                self.writer.write_all(key.as_bytes())?;
+                write_escaped_json_string(self.writer, key)?;
                 self.writer.write_all(b"\":")?;
                 self.seqpos = IdtSequencePos::InMiddle;
                 Ok(())
