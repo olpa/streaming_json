@@ -1,3 +1,29 @@
+//! Copy JSON input to output, retaining the original structure and collapsing whitespace.
+//! The implementation of `idtransform` is an example of advanced use of the `scan` function.
+//!
+//! The code uses the `scan`'s parameter `baton_cell` of type `IdTransform` to:
+//! - maintain state to properly write JSON, adding or not adding a comma, `IdtSequencePos`
+//! - pass information from matchers to handlers, `IdtMatcherToHandler`
+//!
+//! Actually, there is no such thing as `IdtMatcherToHandler`, because doing "clean code"
+//! and "good design" complicated the code too much. In the final implementation,
+//! `IdTransform` took over the responsibility of the retired `IdtMatcherForKey`.
+//!
+//! Why pass the information at all? This is another trade-off.
+//! The code uses a match-any-key matcher. The matched key should be printed to the output.
+//! In the current implementation of `scan`:
+//! - The matcher is not allowed to print anything.
+//! - The handler doesn't know the key.
+//! How to print? The solution space is:
+//! - Allow matchers to print.
+//!   In this case, the return type of `scan` should be `Result`, not just `boolean`.
+//! - Pass the key to the handler.
+//!   In this case, the argument list of a handler should be extended, and `scan` should
+//!   pass the context which was passed to the matcher once again, now to the handler.
+//! - Pass the key from the matcher to the handler.
+//!   In this case: 1) the matcher produces a side effect, 2) the printing is postponed
+//!   to some unknown point in the future.
+//!
 use crate::matcher::Matcher;
 use crate::StreamOp;
 use crate::{
@@ -73,6 +99,7 @@ enum IdtSequencePos {
     AfterKey,
 }
 
+/// Main transformer structure that maintains the state of the transformation process.
 struct IdTransform<'a> {
     writer: &'a mut dyn Write,
     seqpos: IdtSequencePos,
@@ -157,6 +184,11 @@ impl<'a> Matcher for IdtMatcher<'a> {
     }
 }
 
+/// Matcher for JSON keys that updates the transformer state without printing.
+/// 
+/// This matcher doesn't actually print anything (as matchers shouldn't), but instead
+/// updates the IdtSequencePos in the IdTransform state to remember the key. This state
+/// is then used by the handler to print the key with proper formatting.
 struct IdtMatcherForKey<'a> {
     idt: &'a RefCell<IdTransform<'a>>,
 }
@@ -183,6 +215,8 @@ impl<'a> Matcher for IdtMatcherForKey<'a> {
         true
     }
 }
+
+// ---------------- Handlers
 
 fn on_key(_rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform>) -> StreamOp {
     let mut idt = idt_cell.borrow_mut();
@@ -212,6 +246,7 @@ fn on_atom(rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform>) -> St
     }
 }
 
+// "Struct" means "array" or "object"
 fn on_struct(bytes: &[u8], idt_cell: &RefCell<IdTransform>) -> StreamOp {
     let mut idt = idt_cell.borrow_mut();
 
@@ -252,13 +287,18 @@ fn on_object_end(idt_cell: &RefCell<IdTransform>) -> Result<(), Box<dyn std::err
     on_struct_end(b"}", idt_cell)
 }
 
+// ---------------- Entry point
+
+/// Copy JSON input to output, retaining the original structure and collapsing whitespace.
+///
+/// The implementation of `idtransform` is an example of how to use the `scan` function.
+/// Consult the source code for more details.
 ///
 /// # Errors
 ///
-/// This function will return an error if:
-/// * The input JSON is malformed
-/// * Nesting is too deep
-/// * An IO error occurs while writing to the output
+/// If `scan` fails (mailformed json, nesting too deep, etc), return `scan`'s error.
+/// Also, if an IO error occurs while writing to the output, return it.
+///
 pub fn idtransform(rjiter_cell: &RefCell<RJiter>, writer: &mut dyn Write) -> ScanResult<()> {
     let idt = IdTransform::new(writer);
     let idt_cell = RefCell::new(idt);
@@ -289,7 +329,7 @@ pub fn idtransform(rjiter_cell: &RefCell<RJiter>, writer: &mut dyn Write) -> Sca
     let trigger_key: Trigger<BoxedAction<IdTransform>> =
         Trigger::new(Box::new(IdtMatcherForKey::new(&idt_cell)), Box::new(on_key));
 
-    // Have an intermediate result to avoid: borrowed value does not live long enough
+    // Use an intermediate result to avoid: borrowed value does not live long enough
     let result = scan(
         &[trigger_atom, trigger_object, trigger_array, trigger_key],
         &[trigger_object_end, trigger_array_end],
