@@ -14,6 +14,7 @@
 //! In the current implementation of `scan`:
 //! - The matcher is not allowed to print anything.
 //! - The handler doesn't know the key.
+//!
 //! How to print? The solution space is:
 //! - Allow matchers to print.
 //!   In this case, the return type of `scan` should be `Result`, not just `boolean`.
@@ -90,6 +91,8 @@ pub fn copy_atom(peeked: Peek, rjiter: &mut RJiter, writer: &mut dyn Write) -> S
     Err(ScanError::UnhandledPeek(peeked, rjiter.current_index()))
 }
 
+// ---------------- State
+
 #[derive(Debug)]
 enum IdtSequencePos {
     AtBeginning,
@@ -99,9 +102,10 @@ enum IdtSequencePos {
     AfterKey,
 }
 
-/// Main transformer structure that maintains the state of the transformation process.
+// Main transformer structure that maintains the state of the transformation process.
 struct IdTransform<'a> {
     writer: &'a mut dyn Write,
+    // `seqpos`+`is_top_level` could be the own type `IdtFromMatcherToHandler`
     seqpos: IdtSequencePos,
     is_top_level: bool,
 }
@@ -154,6 +158,12 @@ impl<'a> IdTransform<'a> {
     }
 }
 
+// ---------------- Matchers
+
+//
+// For objects, arrays and values, but not for keys.
+// Pass information to the handler: `is_top_level`.
+//
 struct IdtMatcher<'a> {
     name: String,
     idt: &'a RefCell<IdTransform<'a>>,
@@ -179,16 +189,16 @@ impl<'a> Matcher for IdtMatcher<'a> {
             return false;
         }
         let mut idt = self.idt.borrow_mut();
+        // There is always "#top" in the context.
         idt.is_top_level = context.len() < 2;
         true
     }
 }
 
-/// Matcher for JSON keys that updates the transformer state without printing.
-/// 
-/// This matcher doesn't actually print anything (as matchers shouldn't), but instead
-/// updates the IdtSequencePos in the IdTransform state to remember the key. This state
-/// is then used by the handler to print the key with proper formatting.
+//
+// Matcher for JSON keys.
+// Pass the key name to the handler.
+//
 struct IdtMatcherForKey<'a> {
     idt: &'a RefCell<IdTransform<'a>>,
 }
