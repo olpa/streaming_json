@@ -80,7 +80,6 @@ impl<'a> IdTransform<'a> {
     }
 
     fn write_seqpos(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        println!("write_seqpos: seqpos: {:?}", self.seqpos); // FIXME
         match &self.seqpos {
             IdtSequencePos::AtBeginning => {
                 self.seqpos = IdtSequencePos::InMiddle;
@@ -160,7 +159,6 @@ impl<'a> IdtMatcherForKey<'a> {
 impl<'a> Matcher for IdtMatcherForKey<'a> {
     fn matches(&self, name: &str, _context: &[ContextFrame]) -> bool {
         let mut idt = self.idt.borrow_mut();
-        println!("matches: name: {:?}, seqpos: {:?}", name, idt.seqpos); // FIXME
         idt.seqpos = match &idt.seqpos {
             IdtSequencePos::AtBeginning => IdtSequencePos::AtBeginningKey(name.to_string()),
             _ => IdtSequencePos::InMiddleKey(name.to_string()),
@@ -188,12 +186,6 @@ fn on_atom(rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform>) -> St
         return StreamOp::Error(e);
     }
 
-    println!(
-        "!!! on_atom: seqpos: {:?}, peeked: {:?}",
-        idt.seqpos,
-        rjiter.peek()
-    ); // FIXME
-
     match rjiter.peek() {
         Ok(peeked) => match copy_atom(peeked, &mut rjiter, idt.get_writer_mut()) {
             Ok(()) => StreamOp::ValueIsConsumed,
@@ -205,8 +197,6 @@ fn on_atom(rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform>) -> St
 
 fn on_struct(bytes: &[u8], idt_cell: &RefCell<IdTransform>) -> StreamOp {
     let mut idt = idt_cell.borrow_mut();
-
-    println!("!!! on_struct: seqpos: {:?}", idt.seqpos); // FIXME
 
     if let Err(e) = idt.write_seqpos() {
         return StreamOp::Error(e);
