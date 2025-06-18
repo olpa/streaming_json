@@ -16,6 +16,7 @@ pub enum Error {
     InternalError(usize, String),
     MaxNestingExceeded(usize, usize),
     ActionError(Box<dyn std::error::Error>, usize),
+    IOError(std::io::Error), // for writing in id-transform; reading errors are inside RJiterError
 }
 
 impl std::error::Error for Error {}
@@ -32,6 +33,7 @@ impl std::fmt::Display for Error {
                 f,
                 "Max nesting exceeded at position {pos} with level {level}"
             ),
+            Error::IOError(e) => write!(f, "IO error: {e}"),
         }
     }
 }
@@ -39,6 +41,12 @@ impl std::fmt::Display for Error {
 impl From<rjiter::Error> for Error {
     fn from(error: rjiter::Error) -> Self {
         Error::RJiterError(error)
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(error: std::io::Error) -> Self {
+        Error::IOError(error)
     }
 }
 
