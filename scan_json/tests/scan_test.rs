@@ -990,7 +990,7 @@ data: [DONE]
 
 #[test]
 fn stop_early() {
-    let input = "1 2 3 4 5";
+    let input = r#"{} [] {"foo: "bar}, [{}, []] 777 true}"#;
     let mut reader = input.as_bytes();
     let mut buffer = vec![0u8; 16];
 
@@ -1019,6 +1019,7 @@ fn stop_early() {
     let rjiter_cell = RefCell::new(rjiter);
 
     let triggers: Vec<Trigger<BoxedAction<()>>> = vec![];
+    for _ in 0..4 {
     scan(
         &triggers,
         &vec![],
@@ -1027,11 +1028,12 @@ fn stop_early() {
         ScanOptions {
             sse_tokens: vec![],
             stop_early: true, // `true`
-        },
-    )
-    .unwrap();
+            },
+        )
+        .unwrap();
+    }
 
-    // Verify we can still read the next item
+    // Verify we can still read the next item, which is 777
     let mut rjiter = rjiter_cell.borrow_mut();
-    assert_eq!(rjiter.next_int().unwrap(), rjiter::jiter::NumberInt::Int(2));
+    assert_eq!(rjiter.next_int().unwrap(), rjiter::jiter::NumberInt::Int(777));
 }
