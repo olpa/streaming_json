@@ -1,6 +1,7 @@
 use rjiter::RJiter;
 use scan_json::idtransform::idtransform;
 use std::cell::RefCell;
+use std::io::Write;
 
 #[test]
 fn idt_atomic_on_top() {
@@ -20,11 +21,15 @@ fn idt_atomic_on_top() {
     //
     // Apply and assert
     //
-    idtransform(&rjiter_cell, &mut writer).unwrap();
+    for _ in 0..input.split_whitespace().count() {
+        idtransform(&rjiter_cell, &mut writer).unwrap();
+        writer.write_all(b" ").unwrap();
+    }
     let output = String::from_utf8(writer).unwrap();
+    let output = output.trim();
     let expected = input.split_whitespace().collect::<Vec<&str>>().join(" ");
     assert_eq!(
-        output.trim(),
+        output,
         expected,
         "Output should match input after idtransform. Output: {output}"
     );
@@ -185,10 +190,9 @@ fn idt_deeply_nested() {
                         "updates": "daily"
                     }
                 }
-            }
+            },
+            "x": [{}, {}, [[],[]]]
         }
-
-        {"x": [{}, {}, [[],[]]]}
     "#;
 
     let mut reader = input.as_bytes();
