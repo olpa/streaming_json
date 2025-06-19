@@ -140,7 +140,10 @@ fn test_skip_sse_tokens() {
     let mut buffer = vec![0u8; 16];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
 
-    let options = ScanOptions::new().with_sse_tokens_str(&["data:", "DONE"]);
+    let options = ScanOptions {
+        sse_tokens: vec!["data:".to_string(), "DONE".to_string()],
+        stop_early: false,
+    };
     scan(
         &vec![],
         &vec![],
@@ -166,7 +169,14 @@ fn test_call_begin_dont_touch_value() {
     });
     let triggers = vec![Trigger { matcher, action }];
 
-    scan(&triggers, &vec![], &RefCell::new(rjiter), &state, ScanOptions::new()).unwrap();
+    scan(
+        &triggers,
+        &vec![],
+        &RefCell::new(rjiter),
+        &state,
+        ScanOptions::new(),
+    )
+    .unwrap();
     assert!(*state.borrow(), "Trigger should have been called for 'foo'");
 }
 
@@ -190,7 +200,14 @@ fn test_call_begin_consume_value() {
         });
     let triggers = vec![Trigger { matcher, action }];
 
-    scan(&triggers, &vec![], &RefCell::new(rjiter), &state, ScanOptions::new()).unwrap();
+    scan(
+        &triggers,
+        &vec![],
+        &RefCell::new(rjiter),
+        &state,
+        ScanOptions::new(),
+    )
+    .unwrap();
     assert!(*state.borrow(), "Trigger should have been called for 'foo'");
 }
 
@@ -822,7 +839,13 @@ fn atoms_stream_op_return_values() {
         action: begin_action,
     }];
 
-    let result = scan(&triggers, &vec![], &rjiter_cell, &writer_cell, ScanOptions::new());
+    let result = scan(
+        &triggers,
+        &vec![],
+        &rjiter_cell,
+        &writer_cell,
+        ScanOptions::new(),
+    );
 
     // Check the output
     let message = String::from_utf8(writer_cell.borrow().to_vec()).unwrap();
@@ -879,7 +902,10 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
         &vec![end_message],
         &RefCell::new(rjiter),
         &writer_cell,
-        ScanOptions::new().with_sse_tokens_str(&["data:", "DONE"]),
+        ScanOptions {
+            sse_tokens: vec!["data:".to_string(), "DONE".to_string()],
+            stop_early: false,
+        },
     )
     .unwrap();
 

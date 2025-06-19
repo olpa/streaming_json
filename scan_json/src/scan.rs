@@ -16,7 +16,7 @@ const MAX_NESTING: usize = 20;
 pub struct ScanOptions {
     /// List of SSE tokens to ignore at the top level
     pub sse_tokens: Vec<String>,
-    /// Whether to stop scanning early when encountering certain conditions
+    /// Whether to stop scanning as soon as possible, or scan the complete JSON stream
     pub stop_early: bool,
 }
 
@@ -30,31 +30,9 @@ impl Default for ScanOptions {
 }
 
 impl ScanOptions {
-    /// Create a new `ScanOptions` with default values
     #[allow(clippy::must_use_candidate)]
     pub fn new() -> Self {
         Self::default()
-    }
-
-    /// Set the SSE tokens to ignore
-    #[allow(clippy::must_use_candidate)]
-    pub fn with_sse_tokens(mut self, sse_tokens: Vec<String>) -> Self {
-        self.sse_tokens = sse_tokens;
-        self
-    }
-
-    /// Set the stop_early option
-    #[allow(clippy::must_use_candidate)]
-    pub fn with_stop_early(mut self, stop_early: bool) -> Self {
-        self.stop_early = stop_early;
-        self
-    }
-
-    /// Set the SSE tokens from string slices
-    #[allow(clippy::must_use_candidate)]
-    pub fn with_sse_tokens_str(mut self, sse_tokens: &[&str]) -> Self {
-        self.sse_tokens = sse_tokens.iter().map(|s| s.to_string()).collect();
-        self
     }
 }
 
