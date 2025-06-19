@@ -3,7 +3,7 @@ use std::io::Write;
 
 use ::scan_json::action::{BoxedAction, BoxedEndAction, StreamOp, Trigger};
 use ::scan_json::matcher::{Name, ParentAndName, ParentParentAndName};
-use ::scan_json::{scan, ScanOptions};
+use ::scan_json::{scan, Options};
 use rjiter::{jiter::Peek, RJiter};
 
 #[test]
@@ -18,7 +18,7 @@ fn test_scan_json_empty_input() {
         &vec![],
         &RefCell::new(rjiter),
         &RefCell::new(()),
-        ScanOptions::new(),
+        &Options::new(),
     )
     .unwrap();
 }
@@ -36,7 +36,7 @@ fn test_scan_json_top_level_types() {
         &vec![],
         &RefCell::new(rjiter),
         &RefCell::new(()),
-        ScanOptions::new(),
+        &Options::new(),
     )
     .unwrap();
 }
@@ -54,7 +54,7 @@ fn test_scan_json_simple_object() {
         &vec![],
         &RefCell::new(rjiter),
         &RefCell::new(()),
-        ScanOptions::new(),
+        &Options::new(),
     )
     .unwrap();
 }
@@ -72,7 +72,7 @@ fn test_scan_json_simple_array() {
         &vec![],
         &RefCell::new(rjiter),
         &RefCell::new(()),
-        ScanOptions::new(),
+        &Options::new(),
     )
     .unwrap();
 }
@@ -111,7 +111,7 @@ fn test_scan_json_nested_complex() {
         &vec![],
         &RefCell::new(rjiter),
         &RefCell::new(()),
-        ScanOptions::new(),
+        &Options::new(),
     )
     .unwrap();
 }
@@ -128,7 +128,7 @@ fn skip_long_string() {
         &vec![],
         &RefCell::new(rjiter),
         &RefCell::new(()),
-        ScanOptions::new(),
+        &Options::new(),
     )
     .unwrap();
 }
@@ -140,7 +140,7 @@ fn test_skip_sse_tokens() {
     let mut buffer = vec![0u8; 16];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
 
-    let options = ScanOptions {
+    let options = Options {
         sse_tokens: vec!["data:".to_string(), "DONE".to_string()],
         stop_early: false,
     };
@@ -149,7 +149,7 @@ fn test_skip_sse_tokens() {
         &vec![],
         &RefCell::new(rjiter),
         &RefCell::new(()),
-        options,
+        &options,
     )
     .unwrap();
 }
@@ -174,7 +174,7 @@ fn test_call_begin_dont_touch_value() {
         &vec![],
         &RefCell::new(rjiter),
         &state,
-        ScanOptions::new(),
+        &Options::new(),
     )
     .unwrap();
     assert!(*state.borrow(), "Trigger should have been called for 'foo'");
@@ -205,7 +205,7 @@ fn test_call_begin_consume_value() {
         &vec![],
         &RefCell::new(rjiter),
         &state,
-        ScanOptions::new(),
+        &Options::new(),
     )
     .unwrap();
     assert!(*state.borrow(), "Trigger should have been called for 'foo'");
@@ -238,7 +238,7 @@ fn test_call_end() {
         &triggers_end,
         &RefCell::new(rjiter),
         &state,
-        ScanOptions::new(),
+        &Options::new(),
     )
     .unwrap();
     assert_eq!(
@@ -285,7 +285,7 @@ fn notify_for_top_level_object() {
         &triggers_end,
         &RefCell::new(rjiter),
         &state,
-        ScanOptions::new(),
+        &Options::new(),
     )
     .unwrap();
 
@@ -333,7 +333,7 @@ fn notify_for_object_in_array() {
         &triggers_end,
         &RefCell::new(rjiter),
         &state,
-        ScanOptions::new(),
+        &Options::new(),
     )
     .unwrap();
 
@@ -385,7 +385,7 @@ fn notify_for_array() {
         &triggers_end,
         &RefCell::new(rjiter),
         &state,
-        ScanOptions::new(),
+        &Options::new(),
     )
     .unwrap();
 
@@ -439,7 +439,7 @@ fn client_can_consume_array() {
         &triggers_end,
         &RefCell::new(rjiter),
         &writer_cell,
-        ScanOptions::new(),
+        &Options::new(),
     )
     .unwrap();
 
@@ -483,7 +483,7 @@ fn several_arrays_top_level() {
         &triggers_end,
         &RefCell::new(rjiter),
         &writer_cell,
-        ScanOptions::new(),
+        &Options::new(),
     )
     .unwrap();
 
@@ -506,7 +506,7 @@ fn max_nesting_array() {
         &vec![],
         &RefCell::new(rjiter),
         &RefCell::new(()),
-        ScanOptions::new(),
+        &Options::new(),
     );
     let e = result.unwrap_err();
     assert_eq!(
@@ -528,7 +528,7 @@ fn max_nesting_object() {
         &vec![],
         &RefCell::new(rjiter),
         &RefCell::new(()),
-        ScanOptions::new(),
+        &Options::new(),
     );
     let e = result.unwrap_err();
     assert_eq!(
@@ -555,7 +555,7 @@ fn error_in_begin_action() {
         &vec![],
         &RefCell::new(rjiter),
         &RefCell::new(()),
-        ScanOptions::new(),
+        &Options::new(),
     );
 
     let err = result.unwrap_err();
@@ -585,7 +585,7 @@ fn error_in_end_action() {
         &triggers_end,
         &RefCell::new(rjiter),
         &RefCell::new(()),
-        ScanOptions::new(),
+        &Options::new(),
     );
 
     let err = result.unwrap_err();
@@ -629,7 +629,7 @@ fn several_objects_top_level() {
         &triggers_end,
         &RefCell::new(rjiter),
         &writer_cell,
-        ScanOptions::new(),
+        &Options::new(),
     )
     .unwrap();
 
@@ -669,7 +669,7 @@ fn match_in_array_context() {
         &vec![],
         &RefCell::new(rjiter),
         &writer_cell,
-        ScanOptions::new(),
+        &Options::new(),
     )
     .unwrap();
 
@@ -705,7 +705,7 @@ fn atoms_on_top_level() {
         &vec![],
         &RefCell::new(rjiter),
         &writer_cell,
-        ScanOptions::new(),
+        &Options::new(),
     );
     assert!(result.is_ok());
 
@@ -748,7 +748,7 @@ fn atoms_in_array() {
         &vec![],
         &RefCell::new(rjiter),
         &writer_cell,
-        ScanOptions::new(),
+        &Options::new(),
     );
     assert!(result.is_ok());
 
@@ -789,7 +789,7 @@ fn atoms_in_object() {
         &vec![],
         &RefCell::new(rjiter),
         &writer_cell,
-        ScanOptions::new(),
+        &Options::new(),
     );
     assert!(result.is_ok());
 
@@ -844,7 +844,7 @@ fn atoms_stream_op_return_values() {
         &vec![],
         &rjiter_cell,
         &writer_cell,
-        ScanOptions::new(),
+        &Options::new(),
     );
 
     // Check the output
@@ -902,7 +902,7 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
         &vec![end_message],
         &RefCell::new(rjiter),
         &writer_cell,
-        ScanOptions {
+        &Options {
             sse_tokens: vec!["data:".to_string(), "DONE".to_string()],
             stop_early: false,
         },
@@ -1004,7 +1004,7 @@ fn stop_early() {
         &vec![],
         &rjiter_cell,
         &RefCell::new(()),
-        ScanOptions {
+        &Options {
             sse_tokens: vec![],
             stop_early: false, // `false`
         },
@@ -1026,15 +1026,18 @@ fn stop_early() {
             &vec![],
             &rjiter_cell,
             &RefCell::new(()),
-            ScanOptions {
+            &Options {
                 sse_tokens: vec![],
                 stop_early: true, // `true`
-                },
-            )
-            .unwrap();
+            },
+        )
+        .unwrap();
     }
 
     // Verify we can still read the next item, which is 777
     let mut rjiter = rjiter_cell.borrow_mut();
-    assert_eq!(rjiter.next_int().unwrap(), rjiter::jiter::NumberInt::Int(777));
+    assert_eq!(
+        rjiter.next_int().unwrap(),
+        rjiter::jiter::NumberInt::Int(777)
+    );
 }

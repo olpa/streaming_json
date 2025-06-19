@@ -12,24 +12,15 @@ use std::io;
 const MAX_NESTING: usize = 20;
 
 /// Options for configuring the scan behavior
-#[derive(Debug, Clone)]
-pub struct ScanOptions {
+#[derive(Debug, Clone, Default)]
+pub struct Options {
     /// List of SSE tokens to ignore at the top level
     pub sse_tokens: Vec<String>,
     /// Whether to stop scanning as soon as possible, or scan the complete JSON stream
     pub stop_early: bool,
 }
 
-impl Default for ScanOptions {
-    fn default() -> Self {
-        Self {
-            sse_tokens: Vec::new(),
-            stop_early: false,
-        }
-    }
-}
-
-impl ScanOptions {
+impl Options {
     #[allow(clippy::must_use_candidate)]
     pub fn new() -> Self {
         Self::default()
@@ -282,7 +273,7 @@ pub fn scan<T: ?Sized>(
     triggers_end: &[Trigger<BoxedEndAction<T>>],
     rjiter_cell: &RefCell<RJiter>,
     baton_cell: &RefCell<T>,
-    options: ScanOptions,
+    options: &Options,
 ) -> ScanResult<()> {
     let mut context: Vec<ContextFrame> = Vec::new();
     let mut cur_level = ContextFrame {

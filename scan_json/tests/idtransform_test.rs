@@ -29,8 +29,7 @@ fn idt_atomic_on_top() {
     let output = output.trim();
     let expected = input.split_whitespace().collect::<Vec<&str>>().join(" ");
     assert_eq!(
-        output,
-        expected,
+        output, expected,
         "Output should match input after idtransform. Output: {output}"
     );
 }

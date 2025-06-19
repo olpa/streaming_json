@@ -79,7 +79,7 @@ use std::cell::RefCell;
 use std::io::Write;
 use scan_json::scan;
 use scan_json::{Name, ParentAndName, BoxedAction, BoxedEndAction, StreamOp, Trigger, rjiter::RJiter};
-use scan_json::ScanOptions;
+use scan_json::Options;
 
 
 fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
@@ -127,7 +127,7 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
         &vec![end_message],
         &rjiter_cell,
         &writer_cell,
-        ScanOptions {
+        &Options {
             sse_tokens: vec!["data:".to_string(), "DONE".to_string()],
             stop_early: false,
         },
