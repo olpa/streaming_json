@@ -345,7 +345,10 @@ pub fn idtransform(rjiter_cell: &RefCell<RJiter>, writer: &mut dyn Write) -> Sca
         &[trigger_object_end, trigger_array_end],
         rjiter_cell,
         &idt_cell,
-        ScanOptions::new(),
+        ScanOptions {
+            sse_tokens: vec![],
+            stop_early: true,
+        },
     );
     #[allow(clippy::let_and_return)]
     result

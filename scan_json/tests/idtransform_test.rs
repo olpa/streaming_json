@@ -272,13 +272,12 @@ fn idt_special_symbols() {
 }
 
 #[test]
-#[ignore] // FIXME
 fn idt_stop_after_object() {
     let input = r#"
         {
             "key1": "value1",
             "key2": "value2"
-        },
+        }
         {
             "next_obj_key": "next_obj_value" 
         }
@@ -310,6 +309,6 @@ fn idt_stop_after_object() {
     // Act: RJiter should be able to read the next key-value pair
     //
     let mut rjiter = rjiter_cell.borrow_mut();
-    let key = rjiter.next_key().unwrap();
+    let key = rjiter.next_object().unwrap();
     assert_eq!(key, Some("next_obj_key"));
 }
