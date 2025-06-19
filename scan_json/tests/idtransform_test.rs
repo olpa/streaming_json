@@ -270,3 +270,46 @@ fn idt_special_symbols() {
         "Output should match input after idtransform. Output: {output}"
     );
 }
+
+#[test]
+#[ignore] // FIXME
+fn idt_stop_after_object() {
+    let input = r#"
+        {
+            "key1": "value1",
+            "key2": "value2"
+        },
+        {
+            "next_obj_key": "next_obj_value" 
+        }
+    "#;
+
+    let mut reader = input.as_bytes();
+    let mut buffer = vec![0u8; 32];
+    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let rjiter_cell = RefCell::new(rjiter);
+    let mut writer = Vec::new();
+
+    //
+    // Act: Transform first object
+    //
+    idtransform(&rjiter_cell, &mut writer).unwrap();
+
+    //
+    // Assert: First object should be transformed correctly
+    //
+    let output = String::from_utf8(writer).unwrap();
+    let expected = r#"{"key1":"value1","key2":"value2"}"#;
+    assert_eq!(
+        output.trim(),
+        expected,
+        "First object should be transformed correctly. Output: {output}"
+    );
+
+    //
+    // Act: RJiter should be able to read the next key-value pair
+    //
+    let mut rjiter = rjiter_cell.borrow_mut();
+    let key = rjiter.next_key().unwrap();
+    assert_eq!(key, Some("next_obj_key"));
+}

@@ -11,6 +11,53 @@ use std::io;
 /// Maximum allowed nesting level for JSON structures
 const MAX_NESTING: usize = 20;
 
+/// Options for configuring the scan behavior
+#[derive(Debug, Clone)]
+pub struct ScanOptions {
+    /// List of SSE tokens to ignore at the top level
+    pub sse_tokens: Vec<String>,
+    /// Whether to stop scanning early when encountering certain conditions
+    pub stop_early: bool,
+}
+
+impl Default for ScanOptions {
+    fn default() -> Self {
+        Self {
+            sse_tokens: Vec::new(),
+            stop_early: false,
+        }
+    }
+}
+
+impl ScanOptions {
+    /// Create a new `ScanOptions` with default values
+    #[allow(clippy::must_use_candidate)]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the SSE tokens to ignore
+    #[allow(clippy::must_use_candidate)]
+    pub fn with_sse_tokens(mut self, sse_tokens: Vec<String>) -> Self {
+        self.sse_tokens = sse_tokens;
+        self
+    }
+
+    /// Set the stop_early option
+    #[allow(clippy::must_use_candidate)]
+    pub fn with_stop_early(mut self, stop_early: bool) -> Self {
+        self.stop_early = stop_early;
+        self
+    }
+
+    /// Set the SSE tokens from string slices
+    #[allow(clippy::must_use_candidate)]
+    pub fn with_sse_tokens_str(mut self, sse_tokens: &[&str]) -> Self {
+        self.sse_tokens = sse_tokens.iter().map(|s| s.to_string()).collect();
+        self
+    }
+}
+
 /// Represents the current parsing context within the JSON structure
 #[derive(Debug)]
 pub struct ContextFrame {
@@ -244,9 +291,9 @@ fn push_context(
 ///
 /// * `triggers` - List of action triggers to execute on matching keys
 /// * `triggers_end` - List of end action triggers to execute when a key is ended
-/// * `sse_tokens` - List of SSE tokens to ignore at the top level
 /// * `rjiter_cell` - Reference cell containing the JSON iterator
 /// * `baton_cell` - Reference cell containing the caller's state
+/// * `options` - Configuration options for the scan behavior
 ///
 /// # Errors
 ///
@@ -255,9 +302,9 @@ fn push_context(
 pub fn scan<T: ?Sized>(
     triggers: &[Trigger<BoxedAction<T>>],
     triggers_end: &[Trigger<BoxedEndAction<T>>],
-    sse_tokens: &[&str],
     rjiter_cell: &RefCell<RJiter>,
     baton_cell: &RefCell<T>,
+    options: ScanOptions,
 ) -> ScanResult<()> {
     let mut context: Vec<ContextFrame> = Vec::new();
     let mut cur_level = ContextFrame {
@@ -398,12 +445,17 @@ pub fn scan<T: ?Sized>(
         // The array condition is to handle the token "[DONE]", which is
         // parsed as an array with one element, the string "DONE".
         if context.is_empty() || (cur_level.is_in_array && context.len() == 1) {
-            for sse_token in sse_tokens {
+            for sse_token in &options.sse_tokens {
                 let found = rjiter.known_skip_token(sse_token.as_bytes());
                 if found.is_ok() {
                     continue 'main_loop;
                 }
             }
+        }
+
+        // Check if we should stop early
+        if options.stop_early {
+            break;
         }
 
         return Err(ScanError::UnhandledPeek(peeked, rjiter.current_index()));
