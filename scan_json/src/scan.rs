@@ -292,7 +292,14 @@ pub fn scan<T: ?Sized>(
         is_in_array: false,
     };
 
+    let mut is_progressed = false;
+
     'main_loop: loop {
+        if is_progressed && options.stop_early && context.is_empty() {
+            break;
+        }
+        is_progressed = true;
+
         let mut peeked = None;
 
         if cur_level.is_in_object {

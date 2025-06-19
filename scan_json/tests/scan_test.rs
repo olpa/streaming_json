@@ -990,7 +990,7 @@ data: [DONE]
 
 #[test]
 fn stop_early() {
-    let input = r#"{} [] {"foo: "bar}, [{}, []] 777 true}"#;
+    let input = r#"{} [] {"foo": "bar"} [{}, []] 777 true"#;
     let mut reader = input.as_bytes();
     let mut buffer = vec![0u8; 16];
 
@@ -1015,22 +1015,23 @@ fn stop_early() {
     rjiter_cell.borrow_mut().finish().unwrap();
 
     // Part 2: Process only first item when stop_early is true
+    let mut reader = input.as_bytes();
     let rjiter = RJiter::new(&mut reader, &mut buffer);
     let rjiter_cell = RefCell::new(rjiter);
 
     let triggers: Vec<Trigger<BoxedAction<()>>> = vec![];
     for _ in 0..4 {
-    scan(
-        &triggers,
-        &vec![],
-        &rjiter_cell,
-        &RefCell::new(()),
-        ScanOptions {
-            sse_tokens: vec![],
-            stop_early: true, // `true`
-            },
-        )
-        .unwrap();
+        scan(
+            &triggers,
+            &vec![],
+            &rjiter_cell,
+            &RefCell::new(()),
+            ScanOptions {
+                sse_tokens: vec![],
+                stop_early: true, // `true`
+                },
+            )
+            .unwrap();
     }
 
     // Verify we can still read the next item, which is 777
