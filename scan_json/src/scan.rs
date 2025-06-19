@@ -431,11 +431,6 @@ pub fn scan<T: ?Sized>(
             }
         }
 
-        // Check if we should stop early
-        if options.stop_early {
-            break;
-        }
-
         return Err(ScanError::UnhandledPeek(peeked, rjiter.current_index()));
     }
 

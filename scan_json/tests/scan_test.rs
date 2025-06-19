@@ -987,3 +987,51 @@ data: [DONE]
     let message = String::from_utf8(writer_cell.borrow().to_vec()).unwrap();
     assert_eq!(message, "Hello! How can I assist you today?");
 }
+
+#[test]
+fn stop_early() {
+    let input = "1 2 3 4 5";
+    let mut reader = input.as_bytes();
+    let mut buffer = vec![0u8; 16];
+
+    // Part 1: Process all items when stop_early is false
+    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let rjiter_cell = RefCell::new(rjiter);
+
+    let triggers: Vec<Trigger<BoxedAction<()>>> = vec![];
+    scan(
+        &triggers,
+        &vec![],
+        &rjiter_cell,
+        &RefCell::new(()),
+        ScanOptions {
+            sse_tokens: vec![],
+            stop_early: false, // `false`
+        },
+    )
+    .unwrap();
+
+    // Verify everything was processed
+    rjiter_cell.borrow_mut().finish().unwrap();
+
+    // Part 2: Process only first item when stop_early is true
+    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let rjiter_cell = RefCell::new(rjiter);
+
+    let triggers: Vec<Trigger<BoxedAction<()>>> = vec![];
+    scan(
+        &triggers,
+        &vec![],
+        &rjiter_cell,
+        &RefCell::new(()),
+        ScanOptions {
+            sse_tokens: vec![],
+            stop_early: true, // `true`
+        },
+    )
+    .unwrap();
+
+    // Verify we can still read the next item
+    let mut rjiter = rjiter_cell.borrow_mut();
+    assert_eq!(rjiter.next_int().unwrap(), rjiter::jiter::NumberInt::Int(2));
+}
