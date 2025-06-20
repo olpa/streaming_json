@@ -11,6 +11,22 @@ use std::io;
 /// Maximum allowed nesting level for JSON structures
 const MAX_NESTING: usize = 20;
 
+/// Options for configuring the scan behavior
+#[derive(Debug, Clone, Default)]
+pub struct Options {
+    /// List of SSE tokens to ignore at the top level
+    pub sse_tokens: Vec<String>,
+    /// Whether to stop scanning as soon as possible, or scan the complete JSON stream
+    pub stop_early: bool,
+}
+
+impl Options {
+    #[allow(clippy::must_use_candidate)]
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
 /// Represents the current parsing context within the JSON structure
 #[derive(Debug)]
 pub struct ContextFrame {
@@ -244,9 +260,9 @@ fn push_context(
 ///
 /// * `triggers` - List of action triggers to execute on matching keys
 /// * `triggers_end` - List of end action triggers to execute when a key is ended
-/// * `sse_tokens` - List of SSE tokens to ignore at the top level
 /// * `rjiter_cell` - Reference cell containing the JSON iterator
 /// * `baton_cell` - Reference cell containing the caller's state
+/// * `options` - Configuration options for the scan behavior
 ///
 /// # Errors
 ///
@@ -255,9 +271,9 @@ fn push_context(
 pub fn scan<T: ?Sized>(
     triggers: &[Trigger<BoxedAction<T>>],
     triggers_end: &[Trigger<BoxedEndAction<T>>],
-    sse_tokens: &[&str],
     rjiter_cell: &RefCell<RJiter>,
     baton_cell: &RefCell<T>,
+    options: &Options,
 ) -> ScanResult<()> {
     let mut context: Vec<ContextFrame> = Vec::new();
     let mut cur_level = ContextFrame {
@@ -267,7 +283,14 @@ pub fn scan<T: ?Sized>(
         is_in_array: false,
     };
 
+    let mut is_progressed = false;
+
     'main_loop: loop {
+        if is_progressed && options.stop_early && context.is_empty() {
+            break;
+        }
+        is_progressed = true;
+
         let mut peeked = None;
 
         if cur_level.is_in_object {
@@ -398,7 +421,7 @@ pub fn scan<T: ?Sized>(
         // The array condition is to handle the token "[DONE]", which is
         // parsed as an array with one element, the string "DONE".
         if context.is_empty() || (cur_level.is_in_array && context.len() == 1) {
-            for sse_token in sse_tokens {
+            for sse_token in &options.sse_tokens {
                 let found = rjiter.known_skip_token(sse_token.as_bytes());
                 if found.is_ok() {
                     continue 'main_loop;

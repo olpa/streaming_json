@@ -28,8 +28,8 @@
 use crate::matcher::Matcher;
 use crate::StreamOp;
 use crate::{
-    rjiter::jiter::Peek, scan, scan::ContextFrame, Error as ScanError, Name as NameMatcher, RJiter,
-    Result as ScanResult,
+    rjiter::jiter::Peek, scan, scan::ContextFrame, Error as ScanError, Name as NameMatcher,
+    Options, RJiter, Result as ScanResult,
 };
 use crate::{BoxedAction, BoxedEndAction, Trigger};
 use std::cell::RefCell;
@@ -343,9 +343,12 @@ pub fn idtransform(rjiter_cell: &RefCell<RJiter>, writer: &mut dyn Write) -> Sca
     let result = scan(
         &[trigger_atom, trigger_object, trigger_array, trigger_key],
         &[trigger_object_end, trigger_array_end],
-        &[],
         rjiter_cell,
         &idt_cell,
+        &Options {
+            sse_tokens: vec![],
+            stop_early: true,
+        },
     );
     #[allow(clippy::let_and_return)]
     result

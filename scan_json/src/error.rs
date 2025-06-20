@@ -8,6 +8,7 @@
 /// - `UnbalancedJson`: JSON structure is not properly balanced at the given position
 /// - `InternalError`: Internal processing error at the given position with message
 /// - `MaxNestingExceeded`: JSON nesting level exceeded maximum at given position
+/// - `IOError`: IO error when writing to the output stream. Reading errors are inside `RJiterError`
 #[derive(Debug)]
 pub enum Error {
     RJiterError(rjiter::Error),
@@ -16,7 +17,7 @@ pub enum Error {
     InternalError(usize, String),
     MaxNestingExceeded(usize, usize),
     ActionError(Box<dyn std::error::Error>, usize),
-    IOError(std::io::Error), // for writing in id-transform; reading errors are inside RJiterError
+    IOError(std::io::Error),
 }
 
 impl std::error::Error for Error {}

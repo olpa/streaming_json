@@ -2,8 +2,9 @@
 
 Start processing JSON before the entire JSON document is available.
 
-- [crate](https://crates.io/crates/scan_json)
-- [documentation](https://docs.rs/scan_json/)
+- [`scan_json` on crates.io](https://crates.io/crates/scan_json)
+- [Documentation on docs.rs](https://docs.rs/scan_json/)
+- Entry point: [`crate::scan()`]
 
 
 ## Concepts
@@ -59,6 +60,8 @@ The identity transformation copies JSON input to output, retaining the original 
 The function [`crate::idtransform::idtransform()`] is not just a library function,
 but also an example of advanced `scan` use. Read the source code for details.
 
+Additionally, the function [`crate::idtransform::copy_atom()`] can be useful.
+
 
 ## Complete example: LLM output
 
@@ -79,6 +82,7 @@ use std::cell::RefCell;
 use std::io::Write;
 use scan_json::scan;
 use scan_json::{Name, ParentAndName, BoxedAction, BoxedEndAction, StreamOp, Trigger, rjiter::RJiter};
+use scan_json::Options;
 
 
 fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
@@ -124,9 +128,12 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
     scan(
         &vec![begin_message, content],
         &vec![end_message],
-        &vec!["data:", "DONE"],
         &rjiter_cell,
         &writer_cell,
+        &Options {
+            sse_tokens: vec!["data:".to_string(), "DONE".to_string()],
+            stop_early: false,
+        },
     )
     .unwrap();
 

@@ -11,7 +11,7 @@ pub use error::{Error, Result};
 pub use matcher::{
     DebugPrinter as MatcherDebugPrinter, Matcher, Name, ParentAndName, ParentParentAndName,
 };
-pub use scan::{scan, ContextFrame};
+pub use scan::{scan, ContextFrame, Options};
 
 pub use rjiter;
 pub use rjiter::jiter;
