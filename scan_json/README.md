@@ -2,8 +2,9 @@
 
 Start processing JSON before the entire JSON document is available.
 
-- [crate](https://crates.io/crates/scan_json)
-- [documentation](https://docs.rs/scan_json/)
+- [`scan_json` on crates.io](https://crates.io/crates/scan_json)
+- [Documentation on docs.rs](https://docs.rs/scan_json/)
+- Entry point: [`crate::scan()`]
 
 
 ## Concepts
@@ -58,6 +59,8 @@ The identity transformation copies JSON input to output, retaining the original 
 
 The function [`crate::idtransform::idtransform()`] is not just a library function,
 but also an example of advanced `scan` use. Read the source code for details.
+
+Additionally, the function [`crate::idtransform::copy_atom()`] can be useful.
 
 
 ## Complete example: LLM output
