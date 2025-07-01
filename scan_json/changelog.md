@@ -1,4 +1,4 @@
-## [1.1.0] - 2025-MM-DD
+## [1.1.0] - 2025-07-01
 
 - Change interface of the `scan` function
 - Implement identity transformation `idtransform` and provide `copy_atom`
