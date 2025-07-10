@@ -1,0 +1,378 @@
+jiter - Fast Iterable JSON Parser - Complete API Reference
+
+## Overview
+jiter is a high-performance JSON parsing library for Rust that provides three main interfaces:
+- JsonValue: Simple enum-based JSON representation
+- Jiter: Low-level streaming iterator for precise control
+- PythonParse: Python integration for JSON parsing (requires "python" feature)
+
+## Core Types and Enums
+
+### JsonValue<'s>
+Enum representing parsed JSON data with lifetime 's for borrowed strings.
+
+**Variants:**
+- `Null` - JSON null value
+- `Bool(bool)` - JSON boolean value
+- `Int(i64)` - JSON integer value
+- `BigInt(BigInt)` - Arbitrary precision integer (requires "num-bigint" feature)
+- `Float(f64)` - JSON floating point value
+- `Str(Cow<'s, str>)` - JSON string value (borrowed or owned)
+- `Array(JsonArray<'s>)` - JSON array
+- `Object(JsonObject<'s>)` - JSON object
+
+**Methods:**
+- `parse(data: &'j [u8], allow_inf_nan: bool) -> Result<Self, JsonError>`
+  Parse JSON from byte slice with borrowed lifetime
+- `parse_with_config(data: &'j [u8], allow_inf_nan: bool, allow_partial: PartialMode) -> Result<Self, JsonError>`
+  Parse with configuration options
+- `parse_owned(data: &[u8], allow_inf_nan: bool, allow_partial: PartialMode) -> Result<JsonValue<'static>, JsonError>`
+  Parse into owned value with static lifetime
+- `into_static(self) -> JsonValue<'static>`
+  Convert borrowed value to owned
+- `to_static(&self) -> JsonValue<'static>`
+  Clone borrowed value to owned
+
+### Type Aliases
+- `JsonArray<'s> = Arc<SmallVec<[JsonValue<'s>; 8]>>`
+- `JsonObject<'s> = Arc<LazyIndexMap<Cow<'s, str>, JsonValue<'s>>>`
+
+### Jiter<'j>
+Streaming JSON iterator with lifetime 'j for the input data.
+
+**Construction:**
+- `new(data: &'j [u8]) -> Self`
+  Create new iterator from byte slice
+- `with_allow_inf_nan(self) -> Self`
+  Allow infinite and NaN float values
+- `with_allow_partial_strings(self) -> Self`
+  Allow partial string parsing
+
+**Position Methods:**
+- `current_position(&self) -> LinePosition`
+  Get current line/column position
+- `current_index(&self) -> usize`
+  Get current byte index
+- `slice_to_current(&self, start: usize) -> &'j [u8]`
+  Get slice from start to current position
+- `error_position(&self, index: usize) -> LinePosition`
+  Convert index to line/column position
+
+**Peek Methods:**
+- `peek(&mut self) -> JiterResult<Peek>`
+  Peek at next value type without consuming
+
+**Value Consumption Methods:**
+- `next_null(&mut self) -> JiterResult<()>`
+  Consume null value, error if not null
+- `known_null(&mut self) -> JiterResult<()>`
+  Consume null value (caller guarantees it's null)
+- `next_bool(&mut self) -> JiterResult<bool>`
+  Consume boolean value
+- `known_bool(&mut self, peek: Peek) -> JiterResult<bool>`
+  Consume boolean with known peek
+- `next_number(&mut self) -> JiterResult<NumberAny>`
+  Consume any number type
+- `known_number(&mut self, peek: Peek) -> JiterResult<NumberAny>`
+  Consume number with known peek
+- `next_int(&mut self) -> JiterResult<NumberInt>`
+  Consume integer value
+- `known_int(&mut self, peek: Peek) -> JiterResult<NumberInt>`
+  Consume integer with known peek
+- `next_float(&mut self) -> JiterResult<f64>`
+  Consume float value
+- `known_float(&mut self, peek: Peek) -> JiterResult<f64>`
+  Consume float with known peek
+- `next_number_bytes(&mut self) -> JiterResult<&[u8]>`
+  Consume number and return original bytes
+- `next_str(&mut self) -> JiterResult<&str>`
+  Consume string value
+- `known_str(&mut self) -> JiterResult<&str>`
+  Consume string (caller guarantees it's string)
+- `next_bytes(&mut self) -> JiterResult<&[u8]>`
+  Consume string and return original bytes
+- `known_bytes(&mut self) -> JiterResult<&[u8]>`
+  Consume string bytes (caller guarantees it's string)
+
+**Value Parsing Methods:**
+- `next_value(&mut self) -> JiterResult<JsonValue<'j>>`
+  Parse next value as JsonValue
+- `known_value(&mut self, peek: Peek) -> JiterResult<JsonValue<'j>>`
+  Parse value with known peek
+- `next_value_owned(&mut self) -> JiterResult<JsonValue<'static>>`
+  Parse next value as owned JsonValue
+- `known_value_owned(&mut self, peek: Peek) -> JiterResult<JsonValue<'static>>`
+  Parse owned value with known peek
+- `next_skip(&mut self) -> JiterResult<()>`
+  Skip next value without parsing
+- `known_skip(&mut self, peek: Peek) -> JiterResult<()>`
+  Skip value with known peek
+
+**Array Methods:**
+- `next_array(&mut self) -> JiterResult<Option<Peek>>`
+  Start array parsing, return first element peek
+- `known_array(&mut self) -> JiterResult<Option<Peek>>`
+  Start array (caller guarantees it's array)
+- `array_step(&mut self) -> JiterResult<Option<Peek>>`
+  Move to next array element
+
+**Object Methods:**
+- `next_object(&mut self) -> JiterResult<Option<&str>>`
+  Start object parsing, return first key
+- `known_object(&mut self) -> JiterResult<Option<&str>>`
+  Start object (caller guarantees it's object)
+- `next_object_bytes(&mut self) -> JiterResult<Option<&[u8]>>`
+  Start object, return first key as bytes
+- `next_key(&mut self) -> JiterResult<Option<&str>>`
+  Get next object key
+- `next_key_bytes(&mut self) -> JiterResult<Option<&[u8]>>`
+  Get next object key as bytes
+
+**Finalization:**
+- `finish(&mut self) -> JiterResult<()>`
+  Ensure all input is consumed
+
+### NumberInt
+Enum for integer values supporting arbitrary precision.
+
+**Variants:**
+- `Int(i64)` - Standard 64-bit integer
+- `BigInt(BigInt)` - Arbitrary precision integer (requires "num-bigint" feature)
+
+**Implementations:**
+- `From<NumberInt> for f64` - Convert to float
+- `TryFrom<&[u8]> for NumberInt` - Parse from bytes
+
+### NumberAny
+Enum for any numeric value.
+
+**Variants:**
+- `Int(NumberInt)` - Integer value
+- `Float(f64)` - Float value
+
+### Peek
+Enum representing the type of the next JSON value.
+
+**Constants:**
+- `Null` - Next value is null
+- `True` - Next value is true
+- `False` - Next value is false
+- `String` - Next value is string
+- `Array` - Next value is array
+- `Object` - Next value is object
+- `Minus` - Next value is negative number
+- `Infinity` - Next value is infinity
+- `NaN` - Next value is NaN
+
+**Methods:**
+- `is_num(self) -> bool` - Check if represents a number
+- `into_inner(self) -> u8` - Get underlying byte value
+
+### LazyIndexMap<K, V>
+Lazy-initialized index map for JSON objects.
+
+**Methods:**
+- `new() -> Self` - Create new empty map
+- `insert(&mut self, key: K, value: V)` - Insert key-value pair
+- `get<Q>(&self, key: &Q) -> Option<&V>` - Get value by key
+- `iter(&self) -> impl Iterator<Item = (&K, &V)>` - Iterate over entries
+- `len(&self) -> usize` - Get number of entries
+- `is_empty(&self) -> bool` - Check if empty
+
+## Error Types
+
+### JsonError
+Low-level JSON parsing error.
+
+**Fields:**
+- `error_type: JsonErrorType` - The specific error type
+- `index: usize` - Byte index where error occurred
+
+**Methods:**
+- `new(error_type: JsonErrorType, index: usize) -> Self`
+- `get_position(&self, json_data: &[u8]) -> LinePosition`
+- `description(&self, json_data: &[u8]) -> String`
+
+### JiterError
+High-level iterator error.
+
+**Fields:**
+- `error_type: JiterErrorType` - The specific error type
+- `index: usize` - Byte index where error occurred
+
+**Methods:**
+- `get_position(&self, jiter: &Jiter) -> LinePosition`
+- `description(&self, jiter: &Jiter) -> String`
+- `wrong_type(expected: JsonType, actual: JsonType, index: usize) -> Self`
+
+### JsonErrorType
+Enumeration of all possible JSON parsing errors.
+
+**Variants:**
+- `FloatExpectingInt` - Float found where int expected
+- `DuplicateKey(String)` - Duplicate object key
+- `InternalError(String)` - Internal parser error
+- `EofWhileParsingList` - EOF while parsing array
+- `EofWhileParsingObject` - EOF while parsing object
+- `EofWhileParsingString` - EOF while parsing string
+- `EofWhileParsingValue` - EOF while parsing value
+- `ExpectedColon` - Expected ':' in object
+- `ExpectedListCommaOrEnd` - Expected ',' or ']' in array
+- `ExpectedObjectCommaOrEnd` - Expected ',' or '}' in object
+- `ExpectedSomeIdent` - Expected identifier
+- `ExpectedSomeValue` - Expected JSON value
+- `InvalidEscape` - Invalid escape sequence
+- `InvalidNumber` - Invalid number format
+- `NumberOutOfRange` - Number too large
+- `InvalidUnicodeCodePoint` - Invalid Unicode
+- `ControlCharacterWhileParsingString` - Control character in string
+- `KeyMustBeAString` - Object key must be string
+- `LoneLeadingSurrogateInHexEscape` - Invalid Unicode escape
+- `TrailingComma` - Trailing comma not allowed
+- `TrailingCharacters` - Extra characters after JSON
+- `UnexpectedEndOfHexEscape` - Incomplete hex escape
+- `RecursionLimitExceeded` - Nesting too deep
+
+### JiterErrorType
+Wrapper for iterator-specific errors.
+
+**Variants:**
+- `JsonError(JsonErrorType)` - Wrapped JSON error
+- `WrongType { expected: JsonType, actual: JsonType }` - Type mismatch
+
+### JsonType
+Enumeration of JSON value types.
+
+**Variants:**
+- `Null` - null value
+- `Bool` - boolean value
+- `Int` - integer value
+- `Float` - float value
+- `String` - string value
+- `Array` - array value
+- `Object` - object value
+
+### LinePosition
+Represents a position in the input data.
+
+**Fields:**
+- `line: usize` - Line number (1-based)
+- `column: usize` - Column number (1-based)
+
+**Methods:**
+- `new(line: usize, column: usize) -> Self`
+- `find(json_data: &[u8], find: usize) -> Self`
+- `short(&self) -> String` - Format as "line:column"
+
+## Configuration Types
+
+### PartialMode
+Controls partial JSON parsing behavior.
+
+**Variants:**
+- `Off` - No partial parsing
+- `On` - Allow partial parsing
+- `TrailingStrings` - Allow trailing strings
+
+**Methods:**
+- `is_active(self) -> bool` - Check if partial mode is enabled
+- `allow_trailing_str(self) -> bool` - Check if trailing strings allowed
+
+**Implementations:**
+- `From<bool> for PartialMode` - Convert boolean to partial mode
+- `Default` - Defaults to `Off`
+
+## Type Aliases and Results
+
+### Result Types
+- `JiterResult<T> = Result<T, JiterError>`
+- `JsonResult<T> = Result<T, JsonError>`
+
+## Python Integration (requires "python" feature)
+
+### PythonParse
+Configuration struct for Python JSON parsing.
+
+**Fields:**
+- `allow_inf_nan: bool` - Allow infinite and NaN values
+- `cache_mode: StringCacheMode` - String caching behavior
+- `partial_mode: PartialMode` - Partial parsing mode
+- `catch_duplicate_keys: bool` - Detect duplicate keys
+- `float_mode: FloatMode` - How to handle floats
+
+**Methods:**
+- `python_parse<'py>(self, py: Python<'py>, json_data: &[u8]) -> JsonResult<Bound<'py, PyAny>>`
+  Parse JSON into Python object
+
+### FloatMode
+Controls how floats are returned to Python.
+
+**Variants:**
+- `Float` - Return as Python float
+- `Decimal` - Return as Python Decimal
+- `LosslessFloat` - Return as LosslessFloat wrapper
+
+### StringCacheMode
+Controls string caching behavior.
+
+**Variants:**
+- `All` - Cache all strings
+- `Keys` - Cache only object keys
+- `None` - No caching
+
+### LosslessFloat
+Wrapper for precise float representation.
+
+**Methods:**
+- `new(value: f64) -> Self`
+- `value(&self) -> f64`
+
+## Usage Examples
+
+### Basic JsonValue Usage
+```rust
+use jiter::JsonValue;
+
+let json_data = r#"{"name": "John", "age": 30}"#;
+let value = JsonValue::parse(json_data.as_bytes(), true)?;
+match value {
+    JsonValue::Object(obj) => {
+        // Access object fields
+    }
+    _ => {}
+}
+```
+
+### Streaming with Jiter
+```rust
+use jiter::{Jiter, Peek};
+
+let mut jiter = Jiter::new(json_data.as_bytes());
+if let Some(key) = jiter.next_object()? {
+    let value = jiter.next_str()?;
+    // Process key-value pair
+}
+```
+
+### Error Handling
+```rust
+use jiter::{JiterError, JsonErrorType};
+
+match jiter.next_int() {
+    Ok(value) => println!("Got int: {}", value),
+    Err(JiterError { error_type, index }) => {
+        let position = jiter.error_position(index);
+        println!("Error at {}: {}", position, error_type);
+    }
+}
+```
+
+## Performance Notes
+- Use `known_*` methods when you've already peeked for better performance
+- Use `next_skip()` to skip values you don't need
+- LazyIndexMap only builds hash map when needed for large objects
+- String caching can improve performance for repeated keys
+
+## Feature Flags
+- `num-bigint`: Enable arbitrary precision integers (default)
+- `python`: Enable Python integration via PyO3
