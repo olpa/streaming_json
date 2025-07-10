@@ -1,0 +1,3 @@
+scan_json: A Rust crate for processing JSON streams with callback-based triggers that execute actions when specific JSON keys are encountered, supporting streaming parsing, SSE token filtering, and identity transformation.
+
+For detailed API documentation, see: llms.txt

@@ -1,0 +1,3 @@
+Fast iterable JSON parser for Rust. Provides JsonValue enum, Jiter streaming iterator, and optional Python bindings. 2-4x faster than serde_json with memory efficient parsing.
+
+For detailed usage and API documentation, see: llms.txt
