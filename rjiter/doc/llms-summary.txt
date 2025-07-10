@@ -1,0 +1,18 @@
+RJiter - Streaming JSON Parser for Rust
+
+RJiter is a streaming JSON parser that processes large JSON files using a small buffer. It wraps the Jiter library and adds streaming capabilities by automatically reading more data when needed.
+
+Key Features:
+- Memory-efficient parsing of large JSON files with small buffers
+- Streaming API that handles buffer management automatically
+- Support for pass-through of long strings without loading them entirely into memory
+- Token skipping for mixed JSON/text content
+- Built on top of the fast Jiter parser
+
+Use Cases:
+- Processing large JSON files that don't fit in memory
+- Streaming JSON parsing with controlled memory usage
+- JSON-to-JSON transformation with minimal memory footprint
+- Parsing JSON mixed with other text content
+
+For detailed API documentation, see llms.txt
