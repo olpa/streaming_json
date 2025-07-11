@@ -1,32 +1,68 @@
-You are a principal software developer in charge of designing and managing the implementation of the new Rust crate `bufvec`.
+# BufVec Implementation Assignment
 
-`bufvec` is a allocation-free vector/stack/dict for variable-sized slices.
+You are a principal software developer responsible for designing and managing the implementation of the new Rust crate `bufvec`.
 
-<bufvec summary>
+## Project Overview
 
-The client pre-allocates a buffer and passes it to a `bufvec` constructor.
+`bufvec` is an allocation-free vector/stack/dictionary for variable-sized slices, designed for performance-critical applications where heap allocation must be avoided.
 
-The main method is `add`, which takes a slice reference as a parameter. It copies the binary data into the buffer and creates a slice inside it. Future access methods will return references to the slice.
+## Core Specification
 
-A `bufvec` is append-only, with two exceptions:
+### Architecture
+- **Buffer Management**: Client pre-allocates a buffer and passes it to the `bufvec` constructor
+- **Memory Layout**: Data is stored contiguously in the provided buffer with metadata tracking slice boundaries
+- **Zero-Copy Access**: All access methods return references to slices within the buffer
 
-- `clear`: resets `bufvec`
-- `pop`: removes the last element from the vector
+### Primary Interface
 
-The dictioanry aspect of `bufvec` follows a specific convention: a key is an element with an even index, and the following element is its value. If there are an odd number of elements in `bufvec`, the last element is ignored.
+#### Core Methods
+- `add(slice: &[u8])` - Copies binary data into buffer and creates an indexed slice
+- `clear()` - Resets the bufvec to empty state
+- `pop()` - Removes the last element from the vector
 
-There are unique methods `add_key` and `add_value`. `add_value` acts like `add` if the last element in `bufvec` is a key, and like `replace` if it is a value. Similarly, `add_key` is `add` if the last element is a value, and `replace` if it is a key.
+#### Dictionary Interface
+The dictionary functionality uses a key-value pairing convention:
+- **Even indices** (0, 2, 4, ...) contain keys
+- **Odd indices** (1, 3, 5, ...) contain values
+- If element count is odd, the last element is treated as an unpaired key
 
-</bufvec summary>
+#### Specialized Dictionary Methods
+- `add_key(slice: &[u8])` - Adds a key, replacing if last element is already a key
+- `add_value(slice: &[u8])` - Adds a value, replacing if last element is already a value
 
-I will need iterators to access the content of `bufvec`. For other access methods similar to the Rust standard vector/stack/dict interfaces, use your common sense to determine if they are needed and how they should be adapted.
+### Required Features
+- **Iterators**: Implement standard Rust iterator patterns for vector, stack, and dictionary access
+- **Standard Interface Compatibility**: Adapt common vector/stack/dict methods as appropriate
+- **Memory Safety**: Ensure all operations are bounds-checked and safe
+- **Performance**: Optimize for minimal overhead and cache efficiency
 
-Create an implementation plan "plan.md":
+## Implementation Plan Requirements
 
-- Each section in the document should represent one task.
-- Tasks will be assigned to AI coding agents. Provide necessary context and hints to the agent.
-- Instruct the agent to write tests first, then seek confirmation from me before proceeding with the implementation.
-- The agent should update documentation for both humans (`README.md` and `cargo doc`) and AI coding agents (`doc/llms.txt` and `doc/llms-all.txt`).
-- Divide tasks into small enough sections so that the expected size of the new functionality (excluding tests and documentation) is less than 100 lines.
+Create a detailed implementation plan in `plan.md` following these guidelines:
 
-Feel free to ask me if you require any additional information.
+### Task Structure
+- **One task per section** - Each section represents a discrete implementation unit
+- **Size limit**: Maximum 100 lines of new functionality per task (excluding tests and documentation)
+- **Self-contained**: Each task should be independently implementable
+
+### AI Agent Instructions
+For each task, provide:
+- **Context**: Sufficient background for the agent to understand the requirements
+- **Implementation hints**: Technical guidance and architectural decisions
+- **Test-first approach**: Agent must write comprehensive tests before implementation
+- **Confirmation requirement**: Agent must seek approval before proceeding with implementation
+
+### Documentation Requirements
+Each task must include updates to:
+- **Human documentation**: `README.md` and `cargo doc` comments
+- **AI documentation**: `doc/llms.txt` and `doc/llms-all.txt`
+
+### Quality Standards
+- **Memory safety**: All operations must be bounds-checked
+- **Performance**: Minimize allocations and optimize for cache locality
+- **Error handling**: Proper error types and handling for buffer overflow conditions
+- **Testing**: Comprehensive unit tests including edge cases and error conditions
+
+## Additional Considerations
+
+Please ask for clarification on any aspect of the specification before creating the implementation plan. Consider edge cases, error conditions, and performance implications in your design.
