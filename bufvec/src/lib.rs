@@ -33,9 +33,7 @@ impl std::error::Error for BufVecError {}
 pub struct BufVec<'a> {
     buffer: &'a mut [u8],
     count: usize,
-    metadata_capacity: usize,
     data_start: usize,
-    data_used: usize,
     slice_descriptor_size: usize,
 }
 
@@ -49,18 +47,33 @@ impl<'a> BufVec<'a> {
             return Err(BufVecError::BufferTooSmall);
         }
         
-        // Reserve space for at least 2 slices initially, grow as needed
-        let initial_metadata_space = slice_descriptor_size * 2;
-        let data_start = initial_metadata_space;
+        // Start with space for 2 slices
+        let initial_data_start = slice_descriptor_size * 2;
         
         Ok(Self {
             buffer,
             count: 0,
-            metadata_capacity: 2,
-            data_start,
-            data_used: 0,
+            data_start: initial_data_start,
             slice_descriptor_size,
         })
+    }
+    
+    fn metadata_capacity(&self) -> usize {
+        self.data_start / self.slice_descriptor_size
+    }
+    
+    fn data_used(&self) -> usize {
+        if self.count == 0 {
+            return 0;
+        }
+        
+        // Calculate data used by finding the highest end position
+        let mut max_end = self.data_start;
+        for i in 0..self.count {
+            let (slice_start, slice_length) = self.get_slice_descriptor(i);
+            max_end = max_end.max(slice_start + slice_length);
+        }
+        max_end - self.data_start
     }
     
     pub fn with_default_descriptor_size(buffer: &'a mut [u8]) -> Result<Self, BufVecError> {
@@ -81,7 +94,7 @@ impl<'a> BufVec<'a> {
     }
 
     pub fn used_bytes(&self) -> usize {
-        self.data_start + self.data_used
+        self.data_start + self.data_used()
     }
 
     pub fn available_bytes(&self) -> usize {
@@ -102,8 +115,8 @@ impl<'a> BufVec<'a> {
 
     fn ensure_capacity(&mut self, additional_bytes: usize) -> Result<(), BufVecError> {
         // Check if we need more metadata space
-        if self.count >= self.metadata_capacity {
-            let new_metadata_capacity = self.metadata_capacity * 2;
+        if self.count >= self.metadata_capacity() {
+            let new_metadata_capacity = self.metadata_capacity() * 2;
             let new_data_start = new_metadata_capacity * self.slice_descriptor_size;
             
             if new_data_start >= self.buffer.len() {
@@ -112,7 +125,7 @@ impl<'a> BufVec<'a> {
             
             // Move existing data to new position
             let old_data_start = self.data_start;
-            let data_to_move = self.data_used;
+            let data_to_move = self.data_used();
             
             if data_to_move > 0 {
                 // Move data from old position to new position
@@ -132,12 +145,11 @@ impl<'a> BufVec<'a> {
                 }
             }
             
-            self.metadata_capacity = new_metadata_capacity;
             self.data_start = new_data_start;
         }
         
         // Check if we have enough space for the additional bytes
-        if self.data_used + additional_bytes > self.buffer.len() - self.data_start {
+        if self.data_used() + additional_bytes > self.buffer.len() - self.data_start {
             return Err(BufVecError::BufferOverflow);
         }
         Ok(())
@@ -211,20 +223,19 @@ impl<'a> BufVec<'a> {
     pub fn add(&mut self, data: &[u8]) -> Result<(), BufVecError> {
         self.ensure_capacity(data.len())?;
         
-        let start = self.data_start + self.data_used;
+        let start = self.data_start + self.data_used();
         let end = start + data.len();
         
         self.buffer[start..end].copy_from_slice(data);
         self.set_slice_descriptor(self.count, start, data.len());
         self.count += 1;
-        self.data_used += data.len();
         
         Ok(())
     }
 
     pub fn clear(&mut self) {
         self.count = 0;
-        self.data_used = 0;
+        // data_used is now derived from slice descriptors, so no need to reset it
     }
 
     pub fn pop(&mut self) -> Result<&[u8], BufVecError> {
@@ -235,18 +246,7 @@ impl<'a> BufVec<'a> {
         self.count -= 1;
         let (start, length) = self.get_slice_descriptor(self.count);
         
-        // Recalculate data_used by finding the highest end position
-        self.data_used = if self.count == 0 {
-            0
-        } else {
-            let mut max_end = self.data_start;
-            for i in 0..self.count {
-                let (slice_start, slice_length) = self.get_slice_descriptor(i);
-                max_end = max_end.max(slice_start + slice_length);
-            }
-            max_end - self.data_start
-        };
-        
+        // data_used is now automatically recalculated when needed
         Ok(&self.buffer[start..start + length])
     }
 }
@@ -385,5 +385,27 @@ mod tests {
         assert_eq!(bufvec.get(0).unwrap(), b"hi");
         assert_eq!(bufvec.get(1).unwrap(), b"world");
         assert_eq!(bufvec.len(), 2);
+    }
+
+    #[test]
+    fn test_optimized_struct_functionality() {
+        let mut buffer = [0u8; 100];
+        let mut bufvec = BufVec::with_default_descriptor_size(&mut buffer).unwrap();
+        
+        // Test that derived values work correctly
+        assert_eq!(bufvec.metadata_capacity(), 2);
+        assert_eq!(bufvec.data_used(), 0);
+        
+        bufvec.add(b"test").unwrap();
+        assert_eq!(bufvec.data_used(), 4);
+        
+        bufvec.add(b"hello").unwrap();
+        assert_eq!(bufvec.data_used(), 9);
+        
+        bufvec.pop().unwrap();
+        assert_eq!(bufvec.data_used(), 4);
+        
+        bufvec.clear();
+        assert_eq!(bufvec.data_used(), 0);
     }
 }
