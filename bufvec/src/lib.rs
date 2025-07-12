@@ -1655,7 +1655,7 @@ mod tests {
         assert!(message.contains("10 bytes provided"));
 
         let mut buffer = [0u8; 200];
-        let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+        let bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
         let error = bufvec.try_get(0).unwrap_err();
         let message = format!("{}", error);
         assert!(message.contains("Index 0 out of bounds"));
@@ -2197,7 +2197,7 @@ mod tests {
         bufvec.add_value(b"dddd").unwrap();     // 4 bytes
 
         let used_data = 1 + 2 + 3 + 4; // 10 bytes of actual data
-        let used_metadata = 4 * 16;    // 4 slices * 16 bytes per descriptor
+        let _used_metadata = 4 * 16;    // 4 slices * 16 bytes per descriptor
 
         assert_eq!(bufvec.data_used(), used_data);
         assert_eq!(bufvec.available_bytes(), initial_available - used_data);
