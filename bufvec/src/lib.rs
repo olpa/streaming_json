@@ -1944,4 +1944,465 @@ mod tests {
             assert_eq!(slice, expected.as_bytes());
         }
     }
+
+    // Integration Tests - Testing all interfaces working together
+
+    #[test]
+    fn test_integration_vector_stack_dictionary() {
+        let mut buffer = [0u8; 500];
+        let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+
+        // Use as vector
+        bufvec.add(b"first").unwrap();
+        bufvec.add(b"second").unwrap();
+        assert_eq!(bufvec.len(), 2);
+
+        // Use as stack
+        bufvec.push(b"third").unwrap();
+        assert_eq!(bufvec.top(), b"third");
+        let popped = bufvec.pop();
+        assert_eq!(popped, b"third");
+        assert_eq!(bufvec.len(), 2);
+
+        // Use as dictionary
+        bufvec.add_key(b"name").unwrap();
+        bufvec.add_value(b"alice").unwrap();
+        
+        assert_eq!(bufvec.len(), 4);
+        assert_eq!(bufvec.pairs_count(), 2);
+        assert!(!bufvec.has_unpaired_key());
+
+        // Verify all interfaces still work
+        assert_eq!(bufvec.get(0), b"first");  // Vector access
+        assert_eq!(bufvec.top(), b"alice");   // Stack access
+        
+        // Dictionary iteration
+        let pairs: Vec<_> = bufvec.pairs().collect();
+        assert_eq!(pairs.len(), 2);
+        assert_eq!(pairs[0], (&b"first"[..], Some(&b"second"[..])));
+        assert_eq!(pairs[1], (&b"name"[..], Some(&b"alice"[..])));
+    }
+
+    #[test]
+    fn test_integration_mixed_operations_workflow() {
+        let mut buffer = [0u8; 400];
+        let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+
+        // Build a configuration-like structure using all interfaces
+        
+        // Add some config keys using dictionary methods
+        bufvec.add_key(b"host").unwrap();
+        bufvec.add_value(b"localhost").unwrap();
+        
+        bufvec.add_key(b"port").unwrap();
+        bufvec.add_value(b"8080").unwrap();
+
+        // Add some tags using vector operations
+        bufvec.add(b"production").unwrap();
+        bufvec.add(b"web-server").unwrap();
+
+        // Use stack operations to manage temporary values
+        bufvec.push(b"temp-setting").unwrap();
+        let temp = bufvec.pop();
+        assert_eq!(temp, b"temp-setting");
+
+        // Verify the final state
+        assert_eq!(bufvec.len(), 6);
+        assert_eq!(bufvec.pairs_count(), 3); // 2 config pairs + 1 tag pair
+
+        // Verify config values using vector access
+        assert_eq!(bufvec.get(0), b"host");
+        assert_eq!(bufvec.get(1), b"localhost");
+        assert_eq!(bufvec.get(2), b"port");
+        assert_eq!(bufvec.get(3), b"8080");
+        assert_eq!(bufvec.get(4), b"production");
+        assert_eq!(bufvec.get(5), b"web-server");
+
+        // Verify using dictionary interface
+        let mut config_pairs = 0;
+        for (key, value) in bufvec.pairs() {
+            if key == &b"host"[..] {
+                assert_eq!(value, Some(&b"localhost"[..]));
+                config_pairs += 1;
+            } else if key == &b"port"[..] {
+                assert_eq!(value, Some(&b"8080"[..]));
+                config_pairs += 1;
+            }
+        }
+        assert_eq!(config_pairs, 2);
+    }
+
+    #[test]
+    fn test_integration_error_handling_across_interfaces() {
+        let mut buffer = [0u8; 100]; // Small buffer to trigger errors
+        let mut bufvec = BufVec::new(&mut buffer, 3).unwrap(); // Only 3 slices max
+
+        // Fill to capacity using different interfaces
+        bufvec.add(b"data1").unwrap();
+        bufvec.push(b"data2").unwrap();
+        bufvec.add_key(b"key1").unwrap();
+
+        // Now at slice limit (3 slices used)
+        assert_eq!(bufvec.len(), 3);
+
+        // Test error handling across all interfaces
+        assert!(bufvec.add(b"overflow").is_err());
+        assert!(bufvec.push(b"overflow").is_err());
+        // add_key should succeed because it replaces the last key (since we have unpaired key)
+        assert!(bufvec.add_key(b"overflow").is_ok());
+        // After replacement, we still have 3 elements, but now add_value should work normally
+        assert!(bufvec.add_value(b"val").is_err()); // This should fail - no more slices
+
+        // Verify state is still consistent
+        assert_eq!(bufvec.len(), 3);
+        assert_eq!(bufvec.get(0), b"data1");
+        assert_eq!(bufvec.get(1), b"data2");
+        assert_eq!(bufvec.get(2), b"overflow"); // Last element was replaced
+    }
+
+    #[test]
+    fn test_integration_iterator_with_all_interfaces() {
+        let mut buffer = [0u8; 300];
+        let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+
+        // Build data using all interfaces
+        bufvec.add(b"vector_item").unwrap();
+        bufvec.push(b"stack_item").unwrap();
+        bufvec.add_key(b"dict_key").unwrap();
+        bufvec.add_value(b"dict_value").unwrap();
+
+        // Test vector iterator
+        let vec_items: Vec<_> = bufvec.iter().collect();
+        assert_eq!(vec_items.len(), 4);
+        assert_eq!(vec_items[0], &b"vector_item"[..]);
+        assert_eq!(vec_items[1], &b"stack_item"[..]);
+        assert_eq!(vec_items[2], &b"dict_key"[..]);
+        assert_eq!(vec_items[3], &b"dict_value"[..]);
+
+        // Test dictionary iterator
+        let dict_pairs: Vec<_> = bufvec.pairs().collect();
+        assert_eq!(dict_pairs.len(), 2);
+        assert_eq!(dict_pairs[0], (&b"vector_item"[..], Some(&b"stack_item"[..])));
+        assert_eq!(dict_pairs[1], (&b"dict_key"[..], Some(&b"dict_value"[..])));
+
+        // Test for loop syntax works with all the data
+        let mut count = 0;
+        for _item in &bufvec {
+            count += 1;
+        }
+        assert_eq!(count, 4);
+    }
+
+    #[test]
+    fn test_integration_real_world_json_parsing() {
+        let mut buffer = [0u8; 600];
+        let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+
+        // Simulate parsing a JSON object: {"name": "alice", "age": "30", "tags": ["dev", "rust"]}
+        
+        // Parse key-value pairs
+        bufvec.add_key(b"name").unwrap();
+        bufvec.add_value(b"alice").unwrap();
+        
+        bufvec.add_key(b"age").unwrap();
+        bufvec.add_value(b"30").unwrap();
+
+        // Parse array elements using vector operations
+        bufvec.add_key(b"tags").unwrap();
+        bufvec.add_value(b"dev").unwrap();    // First tag
+        bufvec.add(b"rust").unwrap();         // Second tag (unpaired)
+
+        assert_eq!(bufvec.len(), 7);
+        assert_eq!(bufvec.pairs_count(), 3); // 2 complete pairs + 1 with unpaired value
+
+        // Verify the parsed data
+        let pairs: Vec<_> = bufvec.pairs().collect();
+        assert_eq!(pairs[0], (&b"name"[..], Some(&b"alice"[..])));
+        assert_eq!(pairs[1], (&b"age"[..], Some(&b"30"[..])));
+        assert_eq!(pairs[2], (&b"tags"[..], Some(&b"dev"[..])));
+
+        // Handle the unpaired tag
+        assert!(bufvec.has_unpaired_key()); // "rust" is unpaired
+        assert_eq!(bufvec.get(bufvec.len() - 1), b"rust");
+
+        // Use stack operations to process tags
+        let last_tag = bufvec.pop();
+        assert_eq!(last_tag, b"rust");
+        
+        let first_tag = bufvec.pop();
+        assert_eq!(first_tag, b"dev");
+
+        // Verify remaining structure
+        assert_eq!(bufvec.len(), 5);
+        assert_eq!(bufvec.pairs_count(), 2); // 2 complete pairs + 1 unpaired key
+        assert!(bufvec.has_unpaired_key()); // "tags" key is now unpaired after popping its value
+    }
+
+    #[test]
+    fn test_integration_protocol_parsing() {
+        let mut buffer = [0u8; 400];
+        let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+
+        // Simulate parsing a network protocol message with headers and payload
+        
+        // Headers as key-value pairs
+        bufvec.add_key(b"Content-Type").unwrap();
+        bufvec.add_value(b"application/json").unwrap();
+        
+        bufvec.add_key(b"Content-Length").unwrap();
+        bufvec.add_value(b"123").unwrap();
+
+        // Method and path as separate items
+        bufvec.add(b"POST").unwrap();
+        bufvec.add(b"/api/users").unwrap();
+
+        // Use stack to manage parsing state
+        bufvec.push(b"parsing").unwrap();
+        let state = bufvec.top();
+        assert_eq!(state, b"parsing");
+
+        // Verify protocol structure
+        assert_eq!(bufvec.len(), 7);
+        
+        // Extract headers using dictionary interface
+        let headers: Vec<_> = bufvec.pairs().take(2).collect();
+        assert_eq!(headers[0], (&b"Content-Type"[..], Some(&b"application/json"[..])));
+        assert_eq!(headers[1], (&b"Content-Length"[..], Some(&b"123"[..])));
+
+        // Extract method and path using vector interface
+        assert_eq!(bufvec.get(4), b"POST");
+        assert_eq!(bufvec.get(5), b"/api/users");
+
+        // Remove parsing state using stack interface
+        let removed_state = bufvec.pop();
+        assert_eq!(removed_state, b"parsing");
+
+        // Final verification
+        assert_eq!(bufvec.len(), 6);
+        let final_pairs: Vec<_> = bufvec.pairs().collect();
+        assert_eq!(final_pairs.len(), 3); // 2 headers + method/path pair
+    }
+
+    #[test]
+    fn test_integration_buffer_efficiency_mixed_usage() {
+        let mut buffer = [0u8; 200];
+        let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+
+        let initial_available = bufvec.available_bytes();
+
+        // Add data using different interfaces to test buffer efficiency
+        bufvec.add(b"a").unwrap();              // 1 byte
+        bufvec.push(b"bb").unwrap();            // 2 bytes  
+        bufvec.add_key(b"ccc").unwrap();        // 3 bytes
+        bufvec.add_value(b"dddd").unwrap();     // 4 bytes
+
+        let used_data = 1 + 2 + 3 + 4; // 10 bytes of actual data
+        let used_metadata = 4 * 16;    // 4 slices * 16 bytes per descriptor
+
+        assert_eq!(bufvec.data_used(), used_data);
+        assert_eq!(bufvec.available_bytes(), initial_available - used_data);
+
+        // Verify all interfaces can access the efficiently packed data
+        assert_eq!(bufvec.get(0), b"a");
+        assert_eq!(bufvec.get(1), b"bb");
+        assert_eq!(bufvec.get(2), b"ccc");
+        assert_eq!(bufvec.get(3), b"dddd");
+
+        assert_eq!(bufvec.top(), b"dddd");
+        
+        let pairs: Vec<_> = bufvec.pairs().collect();
+        assert_eq!(pairs[0], (&b"a"[..], Some(&b"bb"[..])));
+        assert_eq!(pairs[1], (&b"ccc"[..], Some(&b"dddd"[..])));
+
+        // Test that clearing preserves buffer efficiency
+        let available_before_clear = bufvec.available_bytes();
+        bufvec.clear();
+        
+        // After clear, all space should be available again except metadata section
+        assert_eq!(bufvec.available_bytes(), initial_available);
+        assert!(bufvec.available_bytes() > available_before_clear);
+    }
+
+    // Performance Regression Tests - Ensure basic performance expectations are met
+
+    #[test]
+    fn test_performance_regression_add_operations() {
+        let mut buffer = [0u8; 10000];
+        let mut bufvec = BufVec::new(&mut buffer, 150).unwrap(); // Allow more slices
+
+        let start = std::time::Instant::now();
+        
+        // Add 100 elements - should be very fast
+        for i in 0..100 {
+            let data = format!("element_{}", i);
+            bufvec.add(data.as_bytes()).unwrap();
+        }
+        
+        let duration = start.elapsed();
+        
+        // This should complete in well under 1ms on any reasonable hardware
+        assert!(duration.as_millis() < 10, "Add operations took too long: {:?}", duration);
+        assert_eq!(bufvec.len(), 100);
+    }
+
+    #[test]
+    fn test_performance_regression_random_access() {
+        let mut buffer = [0u8; 10000];
+        let mut bufvec = BufVec::new(&mut buffer, 150).unwrap();
+
+        // Pre-populate
+        for i in 0..100 {
+            let data = format!("element_{}", i);
+            bufvec.add(data.as_bytes()).unwrap();
+        }
+
+        let start = std::time::Instant::now();
+        
+        // Random access pattern - should be O(1) per access
+        for i in [99, 0, 50, 25, 75, 10, 90, 40, 60, 30] {
+            let _data = bufvec.get(i);
+        }
+        
+        let duration = start.elapsed();
+        
+        // 10 random accesses should be extremely fast
+        assert!(duration.as_micros() < 100, "Random access took too long: {:?}", duration);
+    }
+
+    #[test]
+    fn test_performance_regression_memory_calculations() {
+        let mut buffer = [0u8; 5000];
+        let mut bufvec = BufVec::new(&mut buffer, 100).unwrap();
+
+        // Add many elements
+        for i in 0..50 {
+            let data = format!("element_with_content_{}", i);
+            bufvec.add(data.as_bytes()).unwrap();
+        }
+
+        let start = std::time::Instant::now();
+        
+        // Memory calculations should be O(1)
+        for _ in 0..1000 {
+            let _used = bufvec.used_bytes();
+            let _available = bufvec.available_bytes();
+            let _data_used = bufvec.data_used();
+        }
+        
+        let duration = start.elapsed();
+        
+        // 3000 memory calculations should be very fast
+        assert!(duration.as_millis() < 5, "Memory calculations took too long: {:?}", duration);
+    }
+
+    #[test]
+    fn test_performance_regression_iterator_performance() {
+        let mut buffer = [0u8; 10000];
+        let mut bufvec = BufVec::new(&mut buffer, 150).unwrap();
+
+        // Pre-populate
+        for i in 0..100 {
+            let data = format!("element_{}", i);
+            bufvec.add(data.as_bytes()).unwrap();
+        }
+
+        let start = std::time::Instant::now();
+        
+        // Iterator traversal should be linear
+        let mut count = 0;
+        for _slice in &bufvec {
+            count += 1;
+        }
+        
+        let duration = start.elapsed();
+        
+        assert_eq!(count, 100);
+        // Iterating over 100 elements should be very fast
+        assert!(duration.as_millis() < 5, "Iterator traversal took too long: {:?}", duration);
+    }
+
+    #[test]
+    fn test_performance_regression_dictionary_operations() {
+        let mut buffer = [0u8; 10000];
+        let mut bufvec = BufVec::new(&mut buffer, 150).unwrap();
+
+        // Pre-populate with key-value pairs
+        for i in 0..50 {
+            let key = format!("key_{}", i);
+            let value = format!("value_{}", i);
+            bufvec.add(key.as_bytes()).unwrap();
+            bufvec.add(value.as_bytes()).unwrap();
+        }
+
+        let start = std::time::Instant::now();
+        
+        // Dictionary iteration should be linear
+        let mut pair_count = 0;
+        for (_key, _value) in bufvec.pairs() {
+            pair_count += 1;
+        }
+        
+        let duration = start.elapsed();
+        
+        assert_eq!(pair_count, 50);
+        // Dictionary iteration over 50 pairs should be very fast
+        assert!(duration.as_millis() < 5, "Dictionary iteration took too long: {:?}", duration);
+    }
+
+    #[test]
+    fn test_performance_regression_stack_operations() {
+        let mut buffer = [0u8; 5000];
+        let mut bufvec = BufVec::new(&mut buffer, 100).unwrap();
+
+        let start = std::time::Instant::now();
+        
+        // Push 50 elements
+        for i in 0..50 {
+            let data = format!("item_{}", i);
+            bufvec.push(data.as_bytes()).unwrap();
+        }
+        
+        // Pop all elements
+        for _ in 0..50 {
+            let _popped = bufvec.pop();
+        }
+        
+        let duration = start.elapsed();
+        
+        assert!(bufvec.is_empty());
+        // 100 stack operations (50 push + 50 pop) should be very fast
+        assert!(duration.as_millis() < 5, "Stack operations took too long: {:?}", duration);
+    }
+
+    #[test]
+    fn test_performance_regression_mixed_interface_usage() {
+        let mut buffer = [0u8; 8000];
+        let mut bufvec = BufVec::new(&mut buffer, 150).unwrap();
+
+        let start = std::time::Instant::now();
+        
+        // Mixed usage pattern - should maintain performance across interfaces
+        for i in 0..30 {
+            // Vector operations
+            bufvec.add(format!("vector_{}", i).as_bytes()).unwrap();
+            
+            // Stack operations
+            bufvec.push(format!("stack_{}", i).as_bytes()).unwrap();
+            
+            // Dictionary operations
+            bufvec.add_key(format!("key_{}", i).as_bytes()).unwrap();
+            bufvec.add_value(format!("value_{}", i).as_bytes()).unwrap();
+            
+            // Access operations
+            let _len = bufvec.len();
+            let _top = bufvec.top();
+            let _data = bufvec.get(i * 2);
+        }
+        
+        let duration = start.elapsed();
+        
+        assert_eq!(bufvec.len(), 120); // 30 * 4 operations
+        // Mixed operations should complete quickly
+        assert!(duration.as_millis() < 10, "Mixed interface usage took too long: {:?}", duration);
+    }
 }
