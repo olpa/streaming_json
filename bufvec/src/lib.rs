@@ -7,6 +7,37 @@
 //! Buffer layout: [metadata section][data section]
 //! Metadata section stores slice descriptors as (`start_offset`, length) pairs.
 //!
+//! # Dictionary Convention
+//!
+//! `BufVec` supports a dictionary interpretation where elements at even indices (0, 2, 4, ...)
+//! are treated as keys and elements at odd indices (1, 3, 5, ...) are treated as values.
+//! This allows the same data structure to be used as both a vector and a key-value store.
+//!
+//! ```
+//! # use bufvec::BufVec;
+//! let mut buffer = [0u8; 200];
+//! let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+//!
+//! // Add key-value pairs
+//! bufvec.add(b"name").unwrap();      // key at index 0
+//! bufvec.add(b"Alice").unwrap();     // value at index 1
+//! bufvec.add(b"age").unwrap();       // key at index 2
+//! bufvec.add(b"30").unwrap();        // value at index 3
+//!
+//! // Use dictionary interface
+//! for (key, value) in bufvec.pairs() {
+//!     match value {
+//!         Some(v) => println!("{:?} = {:?}", key, v),
+//!         None => println!("{:?} = <no value>", key),
+//!     }
+//! }
+//!
+//! // Check for unpaired keys
+//! if bufvec.has_unpaired_key() {
+//!     println!("Last element is an unpaired key");
+//! }
+//! ```
+//!
 //! # Iterator Support
 //!
 //! `BufVec` implements standard Rust iterator patterns:
@@ -164,23 +195,33 @@ impl<'a> BufVec<'a> {
         Ok(())
     }
 
+    #[allow(clippy::expect_used)]
     fn get_slice_descriptor(&self, index: usize) -> (usize, usize) {
         let offset = index * SLICE_DESCRIPTOR_SIZE;
 
-        let start_bytes = &self.buffer[offset..offset + 8];
-        let length_bytes = &self.buffer[offset + 8..offset + 16];
+        let start_bytes = self.buffer.get(offset..offset + 8)
+            .expect("Buffer bounds checked during construction");
+        let length_bytes = self.buffer.get(offset + 8..offset + 16)
+            .expect("Buffer bounds checked during construction");
 
-        let start = usize::from_le_bytes(start_bytes.try_into().unwrap());
-        let length = usize::from_le_bytes(length_bytes.try_into().unwrap());
+        let start = usize::from_le_bytes(start_bytes.try_into()
+            .expect("Slice is exactly 8 bytes"));
+        let length = usize::from_le_bytes(length_bytes.try_into()
+            .expect("Slice is exactly 8 bytes"));
 
         (start, length)
     }
 
+    #[allow(clippy::expect_used)]
     fn set_slice_descriptor(&mut self, index: usize, start: usize, length: usize) {
         let offset = index * SLICE_DESCRIPTOR_SIZE;
 
-        self.buffer[offset..offset + 8].copy_from_slice(&start.to_le_bytes());
-        self.buffer[offset + 8..offset + 16].copy_from_slice(&length.to_le_bytes());
+        self.buffer.get_mut(offset..offset + 8)
+            .expect("Buffer bounds checked during construction")
+            .copy_from_slice(&start.to_le_bytes());
+        self.buffer.get_mut(offset + 8..offset + 16)
+            .expect("Buffer bounds checked during construction")
+            .copy_from_slice(&length.to_le_bytes());
     }
 
     /// Gets a slice at the specified index.
@@ -189,6 +230,7 @@ impl<'a> BufVec<'a> {
     ///
     /// Panics if `index` is out of bounds.
     #[must_use]
+    #[allow(clippy::expect_used)]
     pub fn get(&self, index: usize) -> &[u8] {
         assert!(
             index < self.count,
@@ -197,7 +239,8 @@ impl<'a> BufVec<'a> {
             self.count
         );
         let (start, length) = self.get_slice_descriptor(index);
-        &self.buffer[start..start + length]
+        self.buffer.get(start..start + length)
+            .expect("Slice bounds validated during add operation")
     }
 
     /// Tries to get a slice at the specified index.
@@ -205,10 +248,16 @@ impl<'a> BufVec<'a> {
     /// # Errors
     ///
     /// Returns `BufVecError::IndexOutOfBounds` if `index` is out of bounds.
+    ///
+    /// # Panics
+    ///
+    /// May panic if buffer integrity is compromised (internal validation failure).
+    #[allow(clippy::expect_used)]
     pub fn try_get(&self, index: usize) -> Result<&[u8], BufVecError> {
         self.check_bounds(index)?;
         let (start, length) = self.get_slice_descriptor(index);
-        Ok(&self.buffer[start..start + length])
+        Ok(self.buffer.get(start..start + length)
+            .expect("Slice bounds validated during add operation"))
     }
 
     /// Adds a slice to the vector.
@@ -218,13 +267,20 @@ impl<'a> BufVec<'a> {
     /// Returns `BufVecError::BufferOverflow` if:
     /// - The maximum number of slices has been reached
     /// - There is insufficient space in the buffer for the data
+    ///
+    /// # Panics
+    ///
+    /// May panic if buffer integrity is compromised (internal validation failure).
+    #[allow(clippy::expect_used)]
     pub fn add(&mut self, data: &[u8]) -> Result<(), BufVecError> {
         self.ensure_capacity(data.len())?;
 
         let start = self.data_start() + self.data_used();
         let end = start + data.len();
 
-        self.buffer[start..end].copy_from_slice(data);
+        self.buffer.get_mut(start..end)
+            .expect("Buffer capacity checked by ensure_capacity")
+            .copy_from_slice(data);
         self.set_slice_descriptor(self.count, start, data.len());
         self.count += 1;
 
@@ -240,7 +296,8 @@ impl<'a> BufVec<'a> {
     ///
     /// # Panics
     ///
-    /// Panics if the vector is empty.
+    /// Panics if the vector is empty or if buffer integrity is compromised.
+    #[allow(clippy::expect_used)]
     pub fn pop(&mut self) -> &[u8] {
         assert!(self.count > 0, "Cannot pop from empty vector");
 
@@ -248,7 +305,8 @@ impl<'a> BufVec<'a> {
         let (start, length) = self.get_slice_descriptor(self.count);
 
         // data_used is now automatically recalculated when needed
-        &self.buffer[start..start + length]
+        self.buffer.get(start..start + length)
+            .expect("Slice bounds validated during add operation")
     }
 
     /// Tries to remove and return the last slice from the vector.
@@ -256,6 +314,11 @@ impl<'a> BufVec<'a> {
     /// # Errors
     ///
     /// Returns `BufVecError::EmptyVector` if the vector is empty.
+    ///
+    /// # Panics
+    ///
+    /// May panic if buffer integrity is compromised (internal validation failure).
+    #[allow(clippy::expect_used)]
     pub fn try_pop(&mut self) -> Result<&[u8], BufVecError> {
         if self.count == 0 {
             return Err(BufVecError::EmptyVector);
@@ -265,13 +328,47 @@ impl<'a> BufVec<'a> {
         let (start, length) = self.get_slice_descriptor(self.count);
 
         // data_used is now automatically recalculated when needed
-        Ok(&self.buffer[start..start + length])
+        Ok(self.buffer.get(start..start + length)
+            .expect("Slice bounds validated during add operation"))
     }
 
     /// Returns an iterator over the slices in the vector.
     #[must_use]
     pub fn iter(&self) -> BufVecIter<'_> {
         self.into_iter()
+    }
+
+    /// Returns true if the index represents a key (even indices).
+    #[must_use]
+    pub fn is_key(&self, index: usize) -> bool {
+        index % 2 == 0
+    }
+
+    /// Returns true if the index represents a value (odd indices).
+    #[must_use]
+    pub fn is_value(&self, index: usize) -> bool {
+        index % 2 == 1
+    }
+
+    /// Returns true if the last element is an unpaired key (odd number of elements).
+    #[must_use]
+    pub fn has_unpaired_key(&self) -> bool {
+        self.count % 2 == 1
+    }
+
+    /// Returns the number of complete key-value pairs.
+    #[must_use]
+    pub fn pairs_count(&self) -> usize {
+        self.count / 2
+    }
+
+    /// Returns an iterator over key-value pairs.
+    #[must_use]
+    pub fn pairs(&self) -> BufVecPairIter<'_> {
+        BufVecPairIter {
+            bufvec: self,
+            current_pair: 0,
+        }
     }
 }
 
@@ -312,6 +409,44 @@ impl<'a> IntoIterator for &'a BufVec<'a> {
         }
     }
 }
+
+pub struct BufVecPairIter<'a> {
+    bufvec: &'a BufVec<'a>,
+    current_pair: usize,
+}
+
+impl<'a> Iterator for BufVecPairIter<'a> {
+    type Item = (&'a [u8], Option<&'a [u8]>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let key_index = self.current_pair * 2;
+
+        if key_index >= self.bufvec.len() {
+            return None;
+        }
+
+        let key = self.bufvec.get(key_index);
+        let value = if key_index + 1 < self.bufvec.len() {
+            Some(self.bufvec.get(key_index + 1))
+        } else {
+            None
+        };
+
+        self.current_pair += 1;
+        Some((key, value))
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining_pairs = if self.bufvec.is_empty() {
+            0
+        } else {
+            ((self.bufvec.len() + 1) / 2) - self.current_pair
+        };
+        (remaining_pairs, Some(remaining_pairs))
+    }
+}
+
+impl<'a> ExactSizeIterator for BufVecPairIter<'a> {}
 
 #[cfg(test)]
 mod tests {
@@ -595,5 +730,156 @@ mod tests {
 
         let collected: Vec<_> = bufvec.iter().collect();
         assert_eq!(collected, vec![&b"hello"[..], &b"world"[..]]);
+    }
+
+    #[test]
+    fn test_dictionary_helper_methods() {
+        let mut buffer = [0u8; 200];
+        let bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+
+        assert!(bufvec.is_key(0));
+        assert!(!bufvec.is_value(0));
+        assert!(bufvec.is_key(2));
+        assert!(bufvec.is_key(4));
+
+        assert!(bufvec.is_value(1));
+        assert!(!bufvec.is_key(1));
+        assert!(bufvec.is_value(3));
+        assert!(bufvec.is_value(5));
+    }
+
+    #[test]
+    fn test_key_value_pairing_even_elements() {
+        let mut buffer = [0u8; 200];
+        let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+
+        bufvec.add(b"key1").unwrap();
+        bufvec.add(b"value1").unwrap();
+        bufvec.add(b"key2").unwrap();
+        bufvec.add(b"value2").unwrap();
+
+        assert_eq!(bufvec.len(), 4);
+        assert!(!bufvec.has_unpaired_key());
+        assert_eq!(bufvec.pairs_count(), 2);
+
+        assert!(bufvec.is_key(0));
+        assert!(bufvec.is_value(1));
+        assert!(bufvec.is_key(2));
+        assert!(bufvec.is_value(3));
+
+        assert_eq!(bufvec.get(0), b"key1");
+        assert_eq!(bufvec.get(1), b"value1");
+        assert_eq!(bufvec.get(2), b"key2");
+        assert_eq!(bufvec.get(3), b"value2");
+    }
+
+    #[test]
+    fn test_unpaired_key_handling_odd_elements() {
+        let mut buffer = [0u8; 200];
+        let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+
+        bufvec.add(b"key1").unwrap();
+        bufvec.add(b"value1").unwrap();
+        bufvec.add(b"key2").unwrap();
+
+        assert_eq!(bufvec.len(), 3);
+        assert!(bufvec.has_unpaired_key());
+        assert_eq!(bufvec.pairs_count(), 1);
+
+        assert!(bufvec.is_key(0));
+        assert!(bufvec.is_value(1));
+        assert!(bufvec.is_key(2));
+
+        assert_eq!(bufvec.get(0), b"key1");
+        assert_eq!(bufvec.get(1), b"value1");
+        assert_eq!(bufvec.get(2), b"key2");
+    }
+
+    #[test]
+    fn test_dictionary_iterator_even_elements() {
+        let mut buffer = [0u8; 200];
+        let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+
+        bufvec.add(b"key1").unwrap();
+        bufvec.add(b"value1").unwrap();
+        bufvec.add(b"key2").unwrap();
+        bufvec.add(b"value2").unwrap();
+
+        let pairs: Vec<_> = bufvec.pairs().collect();
+        assert_eq!(pairs.len(), 2);
+        assert_eq!(pairs[0], (&b"key1"[..], Some(&b"value1"[..])));
+        assert_eq!(pairs[1], (&b"key2"[..], Some(&b"value2"[..])));
+    }
+
+    #[test]
+    fn test_dictionary_iterator_odd_elements() {
+        let mut buffer = [0u8; 200];
+        let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+
+        bufvec.add(b"key1").unwrap();
+        bufvec.add(b"value1").unwrap();
+        bufvec.add(b"key2").unwrap();
+
+        let pairs: Vec<_> = bufvec.pairs().collect();
+        assert_eq!(pairs.len(), 2);
+        assert_eq!(pairs[0], (&b"key1"[..], Some(&b"value1"[..])));
+        assert_eq!(pairs[1], (&b"key2"[..], None));
+    }
+
+    #[test]
+    fn test_dictionary_iterator_empty() {
+        let mut buffer = [0u8; 200];
+        let bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+
+        let pairs: Vec<_> = bufvec.pairs().collect();
+        assert_eq!(pairs.len(), 0);
+    }
+
+    #[test]
+    fn test_dictionary_iterator_single_key() {
+        let mut buffer = [0u8; 200];
+        let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+
+        bufvec.add(b"lonely_key").unwrap();
+
+        let pairs: Vec<_> = bufvec.pairs().collect();
+        assert_eq!(pairs.len(), 1);
+        assert_eq!(pairs[0], (&b"lonely_key"[..], None));
+    }
+
+    #[test]
+    fn test_mixed_usage_vector_and_dictionary() {
+        let mut buffer = [0u8; 200];
+        let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+
+        // Use vector operations
+        bufvec.add(b"name").unwrap();
+        bufvec.add(b"Alice").unwrap();
+        bufvec.add(b"age").unwrap();
+        bufvec.add(b"30").unwrap();
+
+        // Test vector interface still works
+        assert_eq!(bufvec.len(), 4);
+        assert_eq!(bufvec.get(0), b"name");
+        assert_eq!(bufvec.get(1), b"Alice");
+
+        // Test dictionary interface works
+        assert_eq!(bufvec.pairs_count(), 2);
+        assert!(!bufvec.has_unpaired_key());
+
+        let pairs: Vec<_> = bufvec.pairs().collect();
+        assert_eq!(pairs[0], (&b"name"[..], Some(&b"Alice"[..])));
+        assert_eq!(pairs[1], (&b"age"[..], Some(&b"30"[..])));
+
+        // Test that popping works and affects dictionary view
+        let popped = bufvec.pop();
+        assert_eq!(popped, b"30");
+        assert!(bufvec.has_unpaired_key());
+        assert_eq!(bufvec.pairs_count(), 1);
+
+        let pairs_after_pop: Vec<_> = bufvec.pairs().collect();
+        assert_eq!(pairs_after_pop.len(), 2);
+        assert_eq!(pairs_after_pop[0], (&b"name"[..], Some(&b"Alice"[..])));
+        assert_eq!(pairs_after_pop[1], (&b"age"[..], None));
     }
 }
