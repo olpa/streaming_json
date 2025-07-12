@@ -1,0 +1,457 @@
+# BufVec - LLM Documentation
+
+This document provides comprehensive information about BufVec for Large Language Models to understand and use the library effectively.
+
+## Core Concept
+
+BufVec is a zero-allocation vector implementation that stores all data in a client-provided buffer. It provides three interfaces to the same underlying data:
+
+1. **Vector Interface**: Standard indexed access (`add`, `get`, `len`, etc.)
+2. **Stack Interface**: LIFO operations (`push`, `pop`, `top`)  
+3. **Dictionary Interface**: Key-value semantics where even indices are keys, odd indices are values
+
+## Buffer Layout and Memory Management
+
+### Memory Layout
+```
+Buffer: [metadata_section][data_section]
+Metadata: slice_descriptor_0, slice_descriptor_1, ...
+Descriptor: (start_offset: usize, length: usize) // 16 bytes total
+```
+
+### Buffer Size Calculation
+```rust
+buffer_size = (max_slices * 16) + estimated_data_size
+```
+
+Example:
+```rust
+// For 50 slices with average 30 bytes per slice
+let buffer_size = (50 * 16) + (50 * 30); // 2300 bytes
+let mut buffer = vec![0u8; buffer_size];
+let mut bufvec = BufVec::new(&mut buffer, 50)?;
+```
+
+## API Reference
+
+### Construction
+```rust
+// Default: 8 max slices
+BufVec::with_default_max_slices(&mut buffer) -> Result<BufVec, BufVecError>
+
+// Custom max slices
+BufVec::new(&mut buffer, max_slices: usize) -> Result<BufVec, BufVecError>
+```
+
+### Vector Interface
+```rust
+// Adding elements
+add(&mut self, data: &[u8]) -> Result<(), BufVecError>
+
+// Accessing elements  
+get(&self, index: usize) -> &[u8]                    // Panics on bounds
+try_get(&self, index: usize) -> Option<&[u8]>       // Safe variant
+len(&self) -> usize
+is_empty(&self) -> bool
+clear(&mut self)
+
+// Iteration
+iter(&self) -> BufVecIter                            // Returns iterator
+// Also implements IntoIterator for for-loop syntax
+```
+
+### Stack Interface
+```rust
+// Adding/removing
+push(&mut self, data: &[u8]) -> Result<(), BufVecError>  // Alias for add()
+pop(&mut self) -> &[u8]                                  // Panics if empty
+try_pop(&mut self) -> Option<&[u8]>                     // Safe variant
+
+// Inspection
+top(&self) -> &[u8]                                     // Panics if empty  
+try_top(&self) -> Option<&[u8]>                        // Safe variant
+```
+
+### Dictionary Interface
+```rust
+// Smart adding (replaces if same type, adds if different)
+add_key(&mut self, data: &[u8]) -> Result<(), BufVecError>
+add_value(&mut self, data: &[u8]) -> Result<(), BufVecError>
+
+// Dictionary properties
+is_key(&self, index: usize) -> bool                    // True if index % 2 == 0
+is_value(&self, index: usize) -> bool                  // True if index % 2 == 1
+has_unpaired_key(&self) -> bool                        // True if len() % 2 == 1
+pairs_count(&self) -> usize                            // Number of complete pairs
+
+// Iteration
+pairs(&self) -> BufVecPairIter                         // Yields (key, Option<value>)
+```
+
+### Memory Inspection
+```rust
+buffer_capacity(&self) -> usize          // Total buffer size
+used_bytes(&self) -> usize              // Metadata + data used
+available_bytes(&self) -> usize         // Remaining space
+data_used(&self) -> usize              // Only data bytes used (O(1))
+```
+
+## Error Handling
+
+### Error Types
+```rust
+pub enum BufVecError {
+    BufferOverflow { requested: usize, available: usize },
+    IndexOutOfBounds { index: usize, length: usize },
+    SliceLimitExceeded { max_slices: usize },
+    ZeroSizeBuffer,
+    InvalidConfiguration { buffer_size: usize, max_slices: usize },
+}
+```
+
+### Error Handling Patterns
+```rust
+// Pattern 1: Match specific errors
+match bufvec.add(large_data) {
+    Ok(_) => {},
+    Err(BufVecError::BufferOverflow { requested, available }) => {
+        println!("Need {} bytes, have {}", requested, available);
+    },
+    Err(e) => println!("Other error: {}", e),
+}
+
+// Pattern 2: Use ? operator for propagation
+fn process_data(bufvec: &mut BufVec, data: &[u8]) -> Result<(), BufVecError> {
+    bufvec.add(data)?;
+    Ok(())
+}
+
+// Pattern 3: Use safe variants
+if let Some(data) = bufvec.try_get(index) {
+    // Process data
+}
+```
+
+## Usage Patterns
+
+### Pattern 1: Vector Operations
+```rust
+let mut buffer = [0u8; 1000];
+let mut bufvec = BufVec::with_default_max_slices(&mut buffer)?;
+
+// Add elements
+bufvec.add(b"first")?;
+bufvec.add(b"second")?;
+bufvec.add(b"third")?;
+
+// Access by index
+for i in 0..bufvec.len() {
+    println!("Element {}: {:?}", i, bufvec.get(i));
+}
+
+// Iterate
+for (i, slice) in bufvec.iter().enumerate() {
+    println!("Element {}: {:?}", i, slice);
+}
+```
+
+### Pattern 2: Stack Operations
+```rust
+let mut buffer = [0u8; 500];
+let mut bufvec = BufVec::with_default_max_slices(&mut buffer)?;
+
+// Build stack
+bufvec.push(b"bottom")?;
+bufvec.push(b"middle")?;
+bufvec.push(b"top")?;
+
+// Process stack
+while !bufvec.is_empty() {
+    let item = bufvec.pop();
+    println!("Processing: {:?}", item);
+}
+```
+
+### Pattern 3: Dictionary Operations
+```rust
+let mut buffer = [0u8; 800];
+let mut bufvec = BufVec::new(&mut buffer, 20)?;
+
+// Build dictionary
+bufvec.add_key(b"name")?;
+bufvec.add_value(b"Alice")?;
+bufvec.add_key(b"age")?;
+bufvec.add_value(b"30")?;
+
+// Iterate pairs
+for (key, value) in bufvec.pairs() {
+    match value {
+        Some(val) => println!("{:?} = {:?}", key, val),
+        None => println!("{:?} = <no value>", key),
+    }
+}
+
+// Check for unpaired keys
+if bufvec.has_unpaired_key() {
+    println!("Warning: incomplete key-value pair");
+}
+```
+
+### Pattern 4: Smart Dictionary Building
+```rust
+let mut buffer = [0u8; 600];
+let mut bufvec = BufVec::with_default_max_slices(&mut buffer)?;
+
+// Smart replacement logic
+bufvec.add_key(b"name")?;         // Adds key
+bufvec.add_key(b"username")?;     // Replaces previous key
+bufvec.add_value(b"alice")?;      // Adds value
+bufvec.add_value(b"bob")?;        // Replaces previous value
+
+// Result: [username, bob]
+assert_eq!(bufvec.len(), 2);
+assert_eq!(bufvec.get(0), b"username");
+assert_eq!(bufvec.get(1), b"bob");
+```
+
+### Pattern 5: Mixed Interface Usage
+```rust
+let mut buffer = [0u8; 1500];
+let mut bufvec = BufVec::new(&mut buffer, 30)?;
+
+// Configuration parsing workflow
+bufvec.add_key(b"host")?;         // Dictionary for config
+bufvec.add_value(b"localhost")?;
+bufvec.add_key(b"port")?;
+bufvec.add_value(b"8080")?;
+
+bufvec.add(b"tag1")?;             // Vector for tags
+bufvec.add(b"tag2")?;
+
+bufvec.push(b"temp_state")?;      // Stack for processing state
+
+// Process using appropriate interface
+let config_pairs = bufvec.pairs().take(2).collect::<Vec<_>>();
+let temp_state = bufvec.pop();
+let tag_count = bufvec.len() - 4; // Remaining elements after config pairs
+```
+
+## Dictionary Convention Details
+
+### Key-Value Mapping
+- Index 0, 2, 4, ... → Keys
+- Index 1, 3, 5, ... → Values  
+- Pair (i): key at index 2*i, value at index 2*i+1
+
+### Unpaired Key Handling
+```rust
+bufvec.add(b"key1")?;     // Index 0 (key)
+bufvec.add(b"value1")?;   // Index 1 (value) 
+bufvec.add(b"key2")?;     // Index 2 (key) - unpaired!
+
+assert_eq!(bufvec.len(), 3);
+assert!(bufvec.has_unpaired_key());
+assert_eq!(bufvec.pairs_count(), 1); // Only one complete pair
+
+// Pairs iterator handles unpaired keys
+let pairs: Vec<_> = bufvec.pairs().collect();
+assert_eq!(pairs[0], (b"key1", Some(b"value1")));
+assert_eq!(pairs[1], (b"key2", None));  // None for missing value
+```
+
+### Smart Replacement Logic
+The `add_key()` and `add_value()` methods implement smart replacement:
+
+```rust
+// add_key() behavior:
+if bufvec.is_empty() || !bufvec.has_unpaired_key() {
+    // Add normally (last element is value or buffer empty)
+    bufvec.add(data)
+} else {
+    // Replace last element (last element is key)
+    bufvec.replace_last(data)
+}
+
+// add_value() behavior:
+if bufvec.is_empty() || bufvec.has_unpaired_key() {
+    // Add normally (last element is key or buffer empty)
+    bufvec.add(data)  
+} else {
+    // Replace last element (last element is value)
+    bufvec.replace_last(data)
+}
+```
+
+## Performance Characteristics
+
+### Time Complexity
+- **O(1)**: add, get, pop, push, top, clear, data_used, len, is_empty
+- **O(n)**: iteration, pairs iteration
+
+### Space Complexity  
+- **Metadata overhead**: 16 bytes per slice
+- **No heap allocations**: All data in client buffer
+- **Memory efficiency**: Sequential data layout
+
+### Performance Guidelines
+1. **Buffer sizing**: Overestimate to avoid overflow errors
+2. **Max slices**: Set based on expected element count
+3. **Access patterns**: Sequential access is most cache-friendly
+4. **Memory usage**: Use `data_used()` and `available_bytes()` to monitor
+
+## Common Use Cases
+
+### 1. Protocol Parsing
+```rust
+// Parse HTTP-like headers + body
+bufvec.add_key(b"Content-Type")?;
+bufvec.add_value(b"application/json")?;
+bufvec.add_key(b"Content-Length")?;
+bufvec.add_value(b"256")?;
+bufvec.add(b"POST")?;
+bufvec.add(b"/api/endpoint")?;
+```
+
+### 2. Configuration Management
+```rust
+// Key-value config with additional metadata
+bufvec.add_key(b"database_url")?;
+bufvec.add_value(b"postgresql://...")?;
+bufvec.add_key(b"max_connections")?;
+bufvec.add_value(b"100")?;
+bufvec.add(b"production")?;  // Environment tag
+```
+
+### 3. Expression Parsing
+```rust
+// Stack-based expression evaluation
+bufvec.push(b"3")?;
+bufvec.push(b"4")?;
+bufvec.push(b"+")?;
+bufvec.push(b"2")?;
+bufvec.push(b"*")?;
+// Process with stack operations
+```
+
+### 4. Log/Event Processing
+```rust
+// Vector of events with metadata
+bufvec.add(b"2023-01-01T10:00:00")?;
+bufvec.add(b"INFO")?;
+bufvec.add(b"Server started")?;
+bufvec.add(b"2023-01-01T10:01:00")?;
+bufvec.add(b"ERROR")?;
+bufvec.add(b"Connection failed")?;
+```
+
+## Best Practices
+
+### 1. Error Handling
+- Use `?` operator for error propagation
+- Match specific error types when recovery is possible
+- Use safe variants (`try_*`) when bounds are uncertain
+
+### 2. Buffer Management
+- Calculate buffer size conservatively: `(max_slices * 16) + (expected_data * 1.5)`
+- Monitor usage with `available_bytes()` to prevent overflow
+- Consider buffer reuse in loops to avoid allocations
+
+### 3. Interface Selection
+- Use **vector** interface for indexed access and general data storage
+- Use **stack** interface for LIFO processing and temporary state
+- Use **dictionary** interface for key-value data and configuration
+
+### 4. Performance Optimization
+- Access elements sequentially when possible for cache efficiency
+- Use `data_used()` instead of calculating manually (it's O(1))
+- Prefer larger buffers over frequent buffer changes
+
+### 5. Memory Safety
+- Always check error conditions, especially `BufferOverflow` and `SliceLimitExceeded`
+- Use safe variants when index bounds are uncertain
+- Clear buffer when reusing to avoid stale data confusion
+
+## Integration Examples
+
+### Example 1: JSON-like Parser
+```rust
+fn parse_json_like(data: &str, bufvec: &mut BufVec) -> Result<(), BufVecError> {
+    // Simple key:value,key:value parser
+    for pair in data.split(',') {
+        let parts: Vec<&str> = pair.split(':').collect();
+        if parts.len() == 2 {
+            bufvec.add_key(parts[0].trim().as_bytes())?;
+            bufvec.add_value(parts[1].trim().as_bytes())?;
+        }
+    }
+    Ok(())
+}
+
+let mut buffer = [0u8; 1000];
+let mut bufvec = BufVec::new(&mut buffer, 20)?;
+parse_json_like("name:alice,age:30,city:NYC", &mut bufvec)?;
+
+for (key, value) in bufvec.pairs() {
+    println!("{:?} = {:?}", 
+             std::str::from_utf8(key).unwrap(),
+             std::str::from_utf8(value.unwrap()).unwrap());
+}
+```
+
+### Example 2: Command Line Argument Processing
+```rust
+fn process_args(args: &[&str], bufvec: &mut BufVec) -> Result<(), BufVecError> {
+    let mut i = 0;
+    while i < args.len() {
+        if args[i].starts_with("--") {
+            // Long option
+            bufvec.add_key(args[i][2..].as_bytes())?;
+            if i + 1 < args.len() && !args[i + 1].starts_with("-") {
+                bufvec.add_value(args[i + 1].as_bytes())?;
+                i += 2;
+            } else {
+                i += 1;
+            }
+        } else {
+            // Positional argument
+            bufvec.add(args[i].as_bytes())?;
+            i += 1;
+        }
+    }
+    Ok(())
+}
+```
+
+### Example 3: State Machine Processing
+```rust
+fn process_state_machine(events: &[&str], bufvec: &mut BufVec) -> Result<(), BufVecError> {
+    bufvec.push(b"initial")?; // Initial state
+    
+    for event in events {
+        let current_state = bufvec.top();
+        
+        // State transition logic
+        match (current_state, event.as_bytes()) {
+            (b"initial", b"start") => {
+                bufvec.pop();
+                bufvec.push(b"running")?;
+            },
+            (b"running", b"pause") => {
+                bufvec.push(b"paused")?; // Keep running state below
+            },
+            (b"paused", b"resume") => {
+                bufvec.pop(); // Remove paused, back to running
+            },
+            (b"running", b"stop") => {
+                bufvec.pop();
+                bufvec.push(b"stopped")?;
+            },
+            _ => {}, // Invalid transition
+        }
+    }
+    
+    Ok(())
+}
+```
+
+This documentation provides comprehensive guidance for LLMs to understand and effectively use BufVec in various scenarios.
