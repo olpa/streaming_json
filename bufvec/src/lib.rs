@@ -18,11 +18,15 @@
 //! let mut buffer = [0u8; 200];
 //! let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
 //!
-//! // Add key-value pairs
-//! bufvec.add(b"name").unwrap();      // key at index 0
-//! bufvec.add(b"Alice").unwrap();     // value at index 1
-//! bufvec.add(b"age").unwrap();       // key at index 2
-//! bufvec.add(b"30").unwrap();        // value at index 3
+//! // Add key-value pairs using specialized methods
+//! bufvec.add_key(b"name").unwrap();      // key at index 0
+//! bufvec.add_value(b"Alice").unwrap();   // value at index 1
+//! bufvec.add_key(b"age").unwrap();       // key at index 2
+//! bufvec.add_value(b"30").unwrap();      // value at index 3
+//!
+//! // Specialized methods handle replacement logic
+//! bufvec.add_key(b"country").unwrap();   // replaces "age" key since last element was a value
+//! bufvec.add_value(b"USA").unwrap();     // adds normally since last element is now a key
 //!
 //! // Use dictionary interface
 //! for (key, value) in bufvec.pairs() {
@@ -36,6 +40,30 @@
 //! if bufvec.has_unpaired_key() {
 //!     println!("Last element is an unpaired key");
 //! }
+//! ```
+//!
+//! ## Replacement Semantics
+//!
+//! The specialized dictionary methods `add_key()` and `add_value()` implement smart replacement logic:
+//!
+//! - `add_key()`: If the last element is already a key, replaces it. Otherwise, adds normally.
+//! - `add_value()`: If the last element is already a value, replaces it. Otherwise, adds normally.
+//!
+//! This allows for building dictionaries incrementally while correcting mistakes:
+//!
+//! ```
+//! # use bufvec::BufVec;
+//! let mut buffer = [0u8; 200];
+//! let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+//!
+//! bufvec.add_key(b"name").unwrap();
+//! bufvec.add_key(b"username").unwrap();  // replaces "name" with "username"
+//! bufvec.add_value(b"alice").unwrap();   // adds value for "username"
+//! bufvec.add_value(b"alice123").unwrap(); // replaces "alice" with "alice123"
+//!
+//! assert_eq!(bufvec.len(), 2);
+//! assert_eq!(bufvec.get(0), b"username");
+//! assert_eq!(bufvec.get(1), b"alice123");
 //! ```
 //!
 //! # Iterator Support
@@ -199,15 +227,18 @@ impl<'a> BufVec<'a> {
     fn get_slice_descriptor(&self, index: usize) -> (usize, usize) {
         let offset = index * SLICE_DESCRIPTOR_SIZE;
 
-        let start_bytes = self.buffer.get(offset..offset + 8)
+        let start_bytes = self
+            .buffer
+            .get(offset..offset + 8)
             .expect("Buffer bounds checked during construction");
-        let length_bytes = self.buffer.get(offset + 8..offset + 16)
+        let length_bytes = self
+            .buffer
+            .get(offset + 8..offset + 16)
             .expect("Buffer bounds checked during construction");
 
-        let start = usize::from_le_bytes(start_bytes.try_into()
-            .expect("Slice is exactly 8 bytes"));
-        let length = usize::from_le_bytes(length_bytes.try_into()
-            .expect("Slice is exactly 8 bytes"));
+        let start = usize::from_le_bytes(start_bytes.try_into().expect("Slice is exactly 8 bytes"));
+        let length =
+            usize::from_le_bytes(length_bytes.try_into().expect("Slice is exactly 8 bytes"));
 
         (start, length)
     }
@@ -216,10 +247,12 @@ impl<'a> BufVec<'a> {
     fn set_slice_descriptor(&mut self, index: usize, start: usize, length: usize) {
         let offset = index * SLICE_DESCRIPTOR_SIZE;
 
-        self.buffer.get_mut(offset..offset + 8)
+        self.buffer
+            .get_mut(offset..offset + 8)
             .expect("Buffer bounds checked during construction")
             .copy_from_slice(&start.to_le_bytes());
-        self.buffer.get_mut(offset + 8..offset + 16)
+        self.buffer
+            .get_mut(offset + 8..offset + 16)
             .expect("Buffer bounds checked during construction")
             .copy_from_slice(&length.to_le_bytes());
     }
@@ -239,7 +272,8 @@ impl<'a> BufVec<'a> {
             self.count
         );
         let (start, length) = self.get_slice_descriptor(index);
-        self.buffer.get(start..start + length)
+        self.buffer
+            .get(start..start + length)
             .expect("Slice bounds validated during add operation")
     }
 
@@ -256,7 +290,9 @@ impl<'a> BufVec<'a> {
     pub fn try_get(&self, index: usize) -> Result<&[u8], BufVecError> {
         self.check_bounds(index)?;
         let (start, length) = self.get_slice_descriptor(index);
-        Ok(self.buffer.get(start..start + length)
+        Ok(self
+            .buffer
+            .get(start..start + length)
             .expect("Slice bounds validated during add operation"))
     }
 
@@ -278,7 +314,8 @@ impl<'a> BufVec<'a> {
         let start = self.data_start() + self.data_used();
         let end = start + data.len();
 
-        self.buffer.get_mut(start..end)
+        self.buffer
+            .get_mut(start..end)
             .expect("Buffer capacity checked by ensure_capacity")
             .copy_from_slice(data);
         self.set_slice_descriptor(self.count, start, data.len());
@@ -305,7 +342,8 @@ impl<'a> BufVec<'a> {
         let (start, length) = self.get_slice_descriptor(self.count);
 
         // data_used is now automatically recalculated when needed
-        self.buffer.get(start..start + length)
+        self.buffer
+            .get(start..start + length)
             .expect("Slice bounds validated during add operation")
     }
 
@@ -328,7 +366,9 @@ impl<'a> BufVec<'a> {
         let (start, length) = self.get_slice_descriptor(self.count);
 
         // data_used is now automatically recalculated when needed
-        Ok(self.buffer.get(start..start + length)
+        Ok(self
+            .buffer
+            .get(start..start + length)
             .expect("Slice bounds validated during add operation"))
     }
 
@@ -369,6 +409,86 @@ impl<'a> BufVec<'a> {
             bufvec: self,
             current_pair: 0,
         }
+    }
+
+    /// Adds a key to the dictionary. If the last element is already a key, replaces it.
+    ///
+    /// # Errors
+    ///
+    /// Returns `BufVecError::BufferOverflow` if:
+    /// - The maximum number of slices has been reached and replacement is not possible
+    /// - There is insufficient space in the buffer for the data and replacement is not possible
+    ///
+    /// # Panics
+    ///
+    /// May panic if buffer integrity is compromised (internal validation failure).
+    pub fn add_key(&mut self, data: &[u8]) -> Result<(), BufVecError> {
+        if self.is_empty() || !self.has_unpaired_key() {
+            // Empty vector or last element is a value, so add normally
+            self.add(data)
+        } else {
+            // Last element is a key, replace it
+            self.replace_last(data)
+        }
+    }
+
+    /// Adds a value to the dictionary. If the last element is already a value, replaces it.
+    ///
+    /// # Errors
+    ///
+    /// Returns `BufVecError::BufferOverflow` if:
+    /// - The maximum number of slices has been reached and replacement is not possible
+    /// - There is insufficient space in the buffer for the data and replacement is not possible
+    ///
+    /// # Panics
+    ///
+    /// May panic if buffer integrity is compromised (internal validation failure).
+    pub fn add_value(&mut self, data: &[u8]) -> Result<(), BufVecError> {
+        if self.is_empty() || self.has_unpaired_key() {
+            // Empty vector or last element is a key, so add normally
+            self.add(data)
+        } else {
+            // Last element is a value, replace it
+            self.replace_last(data)
+        }
+    }
+
+    #[allow(clippy::expect_used)]
+    fn replace_last(&mut self, data: &[u8]) -> Result<(), BufVecError> {
+        if self.is_empty() {
+            return Err(BufVecError::EmptyVector);
+        }
+
+        // Calculate space needed and available space after removing last element
+        let last_index = self.count - 1;
+
+        // Check if new data fits in the space that would be available
+        // We need to consider the space after all elements except the last one
+        let mut data_used_without_last = 0;
+        for i in 0..last_index {
+            let (slice_start, slice_length) = self.get_slice_descriptor(i);
+            let slice_end = slice_start + slice_length - self.data_start();
+            data_used_without_last = data_used_without_last.max(slice_end);
+        }
+
+        let available_space = self.buffer.len() - self.data_start() - data_used_without_last;
+        if data.len() > available_space {
+            return Err(BufVecError::BufferOverflow);
+        }
+
+        // Place new data at the end of existing data (excluding the last element)
+        let new_start = self.data_start() + data_used_without_last;
+        let new_end = new_start + data.len();
+
+        self.buffer
+            .get_mut(new_start..new_end)
+            .expect("Buffer capacity checked above")
+            .copy_from_slice(data);
+
+        // Update the descriptor for the last element
+        self.set_slice_descriptor(last_index, new_start, data.len());
+
+        Ok(())
     }
 }
 
@@ -881,5 +1001,187 @@ mod tests {
         assert_eq!(pairs_after_pop.len(), 2);
         assert_eq!(pairs_after_pop[0], (&b"name"[..], Some(&b"Alice"[..])));
         assert_eq!(pairs_after_pop[1], (&b"age"[..], None));
+    }
+
+    #[test]
+    fn test_add_key_on_empty_vector() {
+        let mut buffer = [0u8; 200];
+        let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+
+        assert!(bufvec.add_key(b"key1").is_ok());
+        assert_eq!(bufvec.len(), 1);
+        assert_eq!(bufvec.get(0), b"key1");
+        assert!(bufvec.has_unpaired_key());
+    }
+
+    #[test]
+    fn test_add_key_replacing_existing_key() {
+        let mut buffer = [0u8; 200];
+        let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+
+        bufvec.add(b"key1").unwrap();
+        bufvec.add(b"value1").unwrap();
+        bufvec.add(b"key2").unwrap();
+
+        assert_eq!(bufvec.len(), 3);
+        assert!(bufvec.has_unpaired_key());
+
+        // Replace the last key
+        assert!(bufvec.add_key(b"newkey2").is_ok());
+        assert_eq!(bufvec.len(), 3);
+        assert_eq!(bufvec.get(0), b"key1");
+        assert_eq!(bufvec.get(1), b"value1");
+        assert_eq!(bufvec.get(2), b"newkey2");
+        assert!(bufvec.has_unpaired_key());
+    }
+
+    #[test]
+    fn test_add_key_after_value_normal_add() {
+        let mut buffer = [0u8; 200];
+        let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+
+        bufvec.add(b"key1").unwrap();
+        bufvec.add(b"value1").unwrap();
+
+        assert_eq!(bufvec.len(), 2);
+        assert!(!bufvec.has_unpaired_key());
+
+        // Should add normally after a value
+        assert!(bufvec.add_key(b"key2").is_ok());
+        assert_eq!(bufvec.len(), 3);
+        assert_eq!(bufvec.get(0), b"key1");
+        assert_eq!(bufvec.get(1), b"value1");
+        assert_eq!(bufvec.get(2), b"key2");
+        assert!(bufvec.has_unpaired_key());
+    }
+
+    #[test]
+    fn test_add_value_replacing_existing_value() {
+        let mut buffer = [0u8; 200];
+        let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+
+        bufvec.add(b"key1").unwrap();
+        bufvec.add(b"value1").unwrap();
+        bufvec.add(b"key2").unwrap();
+        bufvec.add(b"value2").unwrap();
+
+        assert_eq!(bufvec.len(), 4);
+        assert!(!bufvec.has_unpaired_key());
+
+        // Replace the last value
+        assert!(bufvec.add_value(b"newvalue2").is_ok());
+        assert_eq!(bufvec.len(), 4);
+        assert_eq!(bufvec.get(0), b"key1");
+        assert_eq!(bufvec.get(1), b"value1");
+        assert_eq!(bufvec.get(2), b"key2");
+        assert_eq!(bufvec.get(3), b"newvalue2");
+        assert!(!bufvec.has_unpaired_key());
+    }
+
+    #[test]
+    fn test_add_value_after_key_normal_add() {
+        let mut buffer = [0u8; 200];
+        let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+
+        bufvec.add(b"key1").unwrap();
+
+        assert_eq!(bufvec.len(), 1);
+        assert!(bufvec.has_unpaired_key());
+
+        // Should add normally after a key
+        assert!(bufvec.add_value(b"value1").is_ok());
+        assert_eq!(bufvec.len(), 2);
+        assert_eq!(bufvec.get(0), b"key1");
+        assert_eq!(bufvec.get(1), b"value1");
+        assert!(!bufvec.has_unpaired_key());
+    }
+
+    #[test]
+    fn test_add_value_on_empty_vector() {
+        let mut buffer = [0u8; 200];
+        let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+
+        assert!(bufvec.add_value(b"value1").is_ok());
+        assert_eq!(bufvec.len(), 1);
+        assert_eq!(bufvec.get(0), b"value1");
+        assert!(bufvec.has_unpaired_key()); // Single element at index 0 is considered a key
+    }
+
+    #[test]
+    fn test_buffer_overflow_in_replacement_scenarios() {
+        let mut buffer = [0u8; 150];
+        let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+
+        // Fill buffer close to capacity
+        bufvec.add(b"short").unwrap();
+        bufvec.add(b"tiny").unwrap();
+
+        // Try to replace with data that won't fit
+        let long_data = vec![b'x'; 100];
+        assert!(bufvec.add_key(&long_data).is_err());
+        assert!(bufvec.add_value(&long_data).is_err());
+
+        // Original data should be unchanged
+        assert_eq!(bufvec.get(0), b"short");
+        assert_eq!(bufvec.get(1), b"tiny");
+    }
+
+    #[test]
+    fn test_key_replacement_preserves_order() {
+        let mut buffer = [0u8; 200];
+        let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+
+        bufvec.add(b"key1").unwrap();
+        bufvec.add(b"value1").unwrap();
+        bufvec.add(b"key2").unwrap();
+        bufvec.add(b"value2").unwrap();
+        bufvec.add(b"key3").unwrap();
+
+        // Replace last key
+        bufvec.add_key(b"replacedkey3").unwrap();
+
+        // Check that all elements are in correct order
+        assert_eq!(bufvec.len(), 5);
+        assert_eq!(bufvec.get(0), b"key1");
+        assert_eq!(bufvec.get(1), b"value1");
+        assert_eq!(bufvec.get(2), b"key2");
+        assert_eq!(bufvec.get(3), b"value2");
+        assert_eq!(bufvec.get(4), b"replacedkey3");
+        assert!(bufvec.has_unpaired_key());
+
+        // Dictionary interface should work correctly
+        let pairs: Vec<_> = bufvec.pairs().collect();
+        assert_eq!(pairs.len(), 3);
+        assert_eq!(pairs[0], (&b"key1"[..], Some(&b"value1"[..])));
+        assert_eq!(pairs[1], (&b"key2"[..], Some(&b"value2"[..])));
+        assert_eq!(pairs[2], (&b"replacedkey3"[..], None));
+    }
+
+    #[test]
+    fn test_value_replacement_preserves_order() {
+        let mut buffer = [0u8; 200];
+        let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+
+        bufvec.add(b"key1").unwrap();
+        bufvec.add(b"value1").unwrap();
+        bufvec.add(b"key2").unwrap();
+        bufvec.add(b"value2").unwrap();
+
+        // Replace last value
+        bufvec.add_value(b"replacedvalue2").unwrap();
+
+        // Check that all elements are in correct order
+        assert_eq!(bufvec.len(), 4);
+        assert_eq!(bufvec.get(0), b"key1");
+        assert_eq!(bufvec.get(1), b"value1");
+        assert_eq!(bufvec.get(2), b"key2");
+        assert_eq!(bufvec.get(3), b"replacedvalue2");
+        assert!(!bufvec.has_unpaired_key());
+
+        // Dictionary interface should work correctly
+        let pairs: Vec<_> = bufvec.pairs().collect();
+        assert_eq!(pairs.len(), 2);
+        assert_eq!(pairs[0], (&b"key1"[..], Some(&b"value1"[..])));
+        assert_eq!(pairs[1], (&b"key2"[..], Some(&b"replacedvalue2"[..])));
     }
 }

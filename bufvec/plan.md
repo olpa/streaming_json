@@ -122,7 +122,7 @@
 
 ---
 
-## Task 5: Specialized Dictionary Methods
+## Task 5: Specialized Dictionary Methods ✅ COMPLETED
 
 **Context**: Implement `add_key()` and `add_value()` methods that handle key-value replacement logic.
 
@@ -146,6 +146,15 @@
 - Document replacement semantics clearly
 - Add specialized method examples to `README.md`
 - Update `doc/llms.txt` with method behavior
+
+**Implementation Summary**:
+- Added `add_key()` method that replaces last element if it's already a key, otherwise adds normally
+- Added `add_value()` method that replaces last element if it's already a value, otherwise adds normally
+- Implemented `replace_last()` helper method with proper space calculation and bounds checking
+- Added 10 comprehensive tests covering all scenarios: empty vector, replacement logic, normal addition, buffer overflow, and order preservation
+- Updated module documentation with replacement semantics and detailed examples
+- All tests pass with no warnings
+- Smart replacement logic allows building dictionaries incrementally while correcting mistakes
 
 ---
 
