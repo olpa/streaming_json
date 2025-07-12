@@ -6,6 +6,27 @@
 //!
 //! Buffer layout: [metadata section][data section]
 //! Metadata section stores slice descriptors as (`start_offset`, length) pairs.
+//!
+//! # Iterator Support
+//!
+//! `BufVec` implements standard Rust iterator patterns:
+//!
+//! ```
+//! # use bufvec::BufVec;
+//! let mut buffer = [0u8; 200];
+//! let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+//!
+//! bufvec.add(b"hello").unwrap();
+//! bufvec.add(b"world").unwrap();
+//!
+//! // Iterate using for loop
+//! for slice in &bufvec {
+//!     println!("{:?}", slice);
+//! }
+//!
+//! // Collect into Vec
+//! let collected: Vec<_> = bufvec.into_iter().collect();
+//! ```
 
 use std::fmt;
 
@@ -246,6 +267,50 @@ impl<'a> BufVec<'a> {
         // data_used is now automatically recalculated when needed
         Ok(&self.buffer[start..start + length])
     }
+
+    /// Returns an iterator over the slices in the vector.
+    #[must_use]
+    pub fn iter(&self) -> BufVecIter<'_> {
+        self.into_iter()
+    }
+}
+
+pub struct BufVecIter<'a> {
+    bufvec: &'a BufVec<'a>,
+    current: usize,
+}
+
+impl<'a> Iterator for BufVecIter<'a> {
+    type Item = &'a [u8];
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.current < self.bufvec.len() {
+            let result = self.bufvec.get(self.current);
+            self.current += 1;
+            Some(result)
+        } else {
+            None
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = self.bufvec.len() - self.current;
+        (remaining, Some(remaining))
+    }
+}
+
+impl<'a> ExactSizeIterator for BufVecIter<'a> {}
+
+impl<'a> IntoIterator for &'a BufVec<'a> {
+    type Item = &'a [u8];
+    type IntoIter = BufVecIter<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        BufVecIter {
+            bufvec: self,
+            current: 0,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -419,5 +484,116 @@ mod tests {
 
         bufvec.clear();
         assert_eq!(bufvec.data_used(), 0);
+    }
+
+    #[test]
+    fn test_iterator_empty_vector() {
+        let mut buffer = [0u8; 200];
+        let bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+
+        let mut iter = bufvec.into_iter();
+        assert_eq!(iter.next(), None);
+        assert_eq!(iter.size_hint(), (0, Some(0)));
+    }
+
+    #[test]
+    fn test_iterator_populated_vector() {
+        let mut buffer = [0u8; 200];
+        let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+
+        bufvec.add(b"hello").unwrap();
+        bufvec.add(b"world").unwrap();
+        bufvec.add(b"test").unwrap();
+
+        let mut iter = bufvec.into_iter();
+        assert_eq!(iter.size_hint(), (3, Some(3)));
+
+        assert_eq!(iter.next(), Some(&b"hello"[..]));
+        assert_eq!(iter.size_hint(), (2, Some(2)));
+
+        assert_eq!(iter.next(), Some(&b"world"[..]));
+        assert_eq!(iter.size_hint(), (1, Some(1)));
+
+        assert_eq!(iter.next(), Some(&b"test"[..]));
+        assert_eq!(iter.size_hint(), (0, Some(0)));
+
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn test_iterator_consumed_completely() {
+        let mut buffer = [0u8; 200];
+        let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+
+        bufvec.add(b"a").unwrap();
+        bufvec.add(b"b").unwrap();
+
+        let collected: Vec<_> = bufvec.into_iter().collect();
+        assert_eq!(collected, vec![&b"a"[..], &b"b"[..]]);
+    }
+
+    #[test]
+    fn test_iterator_partial_iteration() {
+        let mut buffer = [0u8; 200];
+        let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+
+        bufvec.add(b"first").unwrap();
+        bufvec.add(b"second").unwrap();
+        bufvec.add(b"third").unwrap();
+
+        let mut iter = bufvec.into_iter();
+        assert_eq!(iter.next(), Some(&b"first"[..]));
+        assert_eq!(iter.next(), Some(&b"second"[..]));
+        // Iterator should still work after partial consumption
+        assert_eq!(iter.size_hint(), (1, Some(1)));
+        assert_eq!(iter.next(), Some(&b"third"[..]));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn test_iterator_lifetime_correctness() {
+        let mut buffer = [0u8; 200];
+        let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+
+        bufvec.add(b"data").unwrap();
+
+        // Test that iterator can be created and used
+        {
+            let iter = bufvec.into_iter();
+            let first = iter.take(1).next().unwrap();
+            assert_eq!(first, b"data");
+        }
+
+        // BufVec should still be usable after iterator is dropped
+        assert_eq!(bufvec.len(), 1);
+        assert_eq!(bufvec.get(0), b"data");
+    }
+
+    #[test]
+    fn test_for_loop_syntax() {
+        let mut buffer = [0u8; 200];
+        let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+
+        bufvec.add(b"hello").unwrap();
+        bufvec.add(b"world").unwrap();
+
+        let mut results = Vec::new();
+        for slice in &bufvec {
+            results.push(slice);
+        }
+
+        assert_eq!(results, vec![&b"hello"[..], &b"world"[..]]);
+    }
+
+    #[test]
+    fn test_iter_method() {
+        let mut buffer = [0u8; 200];
+        let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+
+        bufvec.add(b"hello").unwrap();
+        bufvec.add(b"world").unwrap();
+
+        let collected: Vec<_> = bufvec.iter().collect();
+        assert_eq!(collected, vec![&b"hello"[..], &b"world"[..]]);
     }
 }
