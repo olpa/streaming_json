@@ -1,6 +1,8 @@
-use std::fmt;
-
 /// Error types for BufVec operations
+///
+/// This module provides error types that are compatible with `no_std` environments.
+/// Error types implement `Debug`, `PartialEq`, `Eq`, and `Clone` but do not implement
+/// `std::fmt::Display` or `std::error::Error` to maintain `no_std` compatibility.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum BufVecError {
     /// Buffer has insufficient space for the requested operation
@@ -41,48 +43,3 @@ pub enum BufVecError {
         value: usize,
     },
 }
-
-impl fmt::Display for BufVecError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            BufVecError::BufferOverflow {
-                requested,
-                available,
-            } => {
-                write!(
-                    f,
-                    "Buffer overflow: requested {requested} bytes, only {available} available"
-                )
-            }
-            BufVecError::IndexOutOfBounds { index, length } => {
-                write!(
-                    f,
-                    "Index {index} out of bounds for vector of length {length}"
-                )
-            }
-            BufVecError::EmptyVector => {
-                write!(f, "Operation attempted on empty vector")
-            }
-            BufVecError::BufferTooSmall { required, provided } => {
-                write!(
-                    f,
-                    "Buffer too small: {required} bytes required, {provided} bytes provided"
-                )
-            }
-            BufVecError::SliceLimitExceeded { max_slices } => {
-                write!(f, "Maximum number of slices ({max_slices}) exceeded")
-            }
-            BufVecError::ZeroSizeBuffer => {
-                write!(
-                    f,
-                    "Zero-size buffer provided where data storage is required"
-                )
-            }
-            BufVecError::InvalidConfiguration { parameter, value } => {
-                write!(f, "Invalid configuration: {parameter} = {value}")
-            }
-        }
-    }
-}
-
-impl std::error::Error for BufVecError {}
