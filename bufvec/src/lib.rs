@@ -135,21 +135,71 @@
 
 use std::fmt;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum BufVecError {
-    BufferOverflow,
-    IndexOutOfBounds,
+    /// Buffer has insufficient space for the requested operation
+    BufferOverflow {
+        /// Number of bytes requested
+        requested: usize,
+        /// Number of bytes available
+        available: usize,
+    },
+    /// Index is beyond the current vector length
+    IndexOutOfBounds {
+        /// Index that was accessed
+        index: usize,
+        /// Current length of the vector
+        length: usize,
+    },
+    /// Operation attempted on an empty vector
     EmptyVector,
-    BufferTooSmall,
+    /// Buffer is too small to hold the required metadata
+    BufferTooSmall {
+        /// Minimum buffer size required
+        required: usize,
+        /// Actual buffer size provided
+        provided: usize,
+    },
+    /// Maximum number of slices has been reached
+    SliceLimitExceeded {
+        /// Maximum number of slices allowed
+        max_slices: usize,
+    },
+    /// Zero-size buffer provided where data storage is required
+    ZeroSizeBuffer,
+    /// Invalid configuration parameter
+    InvalidConfiguration {
+        /// Description of the invalid parameter
+        parameter: &'static str,
+        /// Provided value
+        value: usize,
+    },
 }
 
 impl fmt::Display for BufVecError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            BufVecError::BufferOverflow => write!(f, "Buffer overflow: insufficient space"),
-            BufVecError::IndexOutOfBounds => write!(f, "Index out of bounds"),
-            BufVecError::EmptyVector => write!(f, "Operation on empty vector"),
-            BufVecError::BufferTooSmall => write!(f, "Buffer too small for metadata"),
+            BufVecError::BufferOverflow { requested, available } => {
+                write!(f, "Buffer overflow: requested {} bytes, only {} available", requested, available)
+            }
+            BufVecError::IndexOutOfBounds { index, length } => {
+                write!(f, "Index {} out of bounds for vector of length {}", index, length)
+            }
+            BufVecError::EmptyVector => {
+                write!(f, "Operation attempted on empty vector")
+            }
+            BufVecError::BufferTooSmall { required, provided } => {
+                write!(f, "Buffer too small: {} bytes required, {} bytes provided", required, provided)
+            }
+            BufVecError::SliceLimitExceeded { max_slices } => {
+                write!(f, "Maximum number of slices ({}) exceeded", max_slices)
+            }
+            BufVecError::ZeroSizeBuffer => {
+                write!(f, "Zero-size buffer provided where data storage is required")
+            }
+            BufVecError::InvalidConfiguration { parameter, value } => {
+                write!(f, "Invalid configuration: {} = {}", parameter, value)
+            }
         }
     }
 }
@@ -159,6 +209,7 @@ impl std::error::Error for BufVecError {}
 const SLICE_DESCRIPTOR_SIZE: usize = 16; // 2 * size_of::<usize>() on 64-bit
 const DEFAULT_MAX_SLICES: usize = 8;
 
+#[derive(Debug)]
 pub struct BufVec<'a> {
     buffer: &'a mut [u8],
     count: usize,
@@ -175,13 +226,24 @@ impl<'a> BufVec<'a> {
     /// - The buffer is too small to hold the metadata for `max_slices`
     pub fn new(buffer: &'a mut [u8], max_slices: usize) -> Result<Self, BufVecError> {
         if max_slices == 0 {
-            return Err(BufVecError::BufferTooSmall);
+            return Err(BufVecError::InvalidConfiguration {
+                parameter: "max_slices",
+                value: max_slices,
+            });
+        }
+
+        if buffer.is_empty() {
+            return Err(BufVecError::ZeroSizeBuffer);
         }
 
         let metadata_space = max_slices * SLICE_DESCRIPTOR_SIZE;
+        let min_required = metadata_space + 1; // At least 1 byte for data
 
-        if buffer.len() <= metadata_space {
-            return Err(BufVecError::BufferTooSmall);
+        if buffer.len() < min_required {
+            return Err(BufVecError::BufferTooSmall {
+                required: min_required,
+                provided: buffer.len(),
+            });
         }
 
         Ok(Self {
@@ -250,7 +312,10 @@ impl<'a> BufVec<'a> {
 
     fn check_bounds(&self, index: usize) -> Result<(), BufVecError> {
         if index >= self.count {
-            Err(BufVecError::IndexOutOfBounds)
+            Err(BufVecError::IndexOutOfBounds {
+                index,
+                length: self.count,
+            })
         } else {
             Ok(())
         }
@@ -259,12 +324,18 @@ impl<'a> BufVec<'a> {
     fn ensure_capacity(&self, additional_bytes: usize) -> Result<(), BufVecError> {
         // Check if we've reached the maximum number of slices
         if self.count >= self.max_slices {
-            return Err(BufVecError::BufferOverflow);
+            return Err(BufVecError::SliceLimitExceeded {
+                max_slices: self.max_slices,
+            });
         }
 
         // Check if we have enough space for the additional bytes
-        if self.data_used() + additional_bytes > self.buffer.len() - self.data_start() {
-            return Err(BufVecError::BufferOverflow);
+        let available_data_space = self.buffer.len() - self.data_start() - self.data_used();
+        if additional_bytes > available_data_space {
+            return Err(BufVecError::BufferOverflow {
+                requested: additional_bytes,
+                available: available_data_space,
+            });
         }
         Ok(())
     }
@@ -557,7 +628,10 @@ impl<'a> BufVec<'a> {
 
         let available_space = self.buffer.len() - self.data_start() - data_used_without_last;
         if data.len() > available_space {
-            return Err(BufVecError::BufferOverflow);
+            return Err(BufVecError::BufferOverflow {
+                requested: data.len(),
+                available: available_space,
+            });
         }
 
         // Place new data at the end of existing data (excluding the last element)
@@ -654,6 +728,7 @@ impl<'a> ExactSizeIterator for BufVecPairIter<'a> {}
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]
@@ -1426,5 +1501,257 @@ mod tests {
         bufvec.clear();
         assert!(bufvec.is_empty());
         assert_eq!(bufvec.len(), 0);
+    }
+
+    // Error Handling and Edge Cases Tests
+
+    #[test]
+    fn test_error_zero_max_slices() {
+        let mut buffer = [0u8; 200];
+        let result = BufVec::new(&mut buffer, 0);
+        assert_eq!(
+            result.unwrap_err(),
+            BufVecError::InvalidConfiguration {
+                parameter: "max_slices",
+                value: 0
+            }
+        );
+    }
+
+    #[test]
+    fn test_error_zero_size_buffer() {
+        let mut buffer = [];
+        let result = BufVec::new(&mut buffer, 1);
+        assert_eq!(result.unwrap_err(), BufVecError::ZeroSizeBuffer);
+    }
+
+    #[test]
+    fn test_error_buffer_too_small_for_metadata() {
+        let mut buffer = [0u8; 10]; // Too small for even 1 slice (16 bytes needed + 1 for data)
+        let result = BufVec::new(&mut buffer, 1);
+        assert_eq!(
+            result.unwrap_err(),
+            BufVecError::BufferTooSmall {
+                required: 17, // 16 bytes metadata + 1 byte data minimum
+                provided: 10
+            }
+        );
+    }
+
+    #[test]
+    fn test_error_detailed_buffer_overflow() {
+        let mut buffer = [0u8; 150];
+        let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+
+        // Fill buffer to near capacity
+        bufvec.add(b"small").unwrap();
+
+        // Try to add data that won't fit
+        let large_data = vec![b'x'; 100];
+        let result = bufvec.add(&large_data);
+        match result.unwrap_err() {
+            BufVecError::BufferOverflow { requested, available } => {
+                assert_eq!(requested, 100);
+                assert!(available < 100);
+            }
+            _ => panic!("Expected BufferOverflow error"),
+        }
+    }
+
+    #[test]
+    fn test_error_detailed_index_out_of_bounds() {
+        let mut buffer = [0u8; 200];
+        let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+
+        bufvec.add(b"test").unwrap();
+
+        let result = bufvec.try_get(5);
+        assert_eq!(
+            result.unwrap_err(),
+            BufVecError::IndexOutOfBounds {
+                index: 5,
+                length: 1
+            }
+        );
+    }
+
+    #[test]
+    fn test_error_slice_limit_exceeded() {
+        let mut buffer = [0u8; 200];
+        let mut bufvec = BufVec::new(&mut buffer, 2).unwrap(); // Only 2 slices allowed
+
+        bufvec.add(b"first").unwrap();
+        bufvec.add(b"second").unwrap();
+
+        let result = bufvec.add(b"third");
+        assert_eq!(
+            result.unwrap_err(),
+            BufVecError::SliceLimitExceeded { max_slices: 2 }
+        );
+    }
+
+    #[test]
+    fn test_error_empty_vector_operations() {
+        let mut buffer = [0u8; 200];
+        let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+
+        // Test try_pop on empty vector
+        assert_eq!(bufvec.try_pop().unwrap_err(), BufVecError::EmptyVector);
+
+        // Test try_top on empty vector
+        assert_eq!(bufvec.try_top().unwrap_err(), BufVecError::EmptyVector);
+
+        // Test replace_last on empty vector
+        let result = bufvec.replace_last(b"test");
+        assert_eq!(result.unwrap_err(), BufVecError::EmptyVector);
+    }
+
+    #[test]
+    fn test_error_messages_quality() {
+        let mut buffer = [0u8; 10];
+        let error = BufVec::new(&mut buffer, 1).unwrap_err();
+        let message = format!("{}", error);
+        assert!(message.contains("17 bytes required"));
+        assert!(message.contains("10 bytes provided"));
+
+        let mut buffer = [0u8; 200];
+        let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+        let error = bufvec.try_get(0).unwrap_err();
+        let message = format!("{}", error);
+        assert!(message.contains("Index 0 out of bounds"));
+        assert!(message.contains("length 0"));
+    }
+
+    #[test]
+    fn test_edge_case_minimal_buffer() {
+        // Test with the absolute minimum buffer size
+        let mut buffer = [0u8; 17]; // 16 bytes metadata + 1 byte data
+        let mut bufvec = BufVec::new(&mut buffer, 1).unwrap();
+
+        // Should be able to add exactly 1 byte
+        assert!(bufvec.add(b"x").is_ok());
+        assert_eq!(bufvec.get(0), b"x");
+
+        // Should fail to add any more data
+        assert!(bufvec.add(b"y").is_err());
+    }
+
+    #[test]
+    fn test_edge_case_exact_capacity() {
+        let mut buffer = [0u8; 150];
+        let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+
+        // Fill buffer to exact capacity
+        let data_space = bufvec.available_bytes();
+        let exact_data = vec![b'x'; data_space];
+        assert!(bufvec.add(&exact_data).is_ok());
+
+        // Should fail to add even 1 more byte
+        assert!(bufvec.add(b"y").is_err());
+    }
+
+    #[test]
+    fn test_edge_case_replacement_with_exact_space() {
+        let mut buffer = [0u8; 200];
+        let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+
+        // Add initial data
+        bufvec.add(b"short").unwrap();
+        bufvec.add(b"data").unwrap();
+
+        // Calculate available space for replacement
+        let available = bufvec.available_bytes() + b"data".len(); // Space freed by replacing last element
+        let exact_replacement = vec![b'x'; available];
+
+        // Should succeed with exact space
+        assert!(bufvec.add_value(&exact_replacement).is_ok());
+
+        // Verify replacement worked
+        assert_eq!(bufvec.len(), 2);
+        assert_eq!(bufvec.get(0), b"short");
+        assert_eq!(bufvec.get(1), &exact_replacement);
+    }
+
+    #[test]
+    fn test_error_recovery_after_failed_operations() {
+        let mut buffer = [0u8; 200];
+        let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+
+        // Add some initial data
+        bufvec.add(b"initial").unwrap();
+        assert_eq!(bufvec.len(), 1);
+
+        // Try to add data that will fail
+        let large_data = vec![b'x'; 1000];
+        assert!(bufvec.add(&large_data).is_err());
+
+        // Verify state is unchanged after error
+        assert_eq!(bufvec.len(), 1);
+        assert_eq!(bufvec.get(0), b"initial");
+
+        // Should still be able to add reasonable data
+        assert!(bufvec.add(b"recovery").is_ok());
+        assert_eq!(bufvec.len(), 2);
+        assert_eq!(bufvec.get(1), b"recovery");
+    }
+
+    #[test]
+    fn test_bounds_checking_with_various_indices() {
+        let mut buffer = [0u8; 200];
+        let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+
+        bufvec.add(b"element").unwrap();
+
+        // Test valid index
+        assert!(bufvec.try_get(0).is_ok());
+
+        // Test various invalid indices
+        assert!(bufvec.try_get(1).is_err());
+        assert!(bufvec.try_get(10).is_err());
+        assert!(bufvec.try_get(usize::MAX).is_err());
+    }
+
+    #[test]
+    fn test_error_types_implement_standard_traits() {
+        let error = BufVecError::EmptyVector;
+
+        // Test Debug
+        let debug_str = format!("{:?}", error);
+        assert!(!debug_str.is_empty());
+
+        // Test Display
+        let display_str = format!("{}", error);
+        assert!(!display_str.is_empty());
+
+        // Test Clone
+        let cloned = error.clone();
+        assert_eq!(error, cloned);
+
+        // Test PartialEq
+        assert_eq!(error, BufVecError::EmptyVector);
+        assert_ne!(error, BufVecError::ZeroSizeBuffer);
+
+        // Test Error trait
+        let _: &dyn std::error::Error = &error;
+    }
+
+    #[test]
+    fn test_comprehensive_error_scenarios() {
+        // Test all error variants have proper error messages
+        let errors = [
+            BufVecError::BufferOverflow { requested: 100, available: 50 },
+            BufVecError::IndexOutOfBounds { index: 5, length: 2 },
+            BufVecError::EmptyVector,
+            BufVecError::BufferTooSmall { required: 100, provided: 50 },
+            BufVecError::SliceLimitExceeded { max_slices: 8 },
+            BufVecError::ZeroSizeBuffer,
+            BufVecError::InvalidConfiguration { parameter: "test", value: 0 },
+        ];
+
+        for error in &errors {
+            let message = format!("{}", error);
+            assert!(!message.is_empty(), "Error message should not be empty for {:?}", error);
+            assert!(message.len() > 10, "Error message should be descriptive for {:?}", error);
+        }
     }
 }
