@@ -1,8 +1,12 @@
+#![no_std]
+
 //! `BufVec`: A zero-allocation vector implementation using client-provided buffers.
 //!
 //! `BufVec` provides vector, stack, and dictionary interfaces while using a single
 //! client-provided buffer for storage. All operations are bounds-checked and
 //! no internal allocations are performed.
+//!
+//! This crate is `no_std` compatible and works in embedded and constrained environments.
 //!
 //! Buffer layout: [metadata section][data section]
 //! Metadata section stores slice descriptors as (`start_offset`, length) pairs.
@@ -34,6 +38,20 @@
 //! - Sequential access patterns are most efficient
 //! - Consider max_slices parameter based on expected element count
 //! - Memory usage scales linearly with data size plus constant metadata overhead
+//!
+//! ## `no_std` Compatibility
+//!
+//! This crate is designed to work in `no_std` environments:
+//! - No heap allocations - all data stored in provided buffers
+//! - Uses only `core` library functionality
+//! - No dependency on `std::error::Error` or `std::fmt::Display`
+//! - Suitable for embedded systems and constrained environments
+//!
+//! Enable the optional `std` feature for additional functionality in std environments:
+//! ```toml
+//! [dependencies]
+//! bufvec = { version = "0.1", features = ["std"] }
+//! ```
 //!
 //! # Dictionary Convention
 //!
@@ -161,11 +179,11 @@
 //! let collected: Vec<_> = bufvec.into_iter().collect();
 //! ```
 
-mod error;
 mod core;
+mod error;
 mod iter;
 
 // Re-export public types and traits
-pub use error::BufVecError;
 pub use core::BufVec;
+pub use error::BufVecError;
 pub use iter::{BufVecIter, BufVecPairIter};
