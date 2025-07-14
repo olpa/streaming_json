@@ -98,37 +98,86 @@ data_used(&self) -> usize              // Only data bytes used (O(1))
 
 ## Error Handling
 
+BufVec uses the `thiserror` crate for comprehensive error handling while maintaining `no_std` compatibility. All errors implement both structured data access and descriptive Display messages.
+
 ### Error Types
 ```rust
+use thiserror::Error;
+
+#[derive(Error, Debug, PartialEq, Eq, Clone)]
 pub enum BufVecError {
+    #[error("Buffer overflow: requested {requested} bytes, but only {available} bytes available")]
     BufferOverflow { requested: usize, available: usize },
+    
+    #[error("Index out of bounds: index {index} is beyond vector length {length}")]
     IndexOutOfBounds { index: usize, length: usize },
+    
+    #[error("Slice limit exceeded: maximum {max_slices} slices allowed")]
     SliceLimitExceeded { max_slices: usize },
+    
+    #[error("Zero-size buffer provided where data storage is required")]
     ZeroSizeBuffer,
-    InvalidConfiguration { buffer_size: usize, max_slices: usize },
+    
+    #[error("Invalid configuration: parameter '{parameter}' has invalid value {value}")]
+    InvalidConfiguration { parameter: &'static str, value: usize },
 }
 ```
 
+### Key Error Handling Features
+- **Descriptive messages**: Each error variant includes a human-readable message via `#[error("...")]`
+- **Structured data**: Error variants include specific fields for programmatic handling
+- **`no_std` compatibility**: Uses `thiserror` with `default-features = false`
+- **Standard traits**: Implements `Error`, `Debug`, `PartialEq`, `Eq`, and `Clone`
+
 ### Error Handling Patterns
 ```rust
-// Pattern 1: Match specific errors
+// Pattern 1: Match specific errors with descriptive messages
 match bufvec.add(large_data) {
     Ok(_) => {},
     Err(BufVecError::BufferOverflow { requested, available }) => {
-        println!("Need {} bytes, have {}", requested, available);
+        println!("Error: {}", BufVecError::BufferOverflow { requested, available }); // "Buffer overflow: requested 200 bytes, but only 84 bytes available"
+        println!("Details: need {} bytes, have {}", requested, available);
     },
     Err(e) => println!("Other error: {}", e),
 }
 
-// Pattern 2: Use ? operator for propagation
+// Pattern 2: Use ? operator for error propagation
 fn process_data(bufvec: &mut BufVec, data: &[u8]) -> Result<(), BufVecError> {
-    bufvec.add(data)?;
+    bufvec.add(data)?; // Automatically propagates BufVecError with descriptive message
     Ok(())
 }
 
-// Pattern 3: Use safe variants
-if let Some(data) = bufvec.try_get(index) {
-    // Process data
+// Pattern 3: Use safe variants to avoid panics
+if let Ok(data) = bufvec.try_get(index) {
+    // Process data safely
+} else {
+    println!("Invalid index: {}", index);
+}
+
+// Pattern 4: Error logging with context
+match bufvec.add_key(key_data) {
+    Ok(_) => {},
+    Err(BufVecError::SliceLimitExceeded { max_slices }) => {
+        log::error!("Cannot add key: {}", BufVecError::SliceLimitExceeded { max_slices }); // Full descriptive message
+        log::debug!("Max slices configured: {}", max_slices); // Structured data
+    },
+    Err(e) => log::error!("Unexpected error adding key: {}", e),
+}
+
+// Pattern 5: Error recovery with detailed context
+fn robust_add(bufvec: &mut BufVec, data: &[u8]) -> Result<bool, BufVecError> {
+    match bufvec.add(data) {
+        Ok(_) => Ok(true),
+        Err(BufVecError::BufferOverflow { available, .. }) if available > data.len() / 2 => {
+            // Try adding half the data if there's some space
+            bufvec.add(&data[..available / 2])?;
+            Ok(false) // Partial success
+        },
+        Err(e) => {
+            log::warn!("Failed to add data: {}", e); // Descriptive error message
+            Err(e)
+        }
+    }
 }
 ```
 
@@ -347,9 +396,11 @@ bufvec.add(b"Connection failed")?;
 ## Best Practices
 
 ### 1. Error Handling
-- Use `?` operator for error propagation
-- Match specific error types when recovery is possible
-- Use safe variants (`try_*`) when bounds are uncertain
+- **Use `?` operator** for error propagation - errors include descriptive messages automatically
+- **Match specific error types** when recovery is possible - access both message and structured data
+- **Use safe variants** (`try_*`) when bounds are uncertain to avoid panics
+- **Log with context** - utilize both `Display` trait for messages and structured fields for details
+- **Leverage `thiserror`** - errors work seamlessly with standard error handling patterns
 
 ### 2. Buffer Management
 - Calculate buffer size conservatively: `(max_slices * 16) + (expected_data * 1.5)`
