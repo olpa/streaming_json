@@ -176,17 +176,21 @@ assert_eq!(bufvec.top(), b"web-server");      // Stack view
 
 ### Error Handling
 
+BufVec uses the `thiserror` crate for comprehensive error handling with descriptive messages while maintaining `no_std` compatibility.
+
 ```rust
 use bufvec::{BufVec, BufVecError};
 
 let mut buffer = [0u8; 100]; // Small buffer
 let mut bufvec = BufVec::new(&mut buffer, 5)?; // Few slices
 
-// Handle buffer overflow
+// Handle buffer overflow with detailed error messages
 match bufvec.add(&[0u8; 200]) { // Too large
     Ok(_) => println!("Added successfully"),
     Err(BufVecError::BufferOverflow { requested, available }) => {
-        println!("Need {} bytes, only {} available", requested, available);
+        // Error includes descriptive Display message
+        println!("Error: {}", BufVecError::BufferOverflow { requested, available }); // "Buffer overflow: requested 200 bytes, but only 84 bytes available"
+        println!("Details: need {} bytes, only {} available", requested, available);
     }
     Err(e) => println!("Other error: {}", e),
 }
@@ -196,11 +200,50 @@ for i in 0..10 {
     match bufvec.add(format!("item_{}", i).as_bytes()) {
         Ok(_) => continue,
         Err(BufVecError::SliceLimitExceeded { max_slices }) => {
+            println!("Error: {}", BufVecError::SliceLimitExceeded { max_slices }); // "Slice limit exceeded: maximum 5 slices allowed"
             println!("Reached slice limit of {}", max_slices);
             break;
         }
         Err(e) => println!("Other error: {}", e),
     }
+}
+
+// Handle index out of bounds
+match bufvec.try_get(100) {
+    Ok(data) => println!("Data: {:?}", data),
+    Err(BufVecError::IndexOutOfBounds { index, length }) => {
+        println!("Error: {}", BufVecError::IndexOutOfBounds { index, length }); // "Index out of bounds: index 100 is beyond vector length 3"
+    }
+    Err(e) => println!("Other error: {}", e),
+}
+
+// Using ? operator for error propagation
+fn process_config(data: &[&[u8]]) -> Result<BufVec, BufVecError> {
+    let mut buffer = [0u8; 1000];
+    let mut bufvec = BufVec::with_default_max_slices(&mut buffer)?;
+    
+    for item in data {
+        bufvec.add(item)?; // Automatically propagates any BufVecError
+    }
+    
+    Ok(bufvec)
+}
+
+// Error handling with safe variants
+let mut buffer = [0u8; 500];
+let mut bufvec = BufVec::with_default_max_slices(&mut buffer)?;
+
+// Safe variants return Option/Result instead of panicking
+if let Ok(data) = bufvec.try_get(0) {
+    println!("First element: {:?}", data);
+} else {
+    println!("No element at index 0");
+}
+
+if let Ok(top) = bufvec.try_top() {
+    println!("Top element: {:?}", top);
+} else {
+    println!("Stack is empty");
 }
 ```
 
@@ -309,17 +352,32 @@ assert_eq!(bufvec.get(5), b"/api/users");
 
 ## Error Types
 
+BufVec uses `thiserror` for enhanced error handling with descriptive messages:
+
 ```rust
+#[derive(Error, Debug, PartialEq, Eq, Clone)]
 pub enum BufVecError {
+    #[error("Buffer overflow: requested {requested} bytes, but only {available} bytes available")]
     BufferOverflow { requested: usize, available: usize },
+    
+    #[error("Index out of bounds: index {index} is beyond vector length {length}")]
     IndexOutOfBounds { index: usize, length: usize },
+    
+    #[error("Slice limit exceeded: maximum {max_slices} slices allowed")]
     SliceLimitExceeded { max_slices: usize },
+    
+    #[error("Zero-size buffer provided where data storage is required")]
     ZeroSizeBuffer,
-    InvalidConfiguration { buffer_size: usize, max_slices: usize },
+    
+    #[error("Invalid configuration: parameter '{parameter}' has invalid value {value}")]
+    InvalidConfiguration { parameter: &'static str, value: usize },
 }
 ```
 
-Each error provides detailed context to help with debugging and error recovery.
+Each error provides:
+- **Structured data** for programmatic handling
+- **Descriptive messages** via the `Display` trait for debugging
+- **`no_std` compatibility** while maintaining rich error information
 
 ## Safety Guarantees
 

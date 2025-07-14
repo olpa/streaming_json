@@ -9,6 +9,7 @@ keywords = ["no-std", "embedded", "vector", "zero-allocation", "buffer"]
 categories = ["no-std", "embedded", "data-structures"]
 
 [dependencies]
+thiserror = { version = "2.0", default-features = false }
 
 [features]
 default = []
