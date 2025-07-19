@@ -2,7 +2,7 @@ use crate::error::BufVecError;
 use crate::iter::{BufVecIter, BufVecPairIter};
 
 const SLICE_DESCRIPTOR_SIZE: usize = 16; // 2 * size_of::<usize>() on 64-bit
-const DEFAULT_MAX_SLICES: usize = 8;
+const DEFAULT_MAX_SLICES: usize = 32;
 
 /// A zero-allocation vector implementation using client-provided buffers
 #[derive(Debug)]
