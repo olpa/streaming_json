@@ -67,8 +67,8 @@ bufvec.push(b"third")?;
 assert_eq!(bufvec.top(), b"third");
 
 // Pop elements
-assert_eq!(bufvec.pop(), b"third");
-assert_eq!(bufvec.pop(), b"second");
+assert_eq!(bufvec.pop(), Some(b"third"));
+assert_eq!(bufvec.pop(), Some(b"second"));
 assert_eq!(bufvec.len(), 1);
 ```
 
@@ -166,7 +166,7 @@ bufvec.add(b"web-server")?;
 bufvec.push(b"processing")?;
 let state = bufvec.top();
 // ... do work ...
-bufvec.pop(); // Remove temporary state
+bufvec.pop(); // Remove temporary state (returns Option)
 
 // Final verification using all interfaces
 assert_eq!(bufvec.get(0), b"host");           // Vector access
@@ -240,6 +240,12 @@ if let Ok(data) = bufvec.try_get(0) {
     println!("No element at index 0");
 }
 
+if let Some(popped) = bufvec.pop() {
+    println!("Popped element: {:?}", popped);
+} else {
+    println!("Stack is empty");
+}
+
 if let Ok(top) = bufvec.try_top() {
     println!("Top element: {:?}", top);
 } else {
@@ -272,7 +278,7 @@ assert_eq!(bufvec.get(1), b"bob");
 
 - **add()**, **push()**: O(1) - constant time insertion
 - **get()**: O(1) - constant time access via descriptor lookup  
-- **pop()**: O(1) - constant time removal
+- **pop()**: O(1) - constant time removal, returns Option
 - **clear()**: O(1) - resets metadata only
 - **data_used()**: O(1) - optimized to use last slice position
 - **Iterator operations**: O(n) - linear traversal
@@ -397,6 +403,7 @@ let top = bufvec.top();
 
 // Safe variants (return Option/Result)
 let data = bufvec.try_get(0)?;
+let popped = bufvec.pop(); // Returns Option<&[u8]>
 let top = bufvec.try_top()?;
 ```
 

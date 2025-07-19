@@ -276,20 +276,17 @@ impl<'a> BufVec<'a> {
 
     /// Removes and returns the last slice from the vector.
     ///
-    /// # Panics
-    ///
-    /// Panics if the vector is empty or if buffer integrity is compromised.
-    #[allow(clippy::expect_used)]
-    pub fn pop(&mut self) -> &[u8] {
-        assert!(self.count > 0, "Cannot pop from empty vector");
+    /// Returns `None` if the vector is empty.
+    pub fn pop(&mut self) -> Option<&[u8]> {
+        if self.count == 0 {
+            return None;
+        }
 
         self.count -= 1;
         let (start, length) = self.get_slice_descriptor(self.count);
 
         // data_used is now automatically recalculated when needed
-        self.buffer
-            .get(start..start + length)
-            .expect("Slice bounds validated during add operation")
+        self.buffer.get(start..start + length)
     }
 
     /// Tries to remove and return the last slice from the vector.

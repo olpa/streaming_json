@@ -64,7 +64,7 @@ iter(&self) -> BufVecIter                            // Returns iterator
 ```rust
 // Adding/removing
 push(&mut self, data: &[u8]) -> Result<(), BufVecError>  // Alias for add()
-pop(&mut self) -> &[u8]                                  // Panics if empty
+pop(&mut self) -> Option<&[u8]>                          // Returns None if empty
 try_pop(&mut self) -> Result<&[u8], BufVecError>         // Safe variant
 
 // Inspection
@@ -215,8 +215,7 @@ bufvec.push(b"middle")?;
 bufvec.push(b"top")?;
 
 // Process stack
-while !bufvec.is_empty() {
-    let item = bufvec.pop();
+while let Some(item) = bufvec.pop() {
     println!("Processing: {:?}", item);
 }
 ```
@@ -281,7 +280,7 @@ bufvec.push(b"temp_state")?;      // Stack for processing state
 
 // Process using appropriate interface
 let config_pairs = bufvec.pairs().take(2).collect::<Vec<_>>();
-let temp_state = bufvec.pop();
+let temp_state = bufvec.pop(); // Returns Option<&[u8]>
 let tag_count = bufvec.len() - 4; // Remaining elements after config pairs
 ```
 
@@ -484,17 +483,17 @@ fn process_state_machine(events: &[&str], bufvec: &mut BufVec) -> Result<(), Buf
         // State transition logic
         match (current_state, event.as_bytes()) {
             (b"initial", b"start") => {
-                bufvec.pop();
+                bufvec.pop(); // Returns Option, safe to ignore
                 bufvec.push(b"running")?;
             },
             (b"running", b"pause") => {
                 bufvec.push(b"paused")?; // Keep running state below
             },
             (b"paused", b"resume") => {
-                bufvec.pop(); // Remove paused, back to running
+                bufvec.pop(); // Returns Option, safe to ignore
             },
             (b"running", b"stop") => {
-                bufvec.pop();
+                bufvec.pop(); // Returns Option, safe to ignore
                 bufvec.push(b"stopped")?;
             },
             _ => {}, // Invalid transition
