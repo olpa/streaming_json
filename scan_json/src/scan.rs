@@ -124,7 +124,7 @@ fn handle_object<T: ?Sized>(
                 if let Err(e) = end_action(baton_cell) {
                     return Err(ScanError::ActionError(
                         e,
-                        rjiter_cell.borrow().current_index(),
+                        rjiter.current_index(),
                     ));
                 }
             }
