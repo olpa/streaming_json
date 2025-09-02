@@ -1,3 +1,8 @@
+## [1.1.x] - 2025-08-xx
+
+- Fix a borrow in a error handler
+
+
 ## [1.1.0] - 2025-07-01
 
 - Change interface of the `scan` function
