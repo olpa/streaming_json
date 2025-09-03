@@ -1,8 +1,8 @@
-# BufVec Implementation Plan
+# U8Pool Implementation Plan
 
 ## Task 1: Core Structure and Buffer Management ✅ COMPLETED
 
-**Context**: Implement the foundational `BufVec` struct with buffer management capabilities. This includes the basic constructor, buffer allocation tracking, and memory layout management.
+**Context**: Implement the foundational `U8Pool` struct with buffer management capabilities. This includes the basic constructor, buffer allocation tracking, and memory layout management.
 
 **Implementation Hints**:
 - Use a single buffer slice with metadata tracking slice boundaries
@@ -24,7 +24,7 @@
 - Add foundational content to `doc/llms.txt`
 
 **Implementation Summary**:
-- Zero-allocation BufVec implementation using client-provided buffers
+- Zero-allocation U8Pool implementation using client-provided buffers
 - Fixed descriptor count configuration with 16-byte slice descriptors
 - Buffer layout: [metadata section][data section]
 - Direct slice return APIs (&[u8]) with panic behavior for bounds violations
@@ -113,7 +113,7 @@
 
 **Implementation Summary**:
 - Added helper methods: `is_key()`, `is_value()`, `has_unpaired_key()`, `pairs_count()`
-- Implemented `BufVecPairIter` that yields `(key, Option<value>)` tuples
+- Implemented `U8PoolPairIter` that yields `(key, Option<value>)` tuples
 - Handles unpaired keys by returning `None` for missing values
 - Added comprehensive test coverage for all dictionary functionality
 - Updated module documentation with dictionary convention examples
@@ -217,7 +217,7 @@
 - Update `doc/llms.txt` with error patterns
 
 **Implementation Summary**:
-- Enhanced `BufVecError` enum with detailed error information including context data
+- Enhanced `U8PoolError` enum with detailed error information including context data
 - Added structured error variants: `BufferOverflow`, `IndexOutOfBounds`, `SliceLimitExceeded`, `ZeroSizeBuffer`, `InvalidConfiguration`
 - Improved error messages with specific details (requested vs available bytes, actual indices and lengths)
 - Implemented comprehensive edge case testing: zero-size buffers, exact capacity limits, minimal buffers

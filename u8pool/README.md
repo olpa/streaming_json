@@ -1,10 +1,10 @@
-# BufVec
+# U8Pool
 
 A zero-allocation vector implementation using client-provided buffers with vector, stack, and dictionary interfaces.
 
 ## Overview
 
-`BufVec` provides a vector-like data structure that operates entirely within a client-provided buffer, performing zero heap allocations. It supports three interfaces:
+`U8Pool` provides a vector-like data structure that operates entirely within a client-provided buffer, performing zero heap allocations. It supports three interfaces:
 
 - **Vector**: Standard indexed access with `add()`, `get()`, `len()`, etc.
 - **Stack**: LIFO operations with `push()`, `pop()`, `top()`
@@ -24,28 +24,28 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-bufvec = "0.1.0"
+u8pool = "0.1.0"
 ```
 
 ### Basic Vector Usage
 
 ```rust
-use bufvec::BufVec;
+use u8pool::U8Pool;
 
 let mut buffer = [0u8; 1000];
-let mut bufvec = BufVec::with_default_max_slices(&mut buffer)?;
+let mut u8pool = U8Pool::with_default_max_slices(&mut buffer)?;
 
 // Add elements
-bufvec.add(b"hello")?;
-bufvec.add(b"world")?;
+u8pool.add(b"hello")?;
+u8pool.add(b"world")?;
 
 // Access elements
-assert_eq!(bufvec.get(0), b"hello");
-assert_eq!(bufvec.get(1), b"world");
-assert_eq!(bufvec.len(), 2);
+assert_eq!(u8pool.get(0), b"hello");
+assert_eq!(u8pool.get(1), b"world");
+assert_eq!(u8pool.len(), 2);
 
 // Iterate
-for slice in &bufvec {
+for slice in &u8pool {
     println!("{:?}", std::str::from_utf8(slice).unwrap());
 }
 ```
@@ -53,41 +53,41 @@ for slice in &bufvec {
 ### Stack Interface
 
 ```rust
-use bufvec::BufVec;
+use u8pool::U8Pool;
 
 let mut buffer = [0u8; 1000];
-let mut bufvec = BufVec::with_default_max_slices(&mut buffer)?;
+let mut u8pool = U8Pool::with_default_max_slices(&mut buffer)?;
 
 // Push elements
-bufvec.push(b"first")?;
-bufvec.push(b"second")?;
-bufvec.push(b"third")?;
+u8pool.push(b"first")?;
+u8pool.push(b"second")?;
+u8pool.push(b"third")?;
 
 // Peek at top
-assert_eq!(bufvec.top(), b"third");
+assert_eq!(u8pool.top(), b"third");
 
 // Pop elements
-assert_eq!(bufvec.pop(), Some(b"third"));
-assert_eq!(bufvec.pop(), Some(b"second"));
-assert_eq!(bufvec.len(), 1);
+assert_eq!(u8pool.pop(), Some(b"third"));
+assert_eq!(u8pool.pop(), Some(b"second"));
+assert_eq!(u8pool.len(), 1);
 ```
 
 ### Dictionary Interface
 
 ```rust
-use bufvec::BufVec;
+use u8pool::U8Pool;
 
 let mut buffer = [0u8; 1000];
-let mut bufvec = BufVec::with_default_max_slices(&mut buffer)?;
+let mut u8pool = U8Pool::with_default_max_slices(&mut buffer)?;
 
 // Add key-value pairs
-bufvec.add_key(b"name")?;
-bufvec.add_value(b"Alice")?;
-bufvec.add_key(b"age")?;
-bufvec.add_value(b"30")?;
+u8pool.add_key(b"name")?;
+u8pool.add_value(b"Alice")?;
+u8pool.add_key(b"age")?;
+u8pool.add_value(b"30")?;
 
 // Iterate over pairs
-for (key, value) in bufvec.pairs() {
+for (key, value) in u8pool.pairs() {
     match value {
         Some(val) => println!("{:?} = {:?}", 
                              std::str::from_utf8(key).unwrap(),
@@ -98,8 +98,8 @@ for (key, value) in bufvec.pairs() {
 }
 
 // Check dictionary properties
-assert_eq!(bufvec.pairs_count(), 2);
-assert!(!bufvec.has_unpaired_key());
+assert_eq!(u8pool.pairs_count(), 2);
+assert!(!u8pool.has_unpaired_key());
 ```
 
 ## Buffer Management
@@ -124,22 +124,22 @@ Example for 100 slices with average 50 bytes per slice:
 ```rust
 let buffer_size = (100 * 16) + (100 * 50); // 6600 bytes
 let mut buffer = vec![0u8; buffer_size];
-let mut bufvec = BufVec::new(&mut buffer, 100)?;
+let mut u8pool = U8Pool::new(&mut buffer, 100)?;
 ```
 
 ### Memory Efficiency
 
 ```rust
 let mut buffer = [0u8; 1000];
-let mut bufvec = BufVec::with_default_max_slices(&mut buffer)?;
+let mut u8pool = U8Pool::with_default_max_slices(&mut buffer)?;
 
-bufvec.add(b"data")?;
+u8pool.add(b"data")?;
 
 // Check memory usage
-println!("Total capacity: {}", bufvec.buffer_capacity());
-println!("Used bytes: {}", bufvec.used_bytes());
-println!("Available bytes: {}", bufvec.available_bytes());
-println!("Data used: {}", bufvec.data_used());
+println!("Total capacity: {}", u8pool.buffer_capacity());
+println!("Used bytes: {}", u8pool.used_bytes());
+println!("Available bytes: {}", u8pool.available_bytes());
+println!("Data used: {}", u8pool.data_used());
 ```
 
 ## Advanced Usage
@@ -147,49 +147,49 @@ println!("Data used: {}", bufvec.data_used());
 ### Mixed Interface Usage
 
 ```rust
-use bufvec::BufVec;
+use u8pool::U8Pool;
 
 let mut buffer = [0u8; 2000];
-let mut bufvec = BufVec::new(&mut buffer, 50)?;
+let mut u8pool = U8Pool::new(&mut buffer, 50)?;
 
 // Use as configuration parser
-bufvec.add_key(b"host")?;
-bufvec.add_value(b"localhost")?;
-bufvec.add_key(b"port")?;
-bufvec.add_value(b"8080")?;
+u8pool.add_key(b"host")?;
+u8pool.add_value(b"localhost")?;
+u8pool.add_key(b"port")?;
+u8pool.add_value(b"8080")?;
 
 // Add tags using vector interface
-bufvec.add(b"production")?;
-bufvec.add(b"web-server")?;
+u8pool.add(b"production")?;
+u8pool.add(b"web-server")?;
 
 // Use stack for temporary processing
-bufvec.push(b"processing")?;
-let state = bufvec.top();
+u8pool.push(b"processing")?;
+let state = u8pool.top();
 // ... do work ...
-bufvec.pop(); // Remove temporary state (returns Option)
+u8pool.pop(); // Remove temporary state (returns Option)
 
 // Final verification using all interfaces
-assert_eq!(bufvec.get(0), b"host");           // Vector access
-assert_eq!(bufvec.pairs_count(), 3);          // Dictionary view
-assert_eq!(bufvec.top(), b"web-server");      // Stack view
+assert_eq!(u8pool.get(0), b"host");           // Vector access
+assert_eq!(u8pool.pairs_count(), 3);          // Dictionary view
+assert_eq!(u8pool.top(), b"web-server");      // Stack view
 ```
 
 ### Error Handling
 
-BufVec uses the `thiserror` crate for comprehensive error handling with descriptive messages while maintaining `no_std` compatibility.
+U8Pool uses the `thiserror` crate for comprehensive error handling with descriptive messages while maintaining `no_std` compatibility.
 
 ```rust
-use bufvec::{BufVec, BufVecError};
+use u8pool::{U8Pool, U8PoolError};
 
 let mut buffer = [0u8; 100]; // Small buffer
-let mut bufvec = BufVec::new(&mut buffer, 5)?; // Few slices
+let mut u8pool = U8Pool::new(&mut buffer, 5)?; // Few slices
 
 // Handle buffer overflow with detailed error messages
-match bufvec.add(&[0u8; 200]) { // Too large
+match u8pool.add(&[0u8; 200]) { // Too large
     Ok(_) => println!("Added successfully"),
-    Err(BufVecError::BufferOverflow { requested, available }) => {
+    Err(U8PoolError::BufferOverflow { requested, available }) => {
         // Error includes descriptive Display message
-        println!("Error: {}", BufVecError::BufferOverflow { requested, available }); // "Buffer overflow: requested 200 bytes, but only 84 bytes available"
+        println!("Error: {}", U8PoolError::BufferOverflow { requested, available }); // "Buffer overflow: requested 200 bytes, but only 84 bytes available"
         println!("Details: need {} bytes, only {} available", requested, available);
     }
     Err(e) => println!("Other error: {}", e),
@@ -197,10 +197,10 @@ match bufvec.add(&[0u8; 200]) { // Too large
 
 // Handle slice limit exceeded
 for i in 0..10 {
-    match bufvec.add(format!("item_{}", i).as_bytes()) {
+    match u8pool.add(format!("item_{}", i).as_bytes()) {
         Ok(_) => continue,
-        Err(BufVecError::SliceLimitExceeded { max_slices }) => {
-            println!("Error: {}", BufVecError::SliceLimitExceeded { max_slices }); // "Slice limit exceeded: maximum 5 slices allowed"
+        Err(U8PoolError::SliceLimitExceeded { max_slices }) => {
+            println!("Error: {}", U8PoolError::SliceLimitExceeded { max_slices }); // "Slice limit exceeded: maximum 5 slices allowed"
             println!("Reached slice limit of {}", max_slices);
             break;
         }
@@ -209,44 +209,44 @@ for i in 0..10 {
 }
 
 // Handle index out of bounds
-match bufvec.try_get(100) {
+match u8pool.try_get(100) {
     Ok(data) => println!("Data: {:?}", data),
-    Err(BufVecError::IndexOutOfBounds { index, length }) => {
-        println!("Error: {}", BufVecError::IndexOutOfBounds { index, length }); // "Index out of bounds: index 100 is beyond vector length 3"
+    Err(U8PoolError::IndexOutOfBounds { index, length }) => {
+        println!("Error: {}", U8PoolError::IndexOutOfBounds { index, length }); // "Index out of bounds: index 100 is beyond vector length 3"
     }
     Err(e) => println!("Other error: {}", e),
 }
 
 // Using ? operator for error propagation
-fn process_config(data: &[&[u8]]) -> Result<BufVec, BufVecError> {
+fn process_config(data: &[&[u8]]) -> Result<U8Pool, U8PoolError> {
     let mut buffer = [0u8; 1000];
-    let mut bufvec = BufVec::with_default_max_slices(&mut buffer)?;
+    let mut u8pool = U8Pool::with_default_max_slices(&mut buffer)?;
     
     for item in data {
-        bufvec.add(item)?; // Automatically propagates any BufVecError
+        u8pool.add(item)?; // Automatically propagates any U8PoolError
     }
     
-    Ok(bufvec)
+    Ok(u8pool)
 }
 
 // Error handling with safe variants
 let mut buffer = [0u8; 500];
-let mut bufvec = BufVec::with_default_max_slices(&mut buffer)?;
+let mut u8pool = U8Pool::with_default_max_slices(&mut buffer)?;
 
 // Safe variants return Option/Result instead of panicking
-if let Ok(data) = bufvec.try_get(0) {
+if let Ok(data) = u8pool.try_get(0) {
     println!("First element: {:?}", data);
 } else {
     println!("No element at index 0");
 }
 
-if let Some(popped) = bufvec.pop() {
+if let Some(popped) = u8pool.pop() {
     println!("Popped element: {:?}", popped);
 } else {
     println!("Stack is empty");
 }
 
-if let Ok(top) = bufvec.try_top() {
+if let Ok(top) = u8pool.try_top() {
     println!("Top element: {:?}", top);
 } else {
     println!("Stack is empty");
@@ -257,19 +257,19 @@ if let Ok(top) = bufvec.try_top() {
 
 ```rust
 let mut buffer = [0u8; 500];
-let mut bufvec = BufVec::with_default_max_slices(&mut buffer)?;
+let mut u8pool = U8Pool::with_default_max_slices(&mut buffer)?;
 
 // Smart key replacement
-bufvec.add_key(b"name")?;
-bufvec.add_key(b"username")?; // Replaces "name" with "username"
-bufvec.add_value(b"alice")?;
+u8pool.add_key(b"name")?;
+u8pool.add_key(b"username")?; // Replaces "name" with "username"
+u8pool.add_value(b"alice")?;
 
 // Smart value replacement  
-bufvec.add_value(b"bob")?; // Replaces "alice" with "bob"
+u8pool.add_value(b"bob")?; // Replaces "alice" with "bob"
 
-assert_eq!(bufvec.len(), 2); // Only 2 elements: key and value
-assert_eq!(bufvec.get(0), b"username");
-assert_eq!(bufvec.get(1), b"bob");
+assert_eq!(u8pool.len(), 2); // Only 2 elements: key and value
+assert_eq!(u8pool.get(0), b"username");
+assert_eq!(u8pool.get(1), b"bob");
 ```
 
 ## Performance Characteristics
@@ -301,29 +301,29 @@ assert_eq!(bufvec.get(1), b"bob");
 ### JSON-like Data Parsing
 
 ```rust
-use bufvec::BufVec;
+use u8pool::U8Pool;
 
 let mut buffer = [0u8; 1000];
-let mut bufvec = BufVec::new(&mut buffer, 20)?;
+let mut u8pool = U8Pool::new(&mut buffer, 20)?;
 
 // Parse: {"name": "alice", "tags": ["dev", "rust"]}
-bufvec.add_key(b"name")?;
-bufvec.add_value(b"alice")?;
+u8pool.add_key(b"name")?;
+u8pool.add_value(b"alice")?;
 
-bufvec.add_key(b"tags")?;
-bufvec.add_value(b"dev")?;
-bufvec.add(b"rust")?; // Additional tag
+u8pool.add_key(b"tags")?;
+u8pool.add_value(b"dev")?;
+u8pool.add(b"rust")?; // Additional tag
 
 // Process parsed data
-for (key, value) in bufvec.pairs() {
+for (key, value) in u8pool.pairs() {
     if key == b"name" {
         println!("Name: {:?}", std::str::from_utf8(value.unwrap()).unwrap());
     }
 }
 
 // Handle unpaired elements
-if bufvec.has_unpaired_key() {
-    let last_item = bufvec.get(bufvec.len() - 1);
+if u8pool.has_unpaired_key() {
+    let last_item = u8pool.get(u8pool.len() - 1);
     println!("Extra tag: {:?}", std::str::from_utf8(last_item).unwrap());
 }
 ```
@@ -331,38 +331,38 @@ if bufvec.has_unpaired_key() {
 ### Protocol Header Parsing
 
 ```rust
-use bufvec::BufVec;
+use u8pool::U8Pool;
 
 let mut buffer = [0u8; 800];
-let mut bufvec = BufVec::new(&mut buffer, 15)?;
+let mut u8pool = U8Pool::new(&mut buffer, 15)?;
 
 // Parse HTTP headers
-bufvec.add_key(b"Content-Type")?;
-bufvec.add_value(b"application/json")?;
-bufvec.add_key(b"Content-Length")?;
-bufvec.add_value(b"256")?;
+u8pool.add_key(b"Content-Type")?;
+u8pool.add_value(b"application/json")?;
+u8pool.add_key(b"Content-Length")?;
+u8pool.add_value(b"256")?;
 
 // Add method and path
-bufvec.add(b"POST")?;
-bufvec.add(b"/api/users")?;
+u8pool.add(b"POST")?;
+u8pool.add(b"/api/users")?;
 
 // Extract headers using dictionary interface
-let headers: Vec<_> = bufvec.pairs().take(2).collect();
+let headers: Vec<_> = u8pool.pairs().take(2).collect();
 assert_eq!(headers[0].0, b"Content-Type");
 assert_eq!(headers[0].1, Some(&b"application/json"[..]));
 
 // Extract method and path using vector interface
-assert_eq!(bufvec.get(4), b"POST");
-assert_eq!(bufvec.get(5), b"/api/users");
+assert_eq!(u8pool.get(4), b"POST");
+assert_eq!(u8pool.get(5), b"/api/users");
 ```
 
 ## Error Types
 
-BufVec uses `thiserror` for enhanced error handling with descriptive messages:
+U8Pool uses `thiserror` for enhanced error handling with descriptive messages:
 
 ```rust
 #[derive(Error, Debug, PartialEq, Eq, Clone)]
-pub enum BufVecError {
+pub enum U8PoolError {
     #[error("Buffer overflow: requested {requested} bytes, but only {available} bytes available")]
     BufferOverflow { requested: usize, available: usize },
     
@@ -398,13 +398,13 @@ Most operations have both panicking and safe variants:
 
 ```rust
 // Panicking variants (for when you know bounds are correct)
-let data = bufvec.get(0);
-let top = bufvec.top();
+let data = u8pool.get(0);
+let top = u8pool.top();
 
 // Safe variants (return Option/Result)
-let data = bufvec.try_get(0)?;
-let popped = bufvec.pop(); // Returns Option<&[u8]>
-let top = bufvec.try_top()?;
+let data = u8pool.try_get(0)?;
+let popped = u8pool.pop(); // Returns Option<&[u8]>
+let top = u8pool.try_top()?;
 ```
 
 ## Contributing

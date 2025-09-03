@@ -1,12 +1,12 @@
-use bufvec::{BufVec, BufVecError};
+use u8pool::{U8Pool, U8PoolError};
 
 #[test]
 fn test_error_zero_max_slices() {
-    let mut buffer = [0u8; 200];
-    let result = BufVec::new(&mut buffer, 0);
+    let mut buffer = [0u8; 600];
+    let result = U8Pool::new(&mut buffer, 0);
     assert_eq!(
         result.unwrap_err(),
-        BufVecError::InvalidConfiguration {
+        U8PoolError::InvalidConfiguration {
             parameter: "max_slices",
             value: 0
         }
@@ -16,17 +16,17 @@ fn test_error_zero_max_slices() {
 #[test]
 fn test_error_zero_size_buffer() {
     let mut buffer = [];
-    let result = BufVec::new(&mut buffer, 1);
-    assert_eq!(result.unwrap_err(), BufVecError::ZeroSizeBuffer);
+    let result = U8Pool::new(&mut buffer, 1);
+    assert_eq!(result.unwrap_err(), U8PoolError::ZeroSizeBuffer);
 }
 
 #[test]
 fn test_error_buffer_too_small_for_metadata() {
     let mut buffer = [0u8; 10]; // Too small for even 1 slice (16 bytes needed + 1 for data)
-    let result = BufVec::new(&mut buffer, 1);
+    let result = U8Pool::new(&mut buffer, 1);
     assert_eq!(
         result.unwrap_err(),
-        BufVecError::BufferTooSmall {
+        U8PoolError::BufferTooSmall {
             required: 17, // 16 bytes metadata + 1 byte data minimum
             provided: 10
         }
@@ -35,17 +35,17 @@ fn test_error_buffer_too_small_for_metadata() {
 
 #[test]
 fn test_error_detailed_buffer_overflow() {
-    let mut buffer = [0u8; 150];
-    let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+    let mut buffer = [0u8; 600];
+    let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
     // Fill buffer to near capacity
-    bufvec.add(b"small").unwrap();
+    u8pool.add(b"small").unwrap();
 
     // Try to add data that won't fit
     let large_data = vec![b'x'; 100];
-    let result = bufvec.add(&large_data);
+    let result = u8pool.add(&large_data);
     match result.unwrap_err() {
-        BufVecError::BufferOverflow {
+        U8PoolError::BufferOverflow {
             requested,
             available,
         } => {
@@ -58,15 +58,15 @@ fn test_error_detailed_buffer_overflow() {
 
 #[test]
 fn test_error_detailed_index_out_of_bounds() {
-    let mut buffer = [0u8; 200];
-    let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+    let mut buffer = [0u8; 600];
+    let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
-    bufvec.add(b"test").unwrap();
+    u8pool.add(b"test").unwrap();
 
-    let result = bufvec.try_get(5);
+    let result = u8pool.try_get(5);
     assert_eq!(
         result.unwrap_err(),
-        BufVecError::IndexOutOfBounds {
+        U8PoolError::IndexOutOfBounds {
             index: 5,
             length: 1
         }
@@ -75,43 +75,43 @@ fn test_error_detailed_index_out_of_bounds() {
 
 #[test]
 fn test_error_slice_limit_exceeded() {
-    let mut buffer = [0u8; 200];
-    let mut bufvec = BufVec::new(&mut buffer, 2).unwrap(); // Only 2 slices allowed
+    let mut buffer = [0u8; 600];
+    let mut u8pool = U8Pool::new(&mut buffer, 2).unwrap(); // Only 2 slices allowed
 
-    bufvec.add(b"first").unwrap();
-    bufvec.add(b"second").unwrap();
+    u8pool.add(b"first").unwrap();
+    u8pool.add(b"second").unwrap();
 
-    let result = bufvec.add(b"third");
+    let result = u8pool.add(b"third");
     assert_eq!(
         result.unwrap_err(),
-        BufVecError::SliceLimitExceeded { max_slices: 2 }
+        U8PoolError::SliceLimitExceeded { max_slices: 2 }
     );
 }
 
 #[test]
 fn test_error_empty_vector_operations() {
-    let mut buffer = [0u8; 200];
-    let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+    let mut buffer = [0u8; 600];
+    let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
     // Test try_pop on empty vector
-    assert_eq!(bufvec.try_pop().unwrap_err(), BufVecError::EmptyVector);
+    assert_eq!(u8pool.try_pop().unwrap_err(), U8PoolError::EmptyVector);
 
     // Test try_top on empty vector
-    assert_eq!(bufvec.try_top().unwrap_err(), BufVecError::EmptyVector);
+    assert_eq!(u8pool.try_top().unwrap_err(), U8PoolError::EmptyVector);
 }
 
 #[test]
 fn test_error_messages_quality() {
     let mut buffer = [0u8; 10];
-    let error = BufVec::new(&mut buffer, 1).unwrap_err();
+    let error = U8Pool::new(&mut buffer, 1).unwrap_err();
     let message = format!("{:?}", error);
     assert!(message.contains("BufferTooSmall"));
     assert!(message.contains("17"));
     assert!(message.contains("10"));
 
-    let mut buffer = [0u8; 200];
-    let bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
-    let error = bufvec.try_get(0).unwrap_err();
+    let mut buffer = [0u8; 600];
+    let u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+    let error = u8pool.try_get(0).unwrap_err();
     let message = format!("{:?}", error);
     assert!(message.contains("IndexOutOfBounds"));
     assert!(message.contains("0"));
@@ -119,7 +119,7 @@ fn test_error_messages_quality() {
 
 #[test]
 fn test_error_types_implement_standard_traits() {
-    let error = BufVecError::EmptyVector;
+    let error = U8PoolError::EmptyVector;
 
     // Test Debug
     let debug_str = format!("{:?}", error);
@@ -134,8 +134,8 @@ fn test_error_types_implement_standard_traits() {
     assert_eq!(error, cloned);
 
     // Test PartialEq
-    assert_eq!(error, BufVecError::EmptyVector);
-    assert_ne!(error, BufVecError::ZeroSizeBuffer);
+    assert_eq!(error, U8PoolError::EmptyVector);
+    assert_ne!(error, U8PoolError::ZeroSizeBuffer);
 
     // Note: Error trait not available in no_std
 }
@@ -144,22 +144,22 @@ fn test_error_types_implement_standard_traits() {
 fn test_comprehensive_error_scenarios() {
     // Test all error variants have proper error messages
     let errors = [
-        BufVecError::BufferOverflow {
+        U8PoolError::BufferOverflow {
             requested: 100,
             available: 50,
         },
-        BufVecError::IndexOutOfBounds {
+        U8PoolError::IndexOutOfBounds {
             index: 5,
             length: 2,
         },
-        BufVecError::EmptyVector,
-        BufVecError::BufferTooSmall {
+        U8PoolError::EmptyVector,
+        U8PoolError::BufferTooSmall {
             required: 100,
             provided: 50,
         },
-        BufVecError::SliceLimitExceeded { max_slices: 8 },
-        BufVecError::ZeroSizeBuffer,
-        BufVecError::InvalidConfiguration {
+        U8PoolError::SliceLimitExceeded { max_slices: 8 },
+        U8PoolError::ZeroSizeBuffer,
+        U8PoolError::InvalidConfiguration {
             parameter: "test",
             value: 0,
         },

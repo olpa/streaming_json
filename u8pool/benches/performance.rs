@@ -1,4 +1,4 @@
-use bufvec::BufVec;
+use u8pool::U8Pool;
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 
 fn bench_sequential_add(c: &mut Criterion) {
@@ -12,14 +12,14 @@ fn bench_sequential_add(c: &mut Criterion) {
             |b, &size| {
                 b.iter(|| {
                     let mut buffer = vec![0u8; size * 100];
-                    let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+                    let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
                     for i in 0..size {
                         let data = format!("element_{}", i);
-                        black_box(bufvec.add(data.as_bytes()).unwrap());
+                        black_box(u8pool.add(data.as_bytes()).unwrap());
                     }
 
-                    black_box(bufvec.len())
+                    black_box(u8pool.len())
                 });
             },
         );
@@ -37,17 +37,17 @@ fn bench_random_access(c: &mut Criterion) {
             size,
             |b, &size| {
                 let mut buffer = vec![0u8; size * 100];
-                let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+                let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
                 // Pre-populate the buffer
                 for i in 0..size {
                     let data = format!("element_{}", i);
-                    bufvec.add(data.as_bytes()).unwrap();
+                    u8pool.add(data.as_bytes()).unwrap();
                 }
 
                 b.iter(|| {
                     for i in 0..size {
-                        black_box(bufvec.get(i));
+                        black_box(u8pool.get(i));
                     }
                 });
             },
@@ -66,16 +66,16 @@ fn bench_iterator_performance(c: &mut Criterion) {
             size,
             |b, &size| {
                 let mut buffer = vec![0u8; size * 100];
-                let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+                let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
                 // Pre-populate the buffer
                 for i in 0..size {
                     let data = format!("element_{}", i);
-                    bufvec.add(data.as_bytes()).unwrap();
+                    u8pool.add(data.as_bytes()).unwrap();
                 }
 
                 b.iter(|| {
-                    for slice in black_box(&bufvec) {
+                    for slice in black_box(&u8pool) {
                         black_box(slice);
                     }
                 });
@@ -95,18 +95,18 @@ fn bench_dictionary_operations(c: &mut Criterion) {
             pairs,
             |b, &pairs| {
                 let mut buffer = vec![0u8; pairs * 200];
-                let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+                let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
                 // Pre-populate with key-value pairs
                 for i in 0..pairs {
                     let key = format!("key_{}", i);
                     let value = format!("value_{}", i);
-                    bufvec.add(key.as_bytes()).unwrap();
-                    bufvec.add(value.as_bytes()).unwrap();
+                    u8pool.add(key.as_bytes()).unwrap();
+                    u8pool.add(value.as_bytes()).unwrap();
                 }
 
                 b.iter(|| {
-                    for (key, value) in black_box(bufvec.pairs()) {
+                    for (key, value) in black_box(u8pool.pairs()) {
                         black_box((key, value));
                     }
                 });
@@ -127,17 +127,17 @@ fn bench_stack_operations(c: &mut Criterion) {
             |b, &size| {
                 b.iter(|| {
                     let mut buffer = vec![0u8; size * 100];
-                    let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+                    let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
                     // Push elements
                     for i in 0..size {
                         let data = format!("element_{}", i);
-                        black_box(bufvec.push(data.as_bytes()).unwrap());
+                        black_box(u8pool.push(data.as_bytes()).unwrap());
                     }
 
                     // Pop elements
                     for _ in 0..size {
-                        black_box(bufvec.pop());
+                        black_box(u8pool.pop());
                     }
                 });
             },
@@ -151,17 +151,17 @@ fn bench_memory_usage(c: &mut Criterion) {
 
     group.bench_function("data_used_calculation", |b| {
         let mut buffer = vec![0u8; 10000];
-        let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+        let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
         // Add many elements
         for i in 0..100 {
             let data = format!("element_with_longer_content_{}", i);
-            bufvec.add(data.as_bytes()).unwrap();
+            u8pool.add(data.as_bytes()).unwrap();
         }
 
         b.iter(|| {
-            black_box(bufvec.used_bytes());
-            black_box(bufvec.available_bytes());
+            black_box(u8pool.used_bytes());
+            black_box(u8pool.available_bytes());
         });
     });
 
@@ -179,15 +179,15 @@ fn bench_large_elements(c: &mut Criterion) {
             |b, &element_size| {
                 b.iter(|| {
                     let mut buffer = vec![0u8; element_size * 20];
-                    let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+                    let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
                     let large_data = vec![b'x'; element_size];
 
                     for _ in 0..10 {
-                        black_box(bufvec.add(&large_data).unwrap());
+                        black_box(u8pool.add(&large_data).unwrap());
                     }
 
-                    black_box(bufvec.len())
+                    black_box(u8pool.len())
                 });
             },
         );

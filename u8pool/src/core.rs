@@ -1,42 +1,42 @@
-use crate::error::BufVecError;
-use crate::iter::{BufVecIter, BufVecPairIter};
+use crate::error::U8PoolError;
+use crate::iter::{U8PoolIter, U8PoolPairIter};
 
 const SLICE_DESCRIPTOR_SIZE: usize = 16; // 2 * size_of::<usize>() on 64-bit
 const DEFAULT_MAX_SLICES: usize = 32;
 
 /// A zero-allocation vector implementation using client-provided buffers
 #[derive(Debug)]
-pub struct BufVec<'a> {
+pub struct U8Pool<'a> {
     buffer: &'a mut [u8],
     count: usize,
     max_slices: usize,
 }
 
-impl<'a> BufVec<'a> {
-    /// Creates a new `BufVec` with the specified maximum number of slices.
+impl<'a> U8Pool<'a> {
+    /// Creates a new `U8Pool` with the specified maximum number of slices.
     ///
     /// # Errors
     ///
-    /// Returns `BufVecError::BufferTooSmall` if:
+    /// Returns `U8PoolError::BufferTooSmall` if:
     /// - `max_slices` is 0
     /// - The buffer is too small to hold the metadata for `max_slices`
-    pub fn new(buffer: &'a mut [u8], max_slices: usize) -> Result<Self, BufVecError> {
+    pub fn new(buffer: &'a mut [u8], max_slices: usize) -> Result<Self, U8PoolError> {
         if max_slices == 0 {
-            return Err(BufVecError::InvalidConfiguration {
+            return Err(U8PoolError::InvalidConfiguration {
                 parameter: "max_slices",
                 value: max_slices,
             });
         }
 
         if buffer.is_empty() {
-            return Err(BufVecError::ZeroSizeBuffer);
+            return Err(U8PoolError::ZeroSizeBuffer);
         }
 
         let metadata_space = max_slices * SLICE_DESCRIPTOR_SIZE;
         let min_required = metadata_space + 1; // At least 1 byte for data
 
         if buffer.len() < min_required {
-            return Err(BufVecError::BufferTooSmall {
+            return Err(U8PoolError::BufferTooSmall {
                 required: min_required,
                 provided: buffer.len(),
             });
@@ -64,12 +64,12 @@ impl<'a> BufVec<'a> {
         last_start + last_length - self.data_start()
     }
 
-    /// Creates a new `BufVec` with the default maximum number of slices (8).
+    /// Creates a new `U8Pool` with the default maximum number of slices (8).
     ///
     /// # Errors
     ///
-    /// Returns `BufVecError::BufferTooSmall` if the buffer is too small.
-    pub fn with_default_max_slices(buffer: &'a mut [u8]) -> Result<Self, BufVecError> {
+    /// Returns `U8PoolError::BufferTooSmall` if the buffer is too small.
+    pub fn with_default_max_slices(buffer: &'a mut [u8]) -> Result<Self, U8PoolError> {
         Self::new(buffer, DEFAULT_MAX_SLICES)
     }
 
@@ -103,9 +103,9 @@ impl<'a> BufVec<'a> {
         self.max_slices
     }
 
-    fn check_bounds(&self, index: usize) -> Result<(), BufVecError> {
+    fn check_bounds(&self, index: usize) -> Result<(), U8PoolError> {
         if index >= self.count {
-            Err(BufVecError::IndexOutOfBounds {
+            Err(U8PoolError::IndexOutOfBounds {
                 index,
                 length: self.count,
             })
@@ -114,10 +114,10 @@ impl<'a> BufVec<'a> {
         }
     }
 
-    fn ensure_capacity(&self, additional_bytes: usize) -> Result<(), BufVecError> {
+    fn ensure_capacity(&self, additional_bytes: usize) -> Result<(), U8PoolError> {
         // Check if we've reached the maximum number of slices
         if self.count >= self.max_slices {
-            return Err(BufVecError::SliceLimitExceeded {
+            return Err(U8PoolError::SliceLimitExceeded {
                 max_slices: self.max_slices,
             });
         }
@@ -125,7 +125,7 @@ impl<'a> BufVec<'a> {
         // Check if we have enough space for the additional bytes
         let available_data_space = self.buffer.len() - self.data_start() - self.data_used();
         if additional_bytes > available_data_space {
-            return Err(BufVecError::BufferOverflow {
+            return Err(U8PoolError::BufferOverflow {
                 requested: additional_bytes,
                 available: available_data_space,
             });
@@ -188,13 +188,13 @@ impl<'a> BufVec<'a> {
     ///
     /// # Errors
     ///
-    /// Returns `BufVecError::IndexOutOfBounds` if `index` is out of bounds.
+    /// Returns `U8PoolError::IndexOutOfBounds` if `index` is out of bounds.
     ///
     /// # Panics
     ///
     /// May panic if buffer integrity is compromised (internal validation failure).
     #[allow(clippy::expect_used)]
-    pub fn try_get(&self, index: usize) -> Result<&[u8], BufVecError> {
+    pub fn try_get(&self, index: usize) -> Result<&[u8], U8PoolError> {
         self.check_bounds(index)?;
         let (start, length) = self.get_slice_descriptor(index);
         Ok(self
@@ -207,7 +207,7 @@ impl<'a> BufVec<'a> {
     ///
     /// # Errors
     ///
-    /// Returns `BufVecError::BufferOverflow` if:
+    /// Returns `U8PoolError::BufferOverflow` if:
     /// - The maximum number of slices has been reached
     /// - There is insufficient space in the buffer for the data
     ///
@@ -215,7 +215,7 @@ impl<'a> BufVec<'a> {
     ///
     /// May panic if buffer integrity is compromised (internal validation failure).
     #[allow(clippy::expect_used)]
-    pub fn add(&mut self, data: &[u8]) -> Result<(), BufVecError> {
+    pub fn add(&mut self, data: &[u8]) -> Result<(), U8PoolError> {
         self.ensure_capacity(data.len())?;
 
         let start = self.data_start() + self.data_used();
@@ -235,14 +235,14 @@ impl<'a> BufVec<'a> {
     ///
     /// # Errors
     ///
-    /// Returns `BufVecError::BufferOverflow` if:
+    /// Returns `U8PoolError::BufferOverflow` if:
     /// - The maximum number of slices has been reached
     /// - There is insufficient space in the buffer for the data
     ///
     /// # Panics
     ///
     /// May panic if buffer integrity is compromised (internal validation failure).
-    pub fn push(&mut self, data: &[u8]) -> Result<(), BufVecError> {
+    pub fn push(&mut self, data: &[u8]) -> Result<(), U8PoolError> {
         self.add(data)
     }
 
@@ -261,10 +261,10 @@ impl<'a> BufVec<'a> {
     ///
     /// # Errors
     ///
-    /// Returns `BufVecError::EmptyVector` if the stack is empty.
-    pub fn try_top(&self) -> Result<&[u8], BufVecError> {
+    /// Returns `U8PoolError::EmptyVector` if the stack is empty.
+    pub fn try_top(&self) -> Result<&[u8], U8PoolError> {
         if self.count == 0 {
-            return Err(BufVecError::EmptyVector);
+            return Err(U8PoolError::EmptyVector);
         }
         Ok(self.get(self.count - 1))
     }
@@ -293,15 +293,15 @@ impl<'a> BufVec<'a> {
     ///
     /// # Errors
     ///
-    /// Returns `BufVecError::EmptyVector` if the vector is empty.
+    /// Returns `U8PoolError::EmptyVector` if the vector is empty.
     ///
     /// # Panics
     ///
     /// May panic if buffer integrity is compromised (internal validation failure).
     #[allow(clippy::expect_used)]
-    pub fn try_pop(&mut self) -> Result<&[u8], BufVecError> {
+    pub fn try_pop(&mut self) -> Result<&[u8], U8PoolError> {
         if self.count == 0 {
-            return Err(BufVecError::EmptyVector);
+            return Err(U8PoolError::EmptyVector);
         }
 
         self.count -= 1;
@@ -316,7 +316,7 @@ impl<'a> BufVec<'a> {
 
     /// Returns an iterator over the slices in the vector.
     #[must_use]
-    pub fn iter(&self) -> BufVecIter<'_> {
+    pub fn iter(&self) -> U8PoolIter<'_> {
         self.into_iter()
     }
 
@@ -346,9 +346,9 @@ impl<'a> BufVec<'a> {
 
     /// Returns an iterator over key-value pairs.
     #[must_use]
-    pub fn pairs(&self) -> BufVecPairIter<'_> {
-        BufVecPairIter {
-            bufvec: self,
+    pub fn pairs(&self) -> U8PoolPairIter<'_> {
+        U8PoolPairIter {
+            u8pool: self,
             current_pair: 0,
         }
     }
@@ -357,14 +357,14 @@ impl<'a> BufVec<'a> {
     ///
     /// # Errors
     ///
-    /// Returns `BufVecError::BufferOverflow` if:
+    /// Returns `U8PoolError::BufferOverflow` if:
     /// - The maximum number of slices has been reached and replacement is not possible
     /// - There is insufficient space in the buffer for the data and replacement is not possible
     ///
     /// # Panics
     ///
     /// May panic if buffer integrity is compromised (internal validation failure).
-    pub fn add_key(&mut self, data: &[u8]) -> Result<(), BufVecError> {
+    pub fn add_key(&mut self, data: &[u8]) -> Result<(), U8PoolError> {
         if self.is_empty() || !self.has_unpaired_key() {
             // Empty vector or last element is a value, so add normally
             self.add(data)
@@ -378,14 +378,14 @@ impl<'a> BufVec<'a> {
     ///
     /// # Errors
     ///
-    /// Returns `BufVecError::BufferOverflow` if:
+    /// Returns `U8PoolError::BufferOverflow` if:
     /// - The maximum number of slices has been reached and replacement is not possible
     /// - There is insufficient space in the buffer for the data and replacement is not possible
     ///
     /// # Panics
     ///
     /// May panic if buffer integrity is compromised (internal validation failure).
-    pub fn add_value(&mut self, data: &[u8]) -> Result<(), BufVecError> {
+    pub fn add_value(&mut self, data: &[u8]) -> Result<(), U8PoolError> {
         if self.is_empty() || self.has_unpaired_key() {
             // Empty vector or last element is a key, so add normally
             self.add(data)
@@ -396,9 +396,9 @@ impl<'a> BufVec<'a> {
     }
 
     #[allow(clippy::expect_used)]
-    fn replace_last(&mut self, data: &[u8]) -> Result<(), BufVecError> {
+    fn replace_last(&mut self, data: &[u8]) -> Result<(), U8PoolError> {
         if self.is_empty() {
-            return Err(BufVecError::EmptyVector);
+            return Err(U8PoolError::EmptyVector);
         }
 
         // Calculate space needed and available space after removing last element
@@ -415,7 +415,7 @@ impl<'a> BufVec<'a> {
 
         let available_space = self.buffer.len() - self.data_start() - data_used_without_last;
         if data.len() > available_space {
-            return Err(BufVecError::BufferOverflow {
+            return Err(U8PoolError::BufferOverflow {
                 requested: data.len(),
                 available: available_space,
             });

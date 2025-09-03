@@ -1,15 +1,15 @@
-# BufVec Implementation Assignment
+# U8Pool Implementation Assignment
 
-You are a principal software developer responsible for designing and managing the implementation of the new Rust crate `bufvec`.
+You are a principal software developer responsible for designing and managing the implementation of the new Rust crate `u8pool`.
 
 ## Project Overview
 
-`bufvec` is an allocation-free vector/stack/dictionary for variable-sized slices, designed for performance-critical applications where heap allocation must be avoided.
+`u8pool` is an allocation-free vector/stack/dictionary for variable-sized slices, designed for performance-critical applications where heap allocation must be avoided.
 
 ## Core Specification
 
 ### Architecture
-- **Buffer Management**: Client pre-allocates a buffer and passes it to the `bufvec` constructor
+- **Buffer Management**: Client pre-allocates a buffer and passes it to the `u8pool` constructor
 - **Memory Layout**: Data is stored contiguously in the provided buffer with metadata tracking slice boundaries
 - **Zero-Copy Access**: All access methods return references to slices within the buffer
 
@@ -17,7 +17,7 @@ You are a principal software developer responsible for designing and managing th
 
 #### Core Methods
 - `add(slice: &[u8])` - Copies binary data into buffer and creates an indexed slice
-- `clear()` - Resets the bufvec to empty state
+- `clear()` - Resets the u8pool to empty state
 - `pop()` - Removes the last element from the vector
 
 #### Dictionary Interface

@@ -1,8 +1,8 @@
 #![no_std]
 
-//! `BufVec`: A zero-allocation vector implementation using client-provided buffers.
+//! `U8Pool`: A zero-allocation vector implementation using client-provided buffers.
 //!
-//! `BufVec` provides vector, stack, and dictionary interfaces while using a single
+//! `U8Pool` provides vector, stack, and dictionary interfaces while using a single
 //! client-provided buffer for storage. All operations are bounds-checked and
 //! no internal allocations are performed.
 //!
@@ -13,7 +13,7 @@
 //!
 //! # Performance Characteristics
 //!
-//! `BufVec` is optimized for cache efficiency and minimal overhead:
+//! `U8Pool` is optimized for cache efficiency and minimal overhead:
 //!
 //! ## Time Complexity
 //! - `add()`, `push()`: O(1) - constant time insertion
@@ -50,32 +50,32 @@
 //! Enable the optional `std` feature for additional functionality in std environments:
 //! ```toml
 //! [dependencies]
-//! bufvec = { version = "0.1", features = ["std"] }
+//! u8pool = { version = "0.1", features = ["std"] }
 //! ```
 //!
 //! # Dictionary Convention
 //!
-//! `BufVec` supports a dictionary interpretation where elements at even indices (0, 2, 4, ...)
+//! `U8Pool` supports a dictionary interpretation where elements at even indices (0, 2, 4, ...)
 //! are treated as keys and elements at odd indices (1, 3, 5, ...) are treated as values.
 //! This allows the same data structure to be used as both a vector and a key-value store.
 //!
 //! ```
-//! # use bufvec::BufVec;
-//! let mut buffer = [0u8; 200];
-//! let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+//! # use u8pool::U8Pool;
+//! let mut buffer = [0u8; 600];
+//! let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 //!
 //! // Add key-value pairs using specialized methods
-//! bufvec.add_key(b"name").unwrap();      // key at index 0
-//! bufvec.add_value(b"Alice").unwrap();   // value at index 1
-//! bufvec.add_key(b"age").unwrap();       // key at index 2
-//! bufvec.add_value(b"30").unwrap();      // value at index 3
+//! u8pool.add_key(b"name").unwrap();      // key at index 0
+//! u8pool.add_value(b"Alice").unwrap();   // value at index 1
+//! u8pool.add_key(b"age").unwrap();       // key at index 2
+//! u8pool.add_value(b"30").unwrap();      // value at index 3
 //!
 //! // Specialized methods handle replacement logic
-//! bufvec.add_key(b"country").unwrap();   // replaces "age" key since last element was a value
-//! bufvec.add_value(b"USA").unwrap();     // adds normally since last element is now a key
+//! u8pool.add_key(b"country").unwrap();   // replaces "age" key since last element was a value
+//! u8pool.add_value(b"USA").unwrap();     // adds normally since last element is now a key
 //!
 //! // Use dictionary interface
-//! for (key, value) in bufvec.pairs() {
+//! for (key, value) in u8pool.pairs() {
 //!     match value {
 //!         Some(v) => println!("{:?} = {:?}", key, v),
 //!         None => println!("{:?} = <no value>", key),
@@ -83,7 +83,7 @@
 //! }
 //!
 //! // Check for unpaired keys
-//! if bufvec.has_unpaired_key() {
+//! if u8pool.has_unpaired_key() {
 //!     println!("Last element is an unpaired key");
 //! }
 //! ```
@@ -98,85 +98,85 @@
 //! This allows for building dictionaries incrementally while correcting mistakes:
 //!
 //! ```
-//! # use bufvec::BufVec;
-//! let mut buffer = [0u8; 200];
-//! let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+//! # use u8pool::U8Pool;
+//! let mut buffer = [0u8; 600];
+//! let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 //!
-//! bufvec.add_key(b"name").unwrap();
-//! bufvec.add_key(b"username").unwrap();  // replaces "name" with "username"
-//! bufvec.add_value(b"alice").unwrap();   // adds value for "username"
-//! bufvec.add_value(b"alice123").unwrap(); // replaces "alice" with "alice123"
+//! u8pool.add_key(b"name").unwrap();
+//! u8pool.add_key(b"username").unwrap();  // replaces "name" with "username"
+//! u8pool.add_value(b"alice").unwrap();   // adds value for "username"
+//! u8pool.add_value(b"alice123").unwrap(); // replaces "alice" with "alice123"
 //!
-//! assert_eq!(bufvec.len(), 2);
-//! assert_eq!(bufvec.get(0), b"username");
-//! assert_eq!(bufvec.get(1), b"alice123");
+//! assert_eq!(u8pool.len(), 2);
+//! assert_eq!(u8pool.get(0), b"username");
+//! assert_eq!(u8pool.get(1), b"alice123");
 //! ```
 //!
 //! # Stack Interface
 //!
-//! `BufVec` supports stack operations through methods like `push()`, `pop()`, and `top()`:
+//! `U8Pool` supports stack operations through methods like `push()`, `pop()`, and `top()`:
 //!
 //! ```
-//! # use bufvec::BufVec;
-//! let mut buffer = [0u8; 200];
-//! let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+//! # use u8pool::U8Pool;
+//! let mut buffer = [0u8; 600];
+//! let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 //!
 //! // Push elements onto the stack
-//! bufvec.push(b"first").unwrap();
-//! bufvec.push(b"second").unwrap();
-//! bufvec.push(b"third").unwrap();
+//! u8pool.push(b"first").unwrap();
+//! u8pool.push(b"second").unwrap();
+//! u8pool.push(b"third").unwrap();
 //!
 //! // Peek at the top element without removing it
-//! assert_eq!(bufvec.top(), b"third");
-//! assert_eq!(bufvec.len(), 3);
+//! assert_eq!(u8pool.top(), b"third");
+//! assert_eq!(u8pool.len(), 3);
 //!
 //! // Pop elements in LIFO order
-//! assert_eq!(bufvec.pop(), b"third");
-//! assert_eq!(bufvec.pop(), b"second");
-//! assert_eq!(bufvec.pop(), b"first");
+//! assert_eq!(u8pool.pop(), Some(&b"third"[..]));
+//! assert_eq!(u8pool.pop(), Some(&b"second"[..]));
+//! assert_eq!(u8pool.pop(), Some(&b"first"[..]));
 //!
-//! assert!(bufvec.is_empty());
+//! assert!(u8pool.is_empty());
 //!
 //! // Safe variants for error handling
-//! assert!(bufvec.try_top().is_err());
-//! assert!(bufvec.try_pop().is_err());
+//! assert!(u8pool.try_top().is_err());
+//! assert!(u8pool.try_pop().is_err());
 //! ```
 //!
 //! The stack interface maintains compatibility with vector operations:
 //!
 //! ```
-//! # use bufvec::BufVec;
-//! let mut buffer = [0u8; 200];
-//! let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+//! # use u8pool::U8Pool;
+//! let mut buffer = [0u8; 600];
+//! let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 //!
 //! // Mix stack and vector operations
-//! bufvec.push(b"stack_data").unwrap();
-//! bufvec.add(b"vector_data").unwrap();
+//! u8pool.push(b"stack_data").unwrap();
+//! u8pool.add(b"vector_data").unwrap();
 //!
 //! // Both interfaces work on the same underlying data
-//! assert_eq!(bufvec.get(0), b"stack_data");
-//! assert_eq!(bufvec.top(), b"vector_data");
+//! assert_eq!(u8pool.get(0), b"stack_data");
+//! assert_eq!(u8pool.top(), b"vector_data");
 //! ```
 //!
 //! # Iterator Support
 //!
-//! `BufVec` implements standard Rust iterator patterns:
+//! `U8Pool` implements standard Rust iterator patterns:
 //!
 //! ```
-//! # use bufvec::BufVec;
-//! let mut buffer = [0u8; 200];
-//! let mut bufvec = BufVec::with_default_max_slices(&mut buffer).unwrap();
+//! # use u8pool::U8Pool;
+//! let mut buffer = [0u8; 600];
+//! let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 //!
-//! bufvec.add(b"hello").unwrap();
-//! bufvec.add(b"world").unwrap();
+//! u8pool.add(b"hello").unwrap();
+//! u8pool.add(b"world").unwrap();
 //!
 //! // Iterate using for loop
-//! for slice in &bufvec {
+//! for slice in &u8pool {
 //!     println!("{:?}", slice);
 //! }
 //!
 //! // Collect into Vec
-//! let collected: Vec<_> = bufvec.into_iter().collect();
+//! let collected: Vec<_> = u8pool.into_iter().collect();
 //! ```
 
 mod core;
@@ -184,6 +184,6 @@ mod error;
 mod iter;
 
 // Re-export public types and traits
-pub use core::BufVec;
-pub use error::BufVecError;
-pub use iter::{BufVecIter, BufVecPairIter};
+pub use core::U8Pool;
+pub use error::U8PoolError;
+pub use iter::{U8PoolIter, U8PoolPairIter};
