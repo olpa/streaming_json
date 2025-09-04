@@ -7,10 +7,6 @@ fn test_buffer_initialization() {
 
     assert_eq!(u8pool.len(), 0);
     assert!(u8pool.is_empty());
-    assert_eq!(u8pool.buffer_capacity(), 600);
-    assert_eq!(u8pool.max_slices(), 32);
-    assert_eq!(u8pool.used_bytes(), 512); // metadata section takes 512 bytes (32 slices * 16 bytes)
-    assert!(u8pool.available_bytes() > 0);
 }
 
 #[test]
@@ -143,27 +139,5 @@ fn test_custom_max_slices() {
     assert_eq!(u8pool.get(1), b"hello");
     assert_eq!(u8pool.get(2), b"world");
     assert_eq!(u8pool.len(), 3);
-    assert_eq!(u8pool.max_slices(), 3);
 }
 
-#[test]
-fn test_fixed_descriptor_functionality() {
-    let mut buffer = [0u8; 600];
-    let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
-
-    // Test that derived values work correctly
-    assert_eq!(u8pool.max_slices(), 32);
-    assert_eq!(u8pool.data_used(), 0);
-
-    u8pool.add(b"test").unwrap();
-    assert_eq!(u8pool.data_used(), 4);
-
-    u8pool.add(b"hello").unwrap();
-    assert_eq!(u8pool.data_used(), 9);
-
-    u8pool.pop();
-    assert_eq!(u8pool.data_used(), 4);
-
-    u8pool.clear();
-    assert_eq!(u8pool.data_used(), 0);
-}

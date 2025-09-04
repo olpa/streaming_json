@@ -88,14 +88,6 @@ pairs_count(&self) -> usize                            // Number of complete pai
 pairs(&self) -> U8PoolPairIter                         // Yields (key, Option<value>)
 ```
 
-### Memory Inspection
-```rust
-buffer_capacity(&self) -> usize          // Total buffer size
-used_bytes(&self) -> usize              // Metadata + data used
-available_bytes(&self) -> usize         // Remaining space
-data_used(&self) -> usize              // Only data bytes used (O(1))
-```
-
 ## Error Handling
 
 U8Pool uses the `thiserror` crate for comprehensive error handling while maintaining `no_std` compatibility. All errors implement both structured data access and descriptive Display messages.
@@ -333,7 +325,7 @@ if u8pool.is_empty() || u8pool.has_unpaired_key() {
 ## Performance Characteristics
 
 ### Time Complexity
-- **O(1)**: add, get, pop, push, top, clear, data_used, len, is_empty
+- **O(1)**: add, get, pop, push, top, clear, len, is_empty
 - **O(n)**: iteration, pairs iteration
 
 ### Space Complexity  
@@ -345,7 +337,7 @@ if u8pool.is_empty() || u8pool.has_unpaired_key() {
 1. **Buffer sizing**: Overestimate to avoid overflow errors
 2. **Max slices**: Set based on expected element count
 3. **Access patterns**: Sequential access is most cache-friendly
-4. **Memory usage**: Use `data_used()` and `available_bytes()` to monitor
+4. **Memory usage**: Monitor by tracking element count and sizes
 
 ## Common Use Cases
 
@@ -403,7 +395,7 @@ u8pool.add(b"Connection failed")?;
 
 ### 2. Buffer Management
 - Calculate buffer size conservatively: `(max_slices * 16) + (expected_data * 1.5)`
-- Monitor usage with `available_bytes()` to prevent overflow
+- Monitor usage by tracking element count and sizes to prevent overflow
 - Consider buffer reuse in loops to avoid allocations
 
 ### 3. Interface Selection
@@ -413,7 +405,7 @@ u8pool.add(b"Connection failed")?;
 
 ### 4. Performance Optimization
 - Access elements sequentially when possible for cache efficiency
-- Use `data_used()` instead of calculating manually (it's O(1))
+- Calculate data usage by tracking element sizes manually when needed
 - Prefer larger buffers over frequent buffer changes
 
 ### 5. Memory Safety

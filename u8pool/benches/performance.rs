@@ -146,27 +146,6 @@ fn bench_stack_operations(c: &mut Criterion) {
     group.finish();
 }
 
-fn bench_memory_usage(c: &mut Criterion) {
-    let mut group = c.benchmark_group("memory_usage");
-
-    group.bench_function("data_used_calculation", |b| {
-        let mut buffer = vec![0u8; 10000];
-        let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
-
-        // Add many elements
-        for i in 0..100 {
-            let data = format!("element_with_longer_content_{}", i);
-            u8pool.add(data.as_bytes()).unwrap();
-        }
-
-        b.iter(|| {
-            black_box(u8pool.used_bytes());
-            black_box(u8pool.available_bytes());
-        });
-    });
-
-    group.finish();
-}
 
 fn bench_large_elements(c: &mut Criterion) {
     let mut group = c.benchmark_group("large_elements");
@@ -202,7 +181,6 @@ criterion_group!(
     bench_iterator_performance,
     bench_dictionary_operations,
     bench_stack_operations,
-    bench_memory_usage,
     bench_large_elements
 );
 criterion_main!(benches);

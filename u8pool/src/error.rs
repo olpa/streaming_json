@@ -1,10 +1,6 @@
 use thiserror::Error;
 
 /// Error types for U8Pool operations
-///
-/// This module provides error types that are compatible with `no_std` environments
-/// using the `thiserror` crate for enhanced error handling with proper Display
-/// implementations while maintaining `no_std` compatibility.
 #[derive(Error, Debug, PartialEq, Eq, Clone)]
 pub enum U8PoolError {
     /// Buffer has insufficient space for the requested operation

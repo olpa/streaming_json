@@ -53,17 +53,6 @@ impl<'a> U8Pool<'a> {
         self.max_slices * SLICE_DESCRIPTOR_SIZE
     }
 
-    pub fn data_used(&self) -> usize {
-        if self.count == 0 {
-            return 0;
-        }
-
-        // For sequential allocation, the last slice determines the total data used
-        // This assumes data is allocated sequentially without gaps
-        let (last_start, last_length) = self.get_slice_descriptor(self.count - 1);
-        last_start + last_length - self.data_start()
-    }
-
     /// Creates a new `U8Pool` with the default maximum number of slices (8).
     ///
     /// # Errors
@@ -83,24 +72,13 @@ impl<'a> U8Pool<'a> {
         self.count == 0
     }
 
-    #[must_use]
-    pub fn buffer_capacity(&self) -> usize {
-        self.buffer.len()
-    }
-
-    #[must_use]
-    pub fn used_bytes(&self) -> usize {
-        self.data_start() + self.data_used()
-    }
-
-    #[must_use]
-    pub fn available_bytes(&self) -> usize {
-        self.buffer.len() - self.used_bytes()
-    }
-
-    #[must_use]
-    pub fn max_slices(&self) -> usize {
-        self.max_slices
+    fn data_used(&self) -> usize {
+        if self.count == 0 {
+            0
+        } else {
+            let (last_start, last_length) = self.get_slice_descriptor(self.count - 1);
+            last_start + last_length - self.data_start()
+        }
     }
 
     fn check_bounds(&self, index: usize) -> Result<(), U8PoolError> {
