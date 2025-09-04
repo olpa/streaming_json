@@ -108,8 +108,8 @@
 //! u8pool.add_value(b"alice123").unwrap(); // replaces "alice" with "alice123"
 //!
 //! assert_eq!(u8pool.len(), 2);
-//! assert_eq!(u8pool.get(0), b"username");
-//! assert_eq!(u8pool.get(1), b"alice123");
+//! assert_eq!(u8pool.get(0).unwrap(), b"username");
+//! assert_eq!(u8pool.get(1).unwrap(), b"alice123");
 //! ```
 //!
 //! # Stack Interface
@@ -154,7 +154,7 @@
 //! u8pool.add(b"vector_data").unwrap();
 //!
 //! // Both interfaces work on the same underlying data
-//! assert_eq!(u8pool.get(0), b"stack_data");
+//! assert_eq!(u8pool.get(0).unwrap(), b"stack_data");
 //! assert_eq!(u8pool.top(), b"vector_data");
 //! ```
 //!

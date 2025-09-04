@@ -80,7 +80,7 @@ fn test_iterator_lifetime_correctness() {
 
     // U8Pool should still be usable after iterator is dropped
     assert_eq!(u8pool.len(), 1);
-    assert_eq!(u8pool.get(0), b"data");
+    assert_eq!(u8pool.get(0).unwrap(), b"data");
 }
 
 #[test]

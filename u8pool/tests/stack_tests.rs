@@ -20,9 +20,9 @@ fn test_stack_push_operations() {
     assert_eq!(u8pool.len(), 3);
 
     // Verify elements are in correct order (LIFO for stack perspective)
-    assert_eq!(u8pool.get(0), b"first");
-    assert_eq!(u8pool.get(1), b"second");
-    assert_eq!(u8pool.get(2), b"third");
+    assert_eq!(u8pool.get(0).unwrap(), b"first");
+    assert_eq!(u8pool.get(1).unwrap(), b"second");
+    assert_eq!(u8pool.get(2).unwrap(), b"third");
 }
 
 #[test]
@@ -100,17 +100,17 @@ fn test_stack_interface_doesnt_break_vector_operations() {
     u8pool.push(b"stack2").unwrap();
 
     assert_eq!(u8pool.len(), 3);
-    assert_eq!(u8pool.get(0), b"stack1");
-    assert_eq!(u8pool.get(1), b"vector1");
-    assert_eq!(u8pool.get(2), b"stack2");
+    assert_eq!(u8pool.get(0).unwrap(), b"stack1");
+    assert_eq!(u8pool.get(1).unwrap(), b"vector1");
+    assert_eq!(u8pool.get(2).unwrap(), b"stack2");
 
     // Stack operations still work
     assert_eq!(u8pool.top(), b"stack2");
     assert_eq!(u8pool.pop(), Some(&b"stack2"[..]));
 
     // Vector operations still work
-    assert_eq!(u8pool.get(0), b"stack1");
-    assert_eq!(u8pool.get(1), b"vector1");
+    assert_eq!(u8pool.get(0).unwrap(), b"stack1");
+    assert_eq!(u8pool.get(1).unwrap(), b"vector1");
 
     // Iterator still works
     let collected: Vec<_> = u8pool.iter().collect();

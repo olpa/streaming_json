@@ -11,7 +11,7 @@ impl<'a> Iterator for U8PoolIter<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.current < self.u8pool.len() {
-            let result = self.u8pool.get(self.current);
+            let result = self.u8pool.get(self.current)?;
             self.current += 1;
             Some(result)
         } else {
@@ -55,9 +55,9 @@ impl<'a> Iterator for U8PoolPairIter<'a> {
             return None;
         }
 
-        let key = self.u8pool.get(key_index);
+        let key = self.u8pool.get(key_index)?;
         let value = if key_index + 1 < self.u8pool.len() {
-            Some(self.u8pool.get(key_index + 1))
+            self.u8pool.get(key_index + 1)
         } else {
             None
         };

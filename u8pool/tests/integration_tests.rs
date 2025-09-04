@@ -17,7 +17,7 @@ fn test_bounds_checking_empty_buffer() {
     let mut buffer = [0u8; 600];
     let u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
-    assert!(u8pool.try_get(0).is_err());
+    assert!(u8pool.get(0).is_none());
 }
 
 #[test]
@@ -35,8 +35,8 @@ fn test_memory_layout_integrity() {
     u8pool.add(b"hello").unwrap();
     u8pool.add(b"world").unwrap();
 
-    assert_eq!(u8pool.get(0), b"hello");
-    assert_eq!(u8pool.get(1), b"world");
+    assert_eq!(u8pool.get(0).unwrap(), b"hello");
+    assert_eq!(u8pool.get(1).unwrap(), b"world");
     assert_eq!(u8pool.len(), 2);
 }
 
@@ -48,7 +48,7 @@ fn test_no_internal_allocation() {
     u8pool.add(b"test").unwrap();
 
     // Verify data is stored correctly in the buffer
-    assert_eq!(u8pool.get(0), b"test");
+    assert_eq!(u8pool.get(0).unwrap(), b"test");
     assert_eq!(u8pool.len(), 1);
 }
 
@@ -74,18 +74,17 @@ fn test_bounds_checking() {
 
     u8pool.add(b"test").unwrap();
 
-    assert_eq!(u8pool.get(0), b"test");
-    assert!(u8pool.try_get(1).is_err());
+    assert_eq!(u8pool.get(0).unwrap(), b"test");
+    assert!(u8pool.get(1).is_none());
 }
 
 #[test]
-#[should_panic(expected = "Index 1 out of bounds for vector of length 1")]
 fn test_get_out_of_bounds() {
     let mut buffer = [0u8; 600];
     let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
     u8pool.add(b"test").unwrap();
-    let _ = u8pool.get(1); // Should panic
+    assert!(u8pool.get(1).is_none()); // Should return None
 }
 
 #[test]
@@ -135,9 +134,9 @@ fn test_custom_max_slices() {
     // Should fail on 4th slice
     assert!(u8pool.add(b"fail").is_err());
 
-    assert_eq!(u8pool.get(0), b"test");
-    assert_eq!(u8pool.get(1), b"hello");
-    assert_eq!(u8pool.get(2), b"world");
+    assert_eq!(u8pool.get(0).unwrap(), b"test");
+    assert_eq!(u8pool.get(1).unwrap(), b"hello");
+    assert_eq!(u8pool.get(2).unwrap(), b"world");
     assert_eq!(u8pool.len(), 3);
 }
 

@@ -81,16 +81,6 @@ impl<'a> U8Pool<'a> {
         }
     }
 
-    fn check_bounds(&self, index: usize) -> Result<(), U8PoolError> {
-        if index >= self.count {
-            Err(U8PoolError::IndexOutOfBounds {
-                index,
-                length: self.count,
-            })
-        } else {
-            Ok(())
-        }
-    }
 
     fn ensure_capacity(&self, additional_bytes: usize) -> Result<(), U8PoolError> {
         // Check if we've reached the maximum number of slices
@@ -144,42 +134,25 @@ impl<'a> U8Pool<'a> {
 
     /// Gets a slice at the specified index.
     ///
-    /// # Panics
-    ///
-    /// Panics if `index` is out of bounds.
-    #[must_use]
-    #[allow(clippy::expect_used)]
-    pub fn get(&self, index: usize) -> &[u8] {
-        assert!(
-            index < self.count,
-            "Index {} out of bounds for vector of length {}",
-            index,
-            self.count
-        );
-        let (start, length) = self.get_slice_descriptor(index);
-        self.buffer
-            .get(start..start + length)
-            .expect("Slice bounds validated during add operation")
-    }
-
-    /// Tries to get a slice at the specified index.
-    ///
-    /// # Errors
-    ///
-    /// Returns `U8PoolError::IndexOutOfBounds` if `index` is out of bounds.
+    /// Returns `None` if the index is out of bounds.
     ///
     /// # Panics
     ///
     /// May panic if buffer integrity is compromised (internal validation failure).
+    #[must_use]
     #[allow(clippy::expect_used)]
-    pub fn try_get(&self, index: usize) -> Result<&[u8], U8PoolError> {
-        self.check_bounds(index)?;
+    pub fn get(&self, index: usize) -> Option<&[u8]> {
+        if index >= self.count {
+            return None;
+        }
         let (start, length) = self.get_slice_descriptor(index);
-        Ok(self
-            .buffer
-            .get(start..start + length)
-            .expect("Slice bounds validated during add operation"))
+        Some(
+            self.buffer
+                .get(start..start + length)
+                .expect("Slice bounds validated during add operation"),
+        )
     }
+
 
     /// Adds a slice to the vector.
     ///
@@ -232,7 +205,7 @@ impl<'a> U8Pool<'a> {
     #[must_use]
     pub fn top(&self) -> &[u8] {
         assert!(self.count > 0, "Cannot peek at top of empty stack");
-        self.get(self.count - 1)
+        self.get(self.count - 1).expect("Index is valid after bounds check")
     }
 
     /// Tries to return a reference to the top element of the stack (last element) without removing it.
@@ -244,7 +217,7 @@ impl<'a> U8Pool<'a> {
         if self.count == 0 {
             return Err(U8PoolError::EmptyVector);
         }
-        Ok(self.get(self.count - 1))
+        Ok(self.get(self.count - 1).expect("Index is valid after bounds check"))
     }
 
     pub fn clear(&mut self) {

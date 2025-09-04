@@ -139,8 +139,8 @@ fn process_data(u8pool: &mut U8Pool, data: &[u8]) -> Result<(), U8PoolError> {
     Ok(())
 }
 
-// Pattern 3: Use safe variants to avoid panics
-if let Ok(data) = u8pool.try_get(index) {
+// Pattern 3: Use safe get to avoid panics
+if let Some(data) = u8pool.get(index) {
     // Process data safely
 } else {
     println!("Invalid index: {}", index);
@@ -187,7 +187,7 @@ u8pool.add(b"third")?;
 
 // Access by index
 for i in 0..u8pool.len() {
-    println!("Element {}: {:?}", i, u8pool.get(i));
+    println!("Element {}: {:?}", i, u8pool.get(i).unwrap());
 }
 
 // Iterate
@@ -250,8 +250,8 @@ u8pool.add_value(b"bob")?;        // Replaces previous value
 
 // Result: [username, bob]
 assert_eq!(u8pool.len(), 2);
-assert_eq!(u8pool.get(0), b"username");
-assert_eq!(u8pool.get(1), b"bob");
+assert_eq!(u8pool.get(0).unwrap(), b"username");
+assert_eq!(u8pool.get(1).unwrap(), b"bob");
 ```
 
 ### Pattern 5: Mixed Interface Usage

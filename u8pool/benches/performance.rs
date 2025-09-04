@@ -47,7 +47,7 @@ fn bench_random_access(c: &mut Criterion) {
 
                 b.iter(|| {
                     for i in 0..size {
-                        black_box(u8pool.get(i));
+                        black_box(u8pool.get(i).unwrap());
                     }
                 });
             },
