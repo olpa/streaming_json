@@ -132,28 +132,6 @@ impl<'a> U8Pool<'a> {
         descriptor_bytes[8..16].copy_from_slice(&length.to_le_bytes());
     }
 
-    /// Gets a slice at the specified index.
-    ///
-    /// Returns `None` if the index is out of bounds.
-    ///
-    /// # Panics
-    ///
-    /// May panic if buffer integrity is compromised (internal validation failure).
-    #[must_use]
-    #[allow(clippy::expect_used)]
-    pub fn get(&self, index: usize) -> Option<&[u8]> {
-        if index >= self.count {
-            return None;
-        }
-        let (start, length) = self.get_slice_descriptor(index);
-        Some(
-            self.buffer
-                .get(start..start + length)
-                .expect("Slice bounds validated during add operation"),
-        )
-    }
-
-
     /// Pushes a slice onto the stack.
     ///
     /// # Errors
@@ -182,12 +160,6 @@ impl<'a> U8Pool<'a> {
         Ok(())
     }
 
-
-    pub fn clear(&mut self) {
-        self.count = 0;
-        // data_used is now derived from slice descriptors, so no need to reset it
-    }
-
     /// Removes and returns the last slice from the vector.
     ///
     /// Returns `None` if the vector is empty.
@@ -199,8 +171,33 @@ impl<'a> U8Pool<'a> {
         self.count -= 1;
         let (start, length) = self.get_slice_descriptor(self.count);
 
-        // data_used is now automatically recalculated when needed
         self.buffer.get(start..start + length)
+    }
+
+    /// Gets a slice at the specified index.
+    ///
+    /// Returns `None` if the index is out of bounds.
+    ///
+    /// # Panics
+    ///
+    /// May panic if buffer integrity is compromised (internal validation failure).
+    #[must_use]
+    #[allow(clippy::expect_used)]
+    pub fn get(&self, index: usize) -> Option<&[u8]> {
+        if index >= self.count {
+            return None;
+        }
+        let (start, length) = self.get_slice_descriptor(index);
+        Some(
+            self.buffer
+                .get(start..start + length)
+                .expect("Slice bounds validated during add operation"),
+        )
+    }
+
+    pub fn clear(&mut self) {
+        self.count = 0;
+        // data_used is now derived from slice descriptors, so no need to reset it
     }
 
 
