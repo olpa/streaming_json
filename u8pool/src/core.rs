@@ -4,7 +4,7 @@ use crate::iter::{U8PoolIter, U8PoolPairIter};
 const SLICE_DESCRIPTOR_SIZE: usize = 16; // 2 * size_of::<usize>() on 64-bit
 const DEFAULT_MAX_SLICES: usize = 32;
 
-/// A zero-allocation vector implementation using client-provided buffers
+/// A zero-allocation stack implementation using client-provided buffers
 #[derive(Debug)]
 pub struct U8Pool<'a> {
     buffer: &'a mut [u8],

@@ -1,9 +1,9 @@
 #![no_std]
 
-//! `U8Pool`: A zero-allocation vector implementation using client-provided buffers.
+//! `U8Pool`: A zero-allocation stack implementation using client-provided buffers.
 //!
-//! `U8Pool` provides vector, stack, and dictionary interfaces while using a single
-//! client-provided buffer for storage. All operations are bounds-checked and
+//! `U8Pool` is primarily a stack data structure with additional vector functions for indexed access.
+//! It uses a single client-provided buffer for storage. All operations are bounds-checked and
 //! no internal allocations are performed.
 //!
 //! This crate is `no_std` compatible.
@@ -38,9 +38,9 @@
 //! ```
 //!
 
-//! # Stack Interface
+//! # Stack Interface (Primary)
 //!
-//! `U8Pool` supports stack operations through methods like `push()` and `pop()`:
+//! `U8Pool` is primarily a stack, providing LIFO (Last In, First Out) operations through `push()` and `pop()`:
 //!
 //! ```
 //! # use u8pool::U8Pool;
@@ -63,20 +63,20 @@
 //! assert_eq!(u8pool.pop(), None);
 //! ```
 //!
-//! The stack interface maintains compatibility with vector operations:
+//! The stack provides additional vector functions for indexed access:
 //!
 //! ```
 //! # use u8pool::U8Pool;
 //! let mut buffer = [0u8; 600];
 //! let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 //!
-//! // Mix stack and vector operations
-//! u8pool.push(b"stack_data").unwrap();
-//! u8pool.push(b"vector_data").unwrap();
+//! // Push elements using stack interface
+//! u8pool.push(b"first_item").unwrap();
+//! u8pool.push(b"second_item").unwrap();
 //!
-//! // Both interfaces work on the same underlying data
-//! assert_eq!(u8pool.get(0).unwrap(), b"stack_data");
-//! assert_eq!(u8pool.get(1).unwrap(), b"vector_data");
+//! // Access elements using vector functions
+//! assert_eq!(u8pool.get(0).unwrap(), b"first_item");
+//! assert_eq!(u8pool.get(1).unwrap(), b"second_item");
 //! ```
 //!
 //! # Iterator Support

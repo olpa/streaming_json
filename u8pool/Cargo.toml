@@ -2,10 +2,10 @@
 name = "u8pool"
 version = "0.1.0"
 edition = "2021"
-description = "A zero-allocation vector implementation using client-provided buffers"
+description = "Stack for u8 slices in a client-provided buffers"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/your-username/u8pool"
-keywords = ["no-std", "embedded", "vector", "zero-allocation", "buffer"]
+keywords = ["no-std", "embedded", "stack", "zero-allocation", "buffer"]
 categories = ["no-std", "embedded", "data-structures"]
 
 [dependencies]

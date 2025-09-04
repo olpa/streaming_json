@@ -4,11 +4,11 @@ This document provides comprehensive information about U8Pool for Large Language
 
 ## Core Concept
 
-U8Pool is a zero-allocation vector implementation that stores all data in a client-provided buffer. It provides three interfaces to the same underlying data:
+U8Pool is a zero-allocation stack implementation that stores all data in a client-provided buffer. It provides a stack-primary design with additional interfaces:
 
-1. **Vector Interface**: Standard indexed access (`push`, `get`, `len`, etc.)
-2. **Stack Interface**: LIFO operations (`push`, `pop`, `top`)  
-3. **Dictionary Interface**: Key-value semantics where even indices are keys, odd indices are values
+1. **Stack Interface (Primary)**: LIFO operations (`push`, `pop`)
+2. **Vector Interface (Secondary)**: Indexed access functions (`get`, `len`, etc.)
+3. **Dictionary Interface**: Key-value interpretation where even indices are keys, odd indices are values
 
 ## Buffer Layout and Memory Management
 
@@ -43,12 +43,16 @@ U8Pool::with_default_max_slices(&mut buffer) -> Result<U8Pool, U8PoolError>
 U8Pool::new(&mut buffer, max_slices: usize) -> Result<U8Pool, U8PoolError>
 ```
 
-### Vector Interface
+### Stack Interface (Primary)
 ```rust
-// Adding elements
-push(&mut self, data: &[u8]) -> Result<(), U8PoolError>
+// Primary operations
+push(&mut self, data: &[u8]) -> Result<(), U8PoolError>  // Add element to top
+pop(&mut self) -> Option<&[u8]>                          // Remove and return top element
+```
 
-// Accessing elements  
+### Vector Interface (Secondary)
+```rust
+// Indexed access
 get(&self, index: usize) -> Option<&[u8]>            // Returns None if out of bounds
 len(&self) -> usize
 is_empty(&self) -> bool
@@ -57,14 +61,6 @@ clear(&mut self)
 // Iteration
 iter(&self) -> U8PoolIter                            // Returns iterator
 // Also implements IntoIterator for for-loop syntax
-```
-
-### Stack Interface
-```rust
-// Adding/removing
-push(&mut self, data: &[u8]) -> Result<(), U8PoolError>  // Primary method
-pop(&mut self) -> Option<&[u8]>                          // Returns None if empty
-
 ```
 
 ### Dictionary Interface
