@@ -182,28 +182,6 @@ impl<'a> U8Pool<'a> {
         Ok(())
     }
 
-    /// Returns a reference to the top element of the stack (last element) without removing it.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the stack is empty.
-    #[must_use]
-    pub fn top(&self) -> &[u8] {
-        assert!(self.count > 0, "Cannot peek at top of empty stack");
-        self.get(self.count - 1).expect("Index is valid after bounds check")
-    }
-
-    /// Tries to return a reference to the top element of the stack (last element) without removing it.
-    ///
-    /// # Errors
-    ///
-    /// Returns `U8PoolError::EmptyVector` if the stack is empty.
-    pub fn try_top(&self) -> Result<&[u8], U8PoolError> {
-        if self.count == 0 {
-            return Err(U8PoolError::EmptyVector);
-        }
-        Ok(self.get(self.count - 1).expect("Index is valid after bounds check"))
-    }
 
     pub fn clear(&mut self) {
         self.count = 0;

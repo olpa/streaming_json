@@ -67,9 +67,6 @@ push(&mut self, data: &[u8]) -> Result<(), U8PoolError>  // Primary method
 pop(&mut self) -> Option<&[u8]>                          // Returns None if empty
 try_pop(&mut self) -> Result<&[u8], U8PoolError>         // Safe variant
 
-// Inspection
-top(&self) -> &[u8]                                     // Panics if empty  
-try_top(&self) -> Result<&[u8], U8PoolError>           // Safe variant
 ```
 
 ### Dictionary Interface
@@ -466,7 +463,12 @@ fn process_state_machine(events: &[&str], u8pool: &mut U8Pool) -> Result<(), U8P
     u8pool.push(b"initial")?; // Initial state
     
     for event in events {
-        let current_state = u8pool.top();
+        // Get current state via vector interface
+        let current_state = if u8pool.len() > 0 {
+            u8pool.get(u8pool.len() - 1).unwrap()
+        } else {
+            b"none"
+        };
         
         // State transition logic
         match (current_state, event.as_bytes()) {

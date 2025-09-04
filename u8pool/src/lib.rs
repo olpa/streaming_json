@@ -72,7 +72,7 @@
 //!
 //! # Stack Interface
 //!
-//! `U8Pool` supports stack operations through methods like `push()`, `pop()`, and `top()`:
+//! `U8Pool` supports stack operations through methods like `push()` and `pop()`:
 //!
 //! ```
 //! # use u8pool::U8Pool;
@@ -84,10 +84,6 @@
 //! u8pool.push(b"second").unwrap();
 //! u8pool.push(b"third").unwrap();
 //!
-//! // Peek at the top element without removing it
-//! assert_eq!(u8pool.top(), b"third");
-//! assert_eq!(u8pool.len(), 3);
-//!
 //! // Pop elements in LIFO order
 //! assert_eq!(u8pool.pop(), Some(&b"third"[..]));
 //! assert_eq!(u8pool.pop(), Some(&b"second"[..]));
@@ -95,8 +91,7 @@
 //!
 //! assert!(u8pool.is_empty());
 //!
-//! // Safe variants for error handling
-//! assert!(u8pool.try_top().is_err());
+//! // Safe variant for error handling
 //! assert!(u8pool.try_pop().is_err());
 //! ```
 //!
@@ -113,7 +108,7 @@
 //!
 //! // Both interfaces work on the same underlying data
 //! assert_eq!(u8pool.get(0).unwrap(), b"stack_data");
-//! assert_eq!(u8pool.top(), b"vector_data");
+//! assert_eq!(u8pool.get(1).unwrap(), b"vector_data");
 //! ```
 //!
 //! # Iterator Support

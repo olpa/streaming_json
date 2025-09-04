@@ -25,39 +25,7 @@ fn test_stack_push_operations() {
     assert_eq!(u8pool.get(2).unwrap(), b"third");
 }
 
-#[test]
-fn test_stack_top_operations() {
-    let mut buffer = [0u8; 600];
-    let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
-    // Test try_top on empty stack
-    assert!(u8pool.try_top().is_err());
-
-    // Add elements and test top
-    u8pool.push(b"bottom").unwrap();
-    assert_eq!(u8pool.top(), b"bottom");
-    assert_eq!(u8pool.try_top().unwrap(), b"bottom");
-
-    u8pool.push(b"middle").unwrap();
-    assert_eq!(u8pool.top(), b"middle");
-    assert_eq!(u8pool.try_top().unwrap(), b"middle");
-
-    u8pool.push(b"top").unwrap();
-    assert_eq!(u8pool.top(), b"top");
-    assert_eq!(u8pool.try_top().unwrap(), b"top");
-
-    // Verify top doesn't modify the stack
-    assert_eq!(u8pool.len(), 3);
-    assert_eq!(u8pool.top(), b"top");
-}
-
-#[test]
-#[should_panic(expected = "Cannot peek at top of empty stack")]
-fn test_stack_top_empty_panic() {
-    let mut buffer = [0u8; 600];
-    let u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
-    let _ = u8pool.top();
-}
 
 #[test]
 fn test_stack_push_pop_operations() {
@@ -74,11 +42,9 @@ fn test_stack_push_pop_operations() {
     // Pop elements in LIFO order
     assert_eq!(u8pool.pop(), Some(&b"third"[..]));
     assert_eq!(u8pool.len(), 2);
-    assert_eq!(u8pool.top(), b"second");
 
     assert_eq!(u8pool.pop(), Some(&b"second"[..]));
     assert_eq!(u8pool.len(), 1);
-    assert_eq!(u8pool.top(), b"first");
 
     assert_eq!(u8pool.pop(), Some(&b"first"[..]));
     assert_eq!(u8pool.len(), 0);
@@ -86,7 +52,6 @@ fn test_stack_push_pop_operations() {
 
     // Test error handling
     assert!(u8pool.try_pop().is_err());
-    assert!(u8pool.try_top().is_err());
 }
 
 #[test]
@@ -105,7 +70,6 @@ fn test_stack_interface_doesnt_break_vector_operations() {
     assert_eq!(u8pool.get(2).unwrap(), b"stack2");
 
     // Stack operations still work
-    assert_eq!(u8pool.top(), b"stack2");
     assert_eq!(u8pool.pop(), Some(&b"stack2"[..]));
 
     // Vector operations still work
@@ -132,7 +96,6 @@ fn test_stack_buffer_overflow() {
 
     // Stack should be unchanged
     assert_eq!(u8pool.len(), 2);
-    assert_eq!(u8pool.top(), b"data2");
 }
 
 #[test]

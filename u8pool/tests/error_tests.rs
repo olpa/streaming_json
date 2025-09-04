@@ -90,8 +90,6 @@ fn test_error_empty_vector_operations() {
     // Test try_pop on empty vector
     assert_eq!(u8pool.try_pop().unwrap_err(), U8PoolError::EmptyVector);
 
-    // Test try_top on empty vector
-    assert_eq!(u8pool.try_top().unwrap_err(), U8PoolError::EmptyVector);
 }
 
 #[test]
