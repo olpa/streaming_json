@@ -91,8 +91,8 @@
 //!
 //! assert!(u8pool.is_empty());
 //!
-//! // Safe variant for error handling
-//! assert!(u8pool.try_pop().is_err());
+//! // Pop returns None when empty
+//! assert_eq!(u8pool.pop(), None);
 //! ```
 //!
 //! The stack interface maintains compatibility with vector operations:

@@ -50,8 +50,8 @@ fn test_stack_push_pop_operations() {
     assert_eq!(u8pool.len(), 0);
     assert!(u8pool.is_empty());
 
-    // Test error handling
-    assert!(u8pool.try_pop().is_err());
+    // Test empty pop returns None
+    assert_eq!(u8pool.pop(), None);
 }
 
 #[test]

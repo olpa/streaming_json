@@ -87,8 +87,8 @@ fn test_error_empty_vector_operations() {
     let mut buffer = [0u8; 600];
     let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
-    // Test try_pop on empty vector
-    assert_eq!(u8pool.try_pop().unwrap_err(), U8PoolError::EmptyVector);
+    // Test pop on empty vector returns None
+    assert_eq!(u8pool.pop(), None);
 
 }
 

@@ -65,7 +65,6 @@ iter(&self) -> U8PoolIter                            // Returns iterator
 // Adding/removing
 push(&mut self, data: &[u8]) -> Result<(), U8PoolError>  // Primary method
 pop(&mut self) -> Option<&[u8]>                          // Returns None if empty
-try_pop(&mut self) -> Result<&[u8], U8PoolError>         // Safe variant
 
 ```
 

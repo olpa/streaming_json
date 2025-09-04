@@ -203,30 +203,6 @@ impl<'a> U8Pool<'a> {
         self.buffer.get(start..start + length)
     }
 
-    /// Tries to remove and return the last slice from the vector.
-    ///
-    /// # Errors
-    ///
-    /// Returns `U8PoolError::EmptyVector` if the vector is empty.
-    ///
-    /// # Panics
-    ///
-    /// May panic if buffer integrity is compromised (internal validation failure).
-    #[allow(clippy::expect_used)]
-    pub fn try_pop(&mut self) -> Result<&[u8], U8PoolError> {
-        if self.count == 0 {
-            return Err(U8PoolError::EmptyVector);
-        }
-
-        self.count -= 1;
-        let (start, length) = self.get_slice_descriptor(self.count);
-
-        // data_used is now automatically recalculated when needed
-        Ok(self
-            .buffer
-            .get(start..start + length)
-            .expect("Slice bounds validated during add operation"))
-    }
 
     /// Returns an iterator over the slices in the vector.
     #[must_use]

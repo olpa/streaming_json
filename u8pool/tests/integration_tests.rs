@@ -119,7 +119,7 @@ fn test_pop_operation() {
     assert_eq!(popped, Some(&b"hello"[..]));
     assert_eq!(u8pool.len(), 0);
 
-    assert!(u8pool.try_pop().is_err());
+    assert_eq!(u8pool.pop(), None);
 }
 
 #[test]
