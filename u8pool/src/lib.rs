@@ -22,54 +22,22 @@
 //! let mut buffer = [0u8; 600];
 //! let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 //!
-//! // Add key-value pairs using specialized methods
-//! u8pool.add_key(b"name").unwrap();      // key at index 0
-//! u8pool.add_value(b"Alice").unwrap();   // value at index 1
-//! u8pool.add_key(b"age").unwrap();       // key at index 2
-//! u8pool.add_value(b"30").unwrap();      // value at index 3
+//! // Add key-value pairs using push
+//! u8pool.push(b"name").unwrap();      // key at index 0
+//! u8pool.push(b"Alice").unwrap();     // value at index 1
+//! u8pool.push(b"age").unwrap();       // key at index 2
+//! u8pool.push(b"30").unwrap();        // value at index 3
 //!
-//! // Specialized methods handle replacement logic
-//! u8pool.add_key(b"country").unwrap();   // replaces "age" key since last element was a value
-//! u8pool.add_value(b"USA").unwrap();     // adds normally since last element is now a key
-//!
-//! // Use dictionary interface
+//! // Use dictionary interface with pairs iterator
 //! for (key, value) in u8pool.pairs() {
 //!     match value {
 //!         Some(v) => println!("{:?} = {:?}", key, v),
 //!         None => println!("{:?} = <no value>", key),
 //!     }
 //! }
-//!
-//! // Check for unpaired keys
-//! if u8pool.has_unpaired_key() {
-//!     println!("Last element is an unpaired key");
-//! }
 //! ```
 //!
-//! ## Replacement Semantics
-//!
-//! The specialized dictionary methods `add_key()` and `add_value()` implement smart replacement logic:
-//!
-//! - `add_key()`: If the last element is already a key, replaces it. Otherwise, adds normally.
-//! - `add_value()`: If the last element is already a value, replaces it. Otherwise, adds normally.
-//!
-//! This allows for building dictionaries incrementally while correcting mistakes:
-//!
-//! ```
-//! # use u8pool::U8Pool;
-//! let mut buffer = [0u8; 600];
-//! let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
-//!
-//! u8pool.add_key(b"name").unwrap();
-//! u8pool.add_key(b"username").unwrap();  // replaces "name" with "username"
-//! u8pool.add_value(b"alice").unwrap();   // adds value for "username"
-//! u8pool.add_value(b"alice123").unwrap(); // replaces "alice" with "alice123"
-//!
-//! assert_eq!(u8pool.len(), 2);
-//! assert_eq!(u8pool.get(0).unwrap(), b"username");
-//! assert_eq!(u8pool.get(1).unwrap(), b"alice123");
-//! ```
-//!
+
 //! # Stack Interface
 //!
 //! `U8Pool` supports stack operations through methods like `push()` and `pop()`:

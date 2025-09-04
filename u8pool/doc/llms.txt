@@ -49,8 +49,7 @@ U8Pool::new(&mut buffer, max_slices: usize) -> Result<U8Pool, U8PoolError>
 push(&mut self, data: &[u8]) -> Result<(), U8PoolError>
 
 // Accessing elements  
-get(&self, index: usize) -> &[u8]                    // Panics on bounds
-try_get(&self, index: usize) -> Result<&[u8], U8PoolError>  // Safe variant
+get(&self, index: usize) -> Option<&[u8]>            // Returns None if out of bounds
 len(&self) -> usize
 is_empty(&self) -> bool
 clear(&mut self)
@@ -70,15 +69,8 @@ pop(&mut self) -> Option<&[u8]>                          // Returns None if empt
 
 ### Dictionary Interface
 ```rust
-// Smart adding (replaces if same type, adds if different)
-add_key(&mut self, data: &[u8]) -> Result<(), U8PoolError>
-add_value(&mut self, data: &[u8]) -> Result<(), U8PoolError>
-
-// Dictionary properties
-is_key(&self, index: usize) -> bool                    // True if index % 2 == 0
-is_value(&self, index: usize) -> bool                  // True if index % 2 == 1
-has_unpaired_key(&self) -> bool                        // True if len() % 2 == 1
-pairs_count(&self) -> usize                            // Number of complete pairs
+// Dictionary interpretation: even indices are keys, odd indices are values
+// Use push() to add elements following key-value pattern
 
 // Iteration
 pairs(&self) -> U8PoolPairIter                         // Yields (key, Option<value>)
@@ -143,13 +135,13 @@ if let Some(data) = u8pool.get(index) {
 }
 
 // Pattern 4: Error logging with context
-match u8pool.add_key(key_data) {
+match u8pool.push(data) {
     Ok(_) => {},
     Err(U8PoolError::SliceLimitExceeded { max_slices }) => {
-        log::error!("Cannot add key: {}", U8PoolError::SliceLimitExceeded { max_slices }); // Full descriptive message
+        log::error!("Cannot add data: {}", U8PoolError::SliceLimitExceeded { max_slices }); // Full descriptive message
         log::debug!("Max slices configured: {}", max_slices); // Structured data
     },
-    Err(e) => log::error!("Unexpected error adding key: {}", e),
+    Err(e) => log::error!("Unexpected error adding data: {}", e),
 }
 
 // Pattern 5: Error recovery with detailed context
@@ -183,7 +175,9 @@ u8pool.push(b"third")?;
 
 // Access by index
 for i in 0..u8pool.len() {
-    println!("Element {}: {:?}", i, u8pool.get(i).unwrap());
+    if let Some(element) = u8pool.get(i) {
+        println!("Element {}: {:?}", i, element);
+    }
 }
 
 // Iterate
@@ -213,11 +207,11 @@ while let Some(item) = u8pool.pop() {
 let mut buffer = [0u8; 800];
 let mut u8pool = U8Pool::new(&mut buffer, 20)?;
 
-// Build dictionary
-u8pool.add_key(b"name")?;
-u8pool.add_value(b"Alice")?;
-u8pool.add_key(b"age")?;
-u8pool.add_value(b"30")?;
+// Build dictionary using push (even indices = keys, odd indices = values)
+u8pool.push(b"name")?;    // key at index 0
+u8pool.push(b"Alice")?;   // value at index 1
+u8pool.push(b"age")?;     // key at index 2
+u8pool.push(b"30")?;      // value at index 3
 
 // Iterate pairs
 for (key, value) in u8pool.pairs() {
@@ -227,39 +221,19 @@ for (key, value) in u8pool.pairs() {
     }
 }
 
-// Check for unpaired keys
-if u8pool.has_unpaired_key() {
-    println!("Warning: incomplete key-value pair");
-}
 ```
 
-### Pattern 4: Smart Dictionary Building
-```rust
-let mut buffer = [0u8; 600];
-let mut u8pool = U8Pool::with_default_max_slices(&mut buffer)?;
 
-// Smart replacement logic
-u8pool.add_key(b"name")?;         // Adds key
-u8pool.add_key(b"username")?;     // Replaces previous key
-u8pool.add_value(b"alice")?;      // Adds value
-u8pool.add_value(b"bob")?;        // Replaces previous value
-
-// Result: [username, bob]
-assert_eq!(u8pool.len(), 2);
-assert_eq!(u8pool.get(0).unwrap(), b"username");
-assert_eq!(u8pool.get(1).unwrap(), b"bob");
-```
-
-### Pattern 5: Mixed Interface Usage
+### Pattern 4: Mixed Interface Usage
 ```rust
 let mut buffer = [0u8; 1500];
 let mut u8pool = U8Pool::new(&mut buffer, 30)?;
 
 // Configuration parsing workflow
-u8pool.add_key(b"host")?;         // Dictionary for config
-u8pool.add_value(b"localhost")?;
-u8pool.add_key(b"port")?;
-u8pool.add_value(b"8080")?;
+u8pool.push(b"host")?;           // Dictionary for config (key at even index)
+u8pool.push(b"localhost")?;      // value at odd index
+u8pool.push(b"port")?;           // key at even index
+u8pool.push(b"8080")?;           // value at odd index
 
 u8pool.push(b"tag1")?;             // Vector for tags
 u8pool.push(b"tag2")?;
@@ -286,8 +260,6 @@ u8pool.push(b"value1")?;   // Index 1 (value)
 u8pool.push(b"key2")?;     // Index 2 (key) - unpaired!
 
 assert_eq!(u8pool.len(), 3);
-assert!(u8pool.has_unpaired_key());
-assert_eq!(u8pool.pairs_count(), 1); // Only one complete pair
 
 // Pairs iterator handles unpaired keys
 let pairs: Vec<_> = u8pool.pairs().collect();
@@ -295,28 +267,6 @@ assert_eq!(pairs[0], (b"key1", Some(b"value1")));
 assert_eq!(pairs[1], (b"key2", None));  // None for missing value
 ```
 
-### Smart Replacement Logic
-The `add_key()` and `add_value()` methods implement smart replacement:
-
-```rust
-// add_key() behavior:
-if u8pool.is_empty() || !u8pool.has_unpaired_key() {
-    // Add normally (last element is value or buffer empty)
-    u8pool.push(data)
-} else {
-    // Replace last element (last element is key)
-    u8pool.replace_last(data)
-}
-
-// add_value() behavior:
-if u8pool.is_empty() || u8pool.has_unpaired_key() {
-    // Add normally (last element is key or buffer empty)
-    u8pool.push(data)  
-} else {
-    // Replace last element (last element is value)
-    u8pool.replace_last(data)
-}
-```
 
 ## Design Characteristics
 
@@ -336,22 +286,22 @@ if u8pool.is_empty() || u8pool.has_unpaired_key() {
 ### 1. Protocol Parsing
 ```rust
 // Parse HTTP-like headers + body
-u8pool.add_key(b"Content-Type")?;
-u8pool.add_value(b"application/json")?;
-u8pool.add_key(b"Content-Length")?;
-u8pool.add_value(b"256")?;
-u8pool.push(b"POST")?;
-u8pool.push(b"/api/endpoint")?;
+u8pool.push(b"Content-Type")?;        // key
+u8pool.push(b"application/json")?;    // value
+u8pool.push(b"Content-Length")?;      // key
+u8pool.push(b"256")?;                 // value
+u8pool.push(b"POST")?;                // additional data
+u8pool.push(b"/api/endpoint")?;       // additional data
 ```
 
 ### 2. Configuration Management
 ```rust
 // Key-value config with additional metadata
-u8pool.add_key(b"database_url")?;
-u8pool.add_value(b"postgresql://...")?;
-u8pool.add_key(b"max_connections")?;
-u8pool.add_value(b"100")?;
-u8pool.push(b"production")?;  // Environment tag
+u8pool.push(b"database_url")?;        // key
+u8pool.push(b"postgresql://...")?;    // value
+u8pool.push(b"max_connections")?;     // key
+u8pool.push(b"100")?;                 // value
+u8pool.push(b"production")?;          // Environment tag
 ```
 
 ### 3. Expression Parsing
@@ -381,7 +331,7 @@ u8pool.push(b"Connection failed")?;
 ### 1. Error Handling
 - **Use `?` operator** for error propagation - errors include descriptive messages automatically
 - **Match specific error types** when recovery is possible - access both message and structured data
-- **Use safe variants** (`try_*`) when bounds are uncertain to avoid panics
+- **Use safe get method** that returns Option to avoid panics
 - **Log with context** - utilize both `Display` trait for messages and structured fields for details
 - **Leverage `thiserror`** - errors work seamlessly with standard error handling patterns
 
@@ -402,7 +352,7 @@ u8pool.push(b"Connection failed")?;
 
 ### 5. Memory Safety
 - Always check error conditions, especially `BufferOverflow` and `SliceLimitExceeded`
-- Use safe variants when index bounds are uncertain
+- Use safe get method when index bounds are uncertain
 - Clear buffer when reusing to avoid stale data confusion
 
 ## Integration Examples
@@ -414,8 +364,8 @@ fn parse_json_like(data: &str, u8pool: &mut U8Pool) -> Result<(), U8PoolError> {
     for pair in data.split(',') {
         let parts: Vec<&str> = pair.split(':').collect();
         if parts.len() == 2 {
-            u8pool.add_key(parts[0].trim().as_bytes())?;
-            u8pool.add_value(parts[1].trim().as_bytes())?;
+            u8pool.push(parts[0].trim().as_bytes())?;  // key
+            u8pool.push(parts[1].trim().as_bytes())?;  // value
         }
     }
     Ok(())
@@ -439,9 +389,9 @@ fn process_args(args: &[&str], u8pool: &mut U8Pool) -> Result<(), U8PoolError> {
     while i < args.len() {
         if args[i].starts_with("--") {
             // Long option
-            u8pool.add_key(args[i][2..].as_bytes())?;
+            u8pool.push(args[i][2..].as_bytes())?;  // key
             if i + 1 < args.len() && !args[i + 1].starts_with("-") {
-                u8pool.add_value(args[i + 1].as_bytes())?;
+                u8pool.push(args[i + 1].as_bytes())?;  // value
                 i += 2;
             } else {
                 i += 1;
@@ -464,7 +414,7 @@ fn process_state_machine(events: &[&str], u8pool: &mut U8Pool) -> Result<(), U8P
     for event in events {
         // Get current state via vector interface
         let current_state = if u8pool.len() > 0 {
-            u8pool.get(u8pool.len() - 1).unwrap()
+            u8pool.get(u8pool.len() - 1).unwrap_or(b"none")
         } else {
             b"none"
         };

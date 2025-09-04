@@ -210,30 +210,6 @@ impl<'a> U8Pool<'a> {
         self.into_iter()
     }
 
-    /// Returns true if the index represents a key (even indices).
-    #[must_use]
-    pub fn is_key(&self, index: usize) -> bool {
-        index % 2 == 0
-    }
-
-    /// Returns true if the index represents a value (odd indices).
-    #[must_use]
-    pub fn is_value(&self, index: usize) -> bool {
-        index % 2 == 1
-    }
-
-    /// Returns true if the last element is an unpaired key (odd number of elements).
-    #[must_use]
-    pub fn has_unpaired_key(&self) -> bool {
-        self.count % 2 == 1
-    }
-
-    /// Returns the number of complete key-value pairs.
-    #[must_use]
-    pub fn pairs_count(&self) -> usize {
-        self.count / 2
-    }
-
     /// Returns an iterator over key-value pairs.
     #[must_use]
     pub fn pairs(&self) -> U8PoolPairIter<'_> {
@@ -241,88 +217,5 @@ impl<'a> U8Pool<'a> {
             u8pool: self,
             current_pair: 0,
         }
-    }
-
-    /// Adds a key to the dictionary. If the last element is already a key, replaces it.
-    ///
-    /// # Errors
-    ///
-    /// Returns `U8PoolError::BufferOverflow` if:
-    /// - The maximum number of slices has been reached and replacement is not possible
-    /// - There is insufficient space in the buffer for the data and replacement is not possible
-    ///
-    /// # Panics
-    ///
-    /// May panic if buffer integrity is compromised (internal validation failure).
-    pub fn add_key(&mut self, data: &[u8]) -> Result<(), U8PoolError> {
-        if self.is_empty() || !self.has_unpaired_key() {
-            // Empty vector or last element is a value, so push normally
-            self.push(data)
-        } else {
-            // Last element is a key, replace it
-            self.replace_last(data)
-        }
-    }
-
-    /// Adds a value to the dictionary. If the last element is already a value, replaces it.
-    ///
-    /// # Errors
-    ///
-    /// Returns `U8PoolError::BufferOverflow` if:
-    /// - The maximum number of slices has been reached and replacement is not possible
-    /// - There is insufficient space in the buffer for the data and replacement is not possible
-    ///
-    /// # Panics
-    ///
-    /// May panic if buffer integrity is compromised (internal validation failure).
-    pub fn add_value(&mut self, data: &[u8]) -> Result<(), U8PoolError> {
-        if self.is_empty() || self.has_unpaired_key() {
-            // Empty vector or last element is a key, so push normally
-            self.push(data)
-        } else {
-            // Last element is a value, replace it
-            self.replace_last(data)
-        }
-    }
-
-    #[allow(clippy::expect_used)]
-    fn replace_last(&mut self, data: &[u8]) -> Result<(), U8PoolError> {
-        if self.is_empty() {
-            return Err(U8PoolError::EmptyVector);
-        }
-
-        // Calculate space needed and available space after removing last element
-        let last_index = self.count - 1;
-
-        // Check if new data fits in the space that would be available
-        // We need to consider the space after all elements except the last one
-        let mut data_used_without_last = 0;
-        for i in 0..last_index {
-            let (slice_start, slice_length) = self.get_slice_descriptor(i);
-            let slice_end = slice_start + slice_length - self.data_start();
-            data_used_without_last = data_used_without_last.max(slice_end);
-        }
-
-        let available_space = self.buffer.len() - self.data_start() - data_used_without_last;
-        if data.len() > available_space {
-            return Err(U8PoolError::BufferOverflow {
-                requested: data.len(),
-                available: available_space,
-            });
-        }
-
-        // Place new data at the end of existing data (excluding the last element)
-        let new_start = self.data_start() + data_used_without_last;
-        let new_end = new_start + data.len();
-
-        self.buffer
-            .get_mut(new_start..new_end)
-            .expect("Buffer capacity checked above")
-            .copy_from_slice(data);
-
-        // Update the descriptor for the last element
-        self.set_slice_descriptor(last_index, new_start, data.len());
-
-        Ok(())
     }
 }
