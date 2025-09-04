@@ -109,7 +109,7 @@
 //!
 //! // Mix stack and vector operations
 //! u8pool.push(b"stack_data").unwrap();
-//! u8pool.add(b"vector_data").unwrap();
+//! u8pool.push(b"vector_data").unwrap();
 //!
 //! // Both interfaces work on the same underlying data
 //! assert_eq!(u8pool.get(0).unwrap(), b"stack_data");
@@ -125,8 +125,8 @@
 //! let mut buffer = [0u8; 600];
 //! let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 //!
-//! u8pool.add(b"hello").unwrap();
-//! u8pool.add(b"world").unwrap();
+//! u8pool.push(b"hello").unwrap();
+//! u8pool.push(b"world").unwrap();
 //!
 //! // Iterate using for loop
 //! for slice in &u8pool {

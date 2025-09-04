@@ -15,9 +15,9 @@ fn test_iterator_populated_vector() {
     let mut buffer = [0u8; 600];
     let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
-    u8pool.add(b"hello").unwrap();
-    u8pool.add(b"world").unwrap();
-    u8pool.add(b"test").unwrap();
+    u8pool.push(b"hello").unwrap();
+    u8pool.push(b"world").unwrap();
+    u8pool.push(b"test").unwrap();
 
     let mut iter = u8pool.into_iter();
     assert_eq!(iter.size_hint(), (3, Some(3)));
@@ -39,8 +39,8 @@ fn test_iterator_consumed_completely() {
     let mut buffer = [0u8; 600];
     let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
-    u8pool.add(b"a").unwrap();
-    u8pool.add(b"b").unwrap();
+    u8pool.push(b"a").unwrap();
+    u8pool.push(b"b").unwrap();
 
     let collected: Vec<_> = u8pool.into_iter().collect();
     assert_eq!(collected, vec![&b"a"[..], &b"b"[..]]);
@@ -51,9 +51,9 @@ fn test_iterator_partial_iteration() {
     let mut buffer = [0u8; 600];
     let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
-    u8pool.add(b"first").unwrap();
-    u8pool.add(b"second").unwrap();
-    u8pool.add(b"third").unwrap();
+    u8pool.push(b"first").unwrap();
+    u8pool.push(b"second").unwrap();
+    u8pool.push(b"third").unwrap();
 
     let mut iter = u8pool.into_iter();
     assert_eq!(iter.next(), Some(&b"first"[..]));
@@ -69,7 +69,7 @@ fn test_iterator_lifetime_correctness() {
     let mut buffer = [0u8; 600];
     let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
-    u8pool.add(b"data").unwrap();
+    u8pool.push(b"data").unwrap();
 
     // Test that iterator can be created and used
     {
@@ -88,8 +88,8 @@ fn test_for_loop_syntax() {
     let mut buffer = [0u8; 600];
     let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
-    u8pool.add(b"hello").unwrap();
-    u8pool.add(b"world").unwrap();
+    u8pool.push(b"hello").unwrap();
+    u8pool.push(b"world").unwrap();
 
     let mut results = Vec::new();
     for slice in &u8pool {
@@ -104,8 +104,8 @@ fn test_iter_method() {
     let mut buffer = [0u8; 600];
     let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
-    u8pool.add(b"hello").unwrap();
-    u8pool.add(b"world").unwrap();
+    u8pool.push(b"hello").unwrap();
+    u8pool.push(b"world").unwrap();
 
     let collected: Vec<_> = u8pool.iter().collect();
     assert_eq!(collected, vec![&b"hello"[..], &b"world"[..]]);

@@ -154,7 +154,7 @@ impl<'a> U8Pool<'a> {
     }
 
 
-    /// Adds a slice to the vector.
+    /// Pushes a slice onto the stack.
     ///
     /// # Errors
     ///
@@ -166,7 +166,7 @@ impl<'a> U8Pool<'a> {
     ///
     /// May panic if buffer integrity is compromised (internal validation failure).
     #[allow(clippy::expect_used)]
-    pub fn add(&mut self, data: &[u8]) -> Result<(), U8PoolError> {
+    pub fn push(&mut self, data: &[u8]) -> Result<(), U8PoolError> {
         self.ensure_capacity(data.len())?;
 
         let start = self.data_start() + self.data_used();
@@ -180,21 +180,6 @@ impl<'a> U8Pool<'a> {
         self.count += 1;
 
         Ok(())
-    }
-
-    /// Pushes a slice onto the stack (alias for `add`).
-    ///
-    /// # Errors
-    ///
-    /// Returns `U8PoolError::BufferOverflow` if:
-    /// - The maximum number of slices has been reached
-    /// - There is insufficient space in the buffer for the data
-    ///
-    /// # Panics
-    ///
-    /// May panic if buffer integrity is compromised (internal validation failure).
-    pub fn push(&mut self, data: &[u8]) -> Result<(), U8PoolError> {
-        self.add(data)
     }
 
     /// Returns a reference to the top element of the stack (last element) without removing it.
@@ -317,8 +302,8 @@ impl<'a> U8Pool<'a> {
     /// May panic if buffer integrity is compromised (internal validation failure).
     pub fn add_key(&mut self, data: &[u8]) -> Result<(), U8PoolError> {
         if self.is_empty() || !self.has_unpaired_key() {
-            // Empty vector or last element is a value, so add normally
-            self.add(data)
+            // Empty vector or last element is a value, so push normally
+            self.push(data)
         } else {
             // Last element is a key, replace it
             self.replace_last(data)
@@ -338,8 +323,8 @@ impl<'a> U8Pool<'a> {
     /// May panic if buffer integrity is compromised (internal validation failure).
     pub fn add_value(&mut self, data: &[u8]) -> Result<(), U8PoolError> {
         if self.is_empty() || self.has_unpaired_key() {
-            // Empty vector or last element is a key, so add normally
-            self.add(data)
+            // Empty vector or last element is a key, so push normally
+            self.push(data)
         } else {
             // Last element is a value, replace it
             self.replace_last(data)

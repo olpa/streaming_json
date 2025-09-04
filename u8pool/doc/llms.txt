@@ -6,7 +6,7 @@ This document provides comprehensive information about U8Pool for Large Language
 
 U8Pool is a zero-allocation vector implementation that stores all data in a client-provided buffer. It provides three interfaces to the same underlying data:
 
-1. **Vector Interface**: Standard indexed access (`add`, `get`, `len`, etc.)
+1. **Vector Interface**: Standard indexed access (`push`, `get`, `len`, etc.)
 2. **Stack Interface**: LIFO operations (`push`, `pop`, `top`)  
 3. **Dictionary Interface**: Key-value semantics where even indices are keys, odd indices are values
 
@@ -46,7 +46,7 @@ U8Pool::new(&mut buffer, max_slices: usize) -> Result<U8Pool, U8PoolError>
 ### Vector Interface
 ```rust
 // Adding elements
-add(&mut self, data: &[u8]) -> Result<(), U8PoolError>
+push(&mut self, data: &[u8]) -> Result<(), U8PoolError>
 
 // Accessing elements  
 get(&self, index: usize) -> &[u8]                    // Panics on bounds
@@ -63,7 +63,7 @@ iter(&self) -> U8PoolIter                            // Returns iterator
 ### Stack Interface
 ```rust
 // Adding/removing
-push(&mut self, data: &[u8]) -> Result<(), U8PoolError>  // Alias for add()
+push(&mut self, data: &[u8]) -> Result<(), U8PoolError>  // Primary method
 pop(&mut self) -> Option<&[u8]>                          // Returns None if empty
 try_pop(&mut self) -> Result<&[u8], U8PoolError>         // Safe variant
 
@@ -124,7 +124,7 @@ pub enum U8PoolError {
 ### Error Handling Patterns
 ```rust
 // Pattern 1: Match specific errors with descriptive messages
-match u8pool.add(large_data) {
+match u8pool.push(large_data) {
     Ok(_) => {},
     Err(U8PoolError::BufferOverflow { requested, available }) => {
         println!("Error: {}", U8PoolError::BufferOverflow { requested, available }); // "Buffer overflow: requested 200 bytes, but only 84 bytes available"
@@ -135,7 +135,7 @@ match u8pool.add(large_data) {
 
 // Pattern 2: Use ? operator for error propagation
 fn process_data(u8pool: &mut U8Pool, data: &[u8]) -> Result<(), U8PoolError> {
-    u8pool.add(data)?; // Automatically propagates U8PoolError with descriptive message
+    u8pool.push(data)?; // Automatically propagates U8PoolError with descriptive message
     Ok(())
 }
 
@@ -158,11 +158,11 @@ match u8pool.add_key(key_data) {
 
 // Pattern 5: Error recovery with detailed context
 fn robust_add(u8pool: &mut U8Pool, data: &[u8]) -> Result<bool, U8PoolError> {
-    match u8pool.add(data) {
+    match u8pool.push(data) {
         Ok(_) => Ok(true),
         Err(U8PoolError::BufferOverflow { available, .. }) if available > data.len() / 2 => {
             // Try adding half the data if there's some space
-            u8pool.add(&data[..available / 2])?;
+            u8pool.push(&data[..available / 2])?;
             Ok(false) // Partial success
         },
         Err(e) => {
@@ -181,9 +181,9 @@ let mut buffer = [0u8; 1000];
 let mut u8pool = U8Pool::with_default_max_slices(&mut buffer)?;
 
 // Add elements
-u8pool.add(b"first")?;
-u8pool.add(b"second")?;
-u8pool.add(b"third")?;
+u8pool.push(b"first")?;
+u8pool.push(b"second")?;
+u8pool.push(b"third")?;
 
 // Access by index
 for i in 0..u8pool.len() {
@@ -265,8 +265,8 @@ u8pool.add_value(b"localhost")?;
 u8pool.add_key(b"port")?;
 u8pool.add_value(b"8080")?;
 
-u8pool.add(b"tag1")?;             // Vector for tags
-u8pool.add(b"tag2")?;
+u8pool.push(b"tag1")?;             // Vector for tags
+u8pool.push(b"tag2")?;
 
 u8pool.push(b"temp_state")?;      // Stack for processing state
 
@@ -285,9 +285,9 @@ let tag_count = u8pool.len() - 4; // Remaining elements after config pairs
 
 ### Unpaired Key Handling
 ```rust
-u8pool.add(b"key1")?;     // Index 0 (key)
-u8pool.add(b"value1")?;   // Index 1 (value) 
-u8pool.add(b"key2")?;     // Index 2 (key) - unpaired!
+u8pool.push(b"key1")?;     // Index 0 (key)
+u8pool.push(b"value1")?;   // Index 1 (value) 
+u8pool.push(b"key2")?;     // Index 2 (key) - unpaired!
 
 assert_eq!(u8pool.len(), 3);
 assert!(u8pool.has_unpaired_key());
@@ -306,7 +306,7 @@ The `add_key()` and `add_value()` methods implement smart replacement:
 // add_key() behavior:
 if u8pool.is_empty() || !u8pool.has_unpaired_key() {
     // Add normally (last element is value or buffer empty)
-    u8pool.add(data)
+    u8pool.push(data)
 } else {
     // Replace last element (last element is key)
     u8pool.replace_last(data)
@@ -315,7 +315,7 @@ if u8pool.is_empty() || !u8pool.has_unpaired_key() {
 // add_value() behavior:
 if u8pool.is_empty() || u8pool.has_unpaired_key() {
     // Add normally (last element is key or buffer empty)
-    u8pool.add(data)  
+    u8pool.push(data)  
 } else {
     // Replace last element (last element is value)
     u8pool.replace_last(data)
@@ -344,8 +344,8 @@ u8pool.add_key(b"Content-Type")?;
 u8pool.add_value(b"application/json")?;
 u8pool.add_key(b"Content-Length")?;
 u8pool.add_value(b"256")?;
-u8pool.add(b"POST")?;
-u8pool.add(b"/api/endpoint")?;
+u8pool.push(b"POST")?;
+u8pool.push(b"/api/endpoint")?;
 ```
 
 ### 2. Configuration Management
@@ -355,7 +355,7 @@ u8pool.add_key(b"database_url")?;
 u8pool.add_value(b"postgresql://...")?;
 u8pool.add_key(b"max_connections")?;
 u8pool.add_value(b"100")?;
-u8pool.add(b"production")?;  // Environment tag
+u8pool.push(b"production")?;  // Environment tag
 ```
 
 ### 3. Expression Parsing
@@ -372,12 +372,12 @@ u8pool.push(b"*")?;
 ### 4. Log/Event Processing
 ```rust
 // Vector of events with metadata
-u8pool.add(b"2023-01-01T10:00:00")?;
-u8pool.add(b"INFO")?;
-u8pool.add(b"Server started")?;
-u8pool.add(b"2023-01-01T10:01:00")?;
-u8pool.add(b"ERROR")?;
-u8pool.add(b"Connection failed")?;
+u8pool.push(b"2023-01-01T10:00:00")?;
+u8pool.push(b"INFO")?;
+u8pool.push(b"Server started")?;
+u8pool.push(b"2023-01-01T10:01:00")?;
+u8pool.push(b"ERROR")?;
+u8pool.push(b"Connection failed")?;
 ```
 
 ## Best Practices
@@ -452,7 +452,7 @@ fn process_args(args: &[&str], u8pool: &mut U8Pool) -> Result<(), U8PoolError> {
             }
         } else {
             // Positional argument
-            u8pool.add(args[i].as_bytes())?;
+            u8pool.push(args[i].as_bytes())?;
             i += 1;
         }
     }

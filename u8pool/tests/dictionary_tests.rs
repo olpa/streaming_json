@@ -21,10 +21,10 @@ fn test_key_value_pairing_even_elements() {
     let mut buffer = [0u8; 600];
     let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
-    u8pool.add(b"key1").unwrap();
-    u8pool.add(b"value1").unwrap();
-    u8pool.add(b"key2").unwrap();
-    u8pool.add(b"value2").unwrap();
+    u8pool.push(b"key1").unwrap();
+    u8pool.push(b"value1").unwrap();
+    u8pool.push(b"key2").unwrap();
+    u8pool.push(b"value2").unwrap();
 
     assert_eq!(u8pool.len(), 4);
     assert!(!u8pool.has_unpaired_key());
@@ -46,9 +46,9 @@ fn test_unpaired_key_handling_odd_elements() {
     let mut buffer = [0u8; 600];
     let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
-    u8pool.add(b"key1").unwrap();
-    u8pool.add(b"value1").unwrap();
-    u8pool.add(b"key2").unwrap();
+    u8pool.push(b"key1").unwrap();
+    u8pool.push(b"value1").unwrap();
+    u8pool.push(b"key2").unwrap();
 
     assert_eq!(u8pool.len(), 3);
     assert!(u8pool.has_unpaired_key());
@@ -68,10 +68,10 @@ fn test_dictionary_iterator_even_elements() {
     let mut buffer = [0u8; 600];
     let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
-    u8pool.add(b"key1").unwrap();
-    u8pool.add(b"value1").unwrap();
-    u8pool.add(b"key2").unwrap();
-    u8pool.add(b"value2").unwrap();
+    u8pool.push(b"key1").unwrap();
+    u8pool.push(b"value1").unwrap();
+    u8pool.push(b"key2").unwrap();
+    u8pool.push(b"value2").unwrap();
 
     let pairs: Vec<_> = u8pool.pairs().collect();
     assert_eq!(pairs.len(), 2);
@@ -84,9 +84,9 @@ fn test_dictionary_iterator_odd_elements() {
     let mut buffer = [0u8; 600];
     let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
-    u8pool.add(b"key1").unwrap();
-    u8pool.add(b"value1").unwrap();
-    u8pool.add(b"key2").unwrap();
+    u8pool.push(b"key1").unwrap();
+    u8pool.push(b"value1").unwrap();
+    u8pool.push(b"key2").unwrap();
 
     let pairs: Vec<_> = u8pool.pairs().collect();
     assert_eq!(pairs.len(), 2);
@@ -108,7 +108,7 @@ fn test_dictionary_iterator_single_key() {
     let mut buffer = [0u8; 600];
     let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
-    u8pool.add(b"lonely_key").unwrap();
+    u8pool.push(b"lonely_key").unwrap();
 
     let pairs: Vec<_> = u8pool.pairs().collect();
     assert_eq!(pairs.len(), 1);
@@ -121,10 +121,10 @@ fn test_mixed_usage_vector_and_dictionary() {
     let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
     // Use vector operations
-    u8pool.add(b"name").unwrap();
-    u8pool.add(b"Alice").unwrap();
-    u8pool.add(b"age").unwrap();
-    u8pool.add(b"30").unwrap();
+    u8pool.push(b"name").unwrap();
+    u8pool.push(b"Alice").unwrap();
+    u8pool.push(b"age").unwrap();
+    u8pool.push(b"30").unwrap();
 
     // Test vector interface still works
     assert_eq!(u8pool.len(), 4);
@@ -167,9 +167,9 @@ fn test_add_key_replacing_existing_key() {
     let mut buffer = [0u8; 600];
     let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
-    u8pool.add(b"key1").unwrap();
-    u8pool.add(b"value1").unwrap();
-    u8pool.add(b"key2").unwrap();
+    u8pool.push(b"key1").unwrap();
+    u8pool.push(b"value1").unwrap();
+    u8pool.push(b"key2").unwrap();
 
     assert_eq!(u8pool.len(), 3);
     assert!(u8pool.has_unpaired_key());
@@ -188,8 +188,8 @@ fn test_add_key_after_value_normal_add() {
     let mut buffer = [0u8; 600];
     let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
-    u8pool.add(b"key1").unwrap();
-    u8pool.add(b"value1").unwrap();
+    u8pool.push(b"key1").unwrap();
+    u8pool.push(b"value1").unwrap();
 
     assert_eq!(u8pool.len(), 2);
     assert!(!u8pool.has_unpaired_key());
@@ -208,10 +208,10 @@ fn test_add_value_replacing_existing_value() {
     let mut buffer = [0u8; 600];
     let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
-    u8pool.add(b"key1").unwrap();
-    u8pool.add(b"value1").unwrap();
-    u8pool.add(b"key2").unwrap();
-    u8pool.add(b"value2").unwrap();
+    u8pool.push(b"key1").unwrap();
+    u8pool.push(b"value1").unwrap();
+    u8pool.push(b"key2").unwrap();
+    u8pool.push(b"value2").unwrap();
 
     assert_eq!(u8pool.len(), 4);
     assert!(!u8pool.has_unpaired_key());
@@ -231,7 +231,7 @@ fn test_add_value_after_key_normal_add() {
     let mut buffer = [0u8; 600];
     let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
-    u8pool.add(b"key1").unwrap();
+    u8pool.push(b"key1").unwrap();
 
     assert_eq!(u8pool.len(), 1);
     assert!(u8pool.has_unpaired_key());

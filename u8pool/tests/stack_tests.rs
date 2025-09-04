@@ -96,7 +96,7 @@ fn test_stack_interface_doesnt_break_vector_operations() {
 
     // Mix stack and vector operations
     u8pool.push(b"stack1").unwrap();
-    u8pool.add(b"vector1").unwrap();
+    u8pool.push(b"vector1").unwrap();
     u8pool.push(b"stack2").unwrap();
 
     assert_eq!(u8pool.len(), 3);

@@ -39,11 +39,11 @@ fn test_error_detailed_buffer_overflow() {
     let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
     // Fill buffer to near capacity
-    u8pool.add(b"small").unwrap();
+    u8pool.push(b"small").unwrap();
 
     // Try to add data that won't fit
     let large_data = vec![b'x'; 100];
-    let result = u8pool.add(&large_data);
+    let result = u8pool.push(&large_data);
     match result.unwrap_err() {
         U8PoolError::BufferOverflow {
             requested,
@@ -61,7 +61,7 @@ fn test_error_detailed_index_out_of_bounds() {
     let mut buffer = [0u8; 600];
     let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
-    u8pool.add(b"test").unwrap();
+    u8pool.push(b"test").unwrap();
 
     let result = u8pool.get(5);
     assert!(result.is_none());
@@ -72,10 +72,10 @@ fn test_error_slice_limit_exceeded() {
     let mut buffer = [0u8; 600];
     let mut u8pool = U8Pool::new(&mut buffer, 2).unwrap(); // Only 2 slices allowed
 
-    u8pool.add(b"first").unwrap();
-    u8pool.add(b"second").unwrap();
+    u8pool.push(b"first").unwrap();
+    u8pool.push(b"second").unwrap();
 
-    let result = u8pool.add(b"third");
+    let result = u8pool.push(b"third");
     assert_eq!(
         result.unwrap_err(),
         U8PoolError::SliceLimitExceeded { max_slices: 2 }
