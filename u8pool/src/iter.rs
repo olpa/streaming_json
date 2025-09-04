@@ -43,6 +43,45 @@ impl<'a> IntoIterator for &'a U8Pool<'a> {
     }
 }
 
+/// Reverse iterator over slices in a U8Pool
+pub struct U8PoolRevIter<'a> {
+    u8pool: &'a U8Pool<'a>,
+    current: usize,
+}
+
+impl<'a> U8PoolRevIter<'a> {
+    pub(crate) fn new(u8pool: &'a U8Pool<'a>) -> Self {
+        Self {
+            u8pool,
+            current: u8pool.len(),
+        }
+    }
+}
+
+impl<'a> Iterator for U8PoolRevIter<'a> {
+    type Item = &'a [u8];
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.current > 0 {
+            self.current -= 1;
+            // Direct access to avoid redundant bounds checks
+            let (start, length) = self.u8pool.get_slice_descriptor(self.current);
+            // Safety: get_slice_descriptor returns valid bounds that were validated during push
+            unsafe {
+                Some(self.u8pool.buffer.get_unchecked(start..start + length))
+            }
+        } else {
+            None
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.current, Some(self.current))
+    }
+}
+
+impl<'a> ExactSizeIterator for U8PoolRevIter<'a> {}
+
 /// Iterator over key-value pairs in a U8Pool
 pub struct U8PoolPairIter<'a> {
     iter: U8PoolIter<'a>,

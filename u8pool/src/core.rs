@@ -1,5 +1,5 @@
 use crate::error::U8PoolError;
-use crate::iter::{U8PoolIter, U8PoolPairIter};
+use crate::iter::{U8PoolIter, U8PoolPairIter, U8PoolRevIter};
 
 const SLICE_DESCRIPTOR_SIZE: usize = 16; // 2 * size_of::<usize>() on 64-bit
 const DEFAULT_MAX_SLICES: usize = 32;
@@ -205,6 +205,12 @@ impl<'a> U8Pool<'a> {
     #[must_use]
     pub fn iter(&self) -> U8PoolIter<'_> {
         self.into_iter()
+    }
+
+    /// Returns a reverse iterator over the slices in the vector.
+    #[must_use]
+    pub fn iter_rev(&self) -> U8PoolRevIter<'_> {
+        U8PoolRevIter::new(self)
     }
 
     /// Returns an iterator over key-value pairs.
