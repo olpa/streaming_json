@@ -236,10 +236,10 @@
 - Profile memory access patterns
 - Consider metadata layout optimization
 - Minimize indirection in hot paths
-- Benchmark against naive implementations
+- ~~Benchmark against naive implementations~~ (benchmarks removed)
 
 **Test Requirements**:
-- Add performance benchmarks
+- ~~Add performance benchmarks~~ (benchmarks removed)
 - Test memory usage patterns
 - Verify zero-allocation guarantee
 - Test cache locality with large datasets
@@ -253,11 +253,11 @@
 
 **Implementation Summary**:
 - Optimized descriptor access to use single 16-byte slice operations for better cache locality
-- Improved `data_used()` from O(n) to O(1) by using last slice position for sequential allocation
+- Improved `data_used()` performance by using last slice position for sequential allocation
 - Enhanced `get_slice_descriptor()` and `set_slice_descriptor()` for more efficient memory access
-- Added comprehensive performance benchmarks covering all operation types
+- ~~Added comprehensive performance benchmarks covering all operation types~~ (benchmarks removed)
 - Verified zero-allocation guarantee with dedicated tests
-- Added cache locality simulation tests for large datasets
+- ~~Added cache locality simulation tests for large datasets~~ (benchmarks removed)
 - Updated module documentation with detailed performance characteristics and guidelines
 - All optimizations maintain full API compatibility and pass existing test suite
 
@@ -302,7 +302,7 @@
 - Final test suite execution
 - Documentation example verification
 - Safety property verification
-- Performance benchmark validation
+- ~~Performance benchmark validation~~ (benchmarks removed)
 
 **Confirmation Required**: Agent must show final review checklist before completion.
 

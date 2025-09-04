@@ -322,13 +322,9 @@ if u8pool.is_empty() || u8pool.has_unpaired_key() {
 }
 ```
 
-## Performance Characteristics
+## Design Characteristics
 
-### Time Complexity
-- **O(1)**: add, get, pop, push, top, clear, len, is_empty
-- **O(n)**: iteration, pairs iteration
-
-### Space Complexity  
+### Memory Layout
 - **Metadata overhead**: 16 bytes per slice
 - **No heap allocations**: All data in client buffer
 - **Memory efficiency**: Sequential data layout

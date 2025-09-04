@@ -6,52 +6,10 @@
 //! client-provided buffer for storage. All operations are bounds-checked and
 //! no internal allocations are performed.
 //!
-//! This crate is `no_std` compatible and works in embedded and constrained environments.
+//! This crate is `no_std` compatible.
 //!
 //! Buffer layout: [metadata section][data section]
 //! Metadata section stores slice descriptors as (`start_offset`, length) pairs.
-//!
-//! # Performance Characteristics
-//!
-//! `U8Pool` is optimized for cache efficiency and minimal overhead:
-//!
-//! ## Time Complexity
-//! - `add()`, `push()`: O(1) - constant time insertion
-//! - `get()`: O(1) - constant time access via descriptor lookup
-//! - `pop()`: O(1) - constant time removal
-//! - `clear()`: O(1) - resets metadata only
-//! - `data_used()`: O(1) - optimized to use last slice position
-//! - Iterator operations: O(n) - linear traversal
-//!
-//! ## Space Complexity
-//! - Memory overhead: 16 bytes per slice (2 × usize for start/length)
-//! - Zero heap allocations - all data stored in client-provided buffer
-//! - Optimal memory layout with metadata section followed by data section
-//!
-//! ## Cache Efficiency Optimizations
-//! - Descriptor access uses single 16-byte slice operations for better cache locality
-//! - Sequential data allocation for optimal cache line utilization
-//! - Metadata stored contiguously at buffer start for efficient access patterns
-//!
-//! ## Performance Guidelines
-//! - Use larger buffers for better amortized performance
-//! - Sequential access patterns are most efficient
-//! - Consider max_slices parameter based on expected element count
-//! - Memory usage scales linearly with data size plus constant metadata overhead
-//!
-//! ## `no_std` Compatibility
-//!
-//! This crate is designed to work in `no_std` environments:
-//! - No heap allocations - all data stored in provided buffers
-//! - Uses only `core` library functionality
-//! - No dependency on `std::error::Error` or `std::fmt::Display`
-//! - Suitable for embedded systems and constrained environments
-//!
-//! Enable the optional `std` feature for additional functionality in std environments:
-//! ```toml
-//! [dependencies]
-//! u8pool = { version = "0.1", features = ["std"] }
-//! ```
 //!
 //! # Dictionary Convention
 //!
