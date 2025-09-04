@@ -28,12 +28,9 @@
 //! u8pool.push(b"age").unwrap();       // key at index 2
 //! u8pool.push(b"30").unwrap();        // value at index 3
 //!
-//! // Use dictionary interface with pairs iterator
+//! // Use dictionary interface with pairs iterator  
 //! for (key, value) in u8pool.pairs() {
-//!     match value {
-//!         Some(v) => println!("{:?} = {:?}", key, v),
-//!         None => println!("{:?} = <no value>", key),
-//!     }
+//!     println!("{:?} = {:?}", key, value);
 //! }
 //! ```
 //!

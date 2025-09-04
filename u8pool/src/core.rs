@@ -7,7 +7,7 @@ const DEFAULT_MAX_SLICES: usize = 32;
 /// A zero-allocation stack implementation using client-provided buffers
 #[derive(Debug)]
 pub struct U8Pool<'a> {
-    buffer: &'a mut [u8],
+    pub(crate) buffer: &'a mut [u8],
     count: usize,
     max_slices: usize,
 }
@@ -102,7 +102,7 @@ impl<'a> U8Pool<'a> {
     }
 
     #[allow(clippy::expect_used)]
-    fn get_slice_descriptor(&self, index: usize) -> (usize, usize) {
+    pub(crate) fn get_slice_descriptor(&self, index: usize) -> (usize, usize) {
         let offset = index * SLICE_DESCRIPTOR_SIZE;
 
         // Read both values in a single 16-byte slice operation for better cache efficiency
@@ -210,9 +210,6 @@ impl<'a> U8Pool<'a> {
     /// Returns an iterator over key-value pairs.
     #[must_use]
     pub fn pairs(&self) -> U8PoolPairIter<'_> {
-        U8PoolPairIter {
-            u8pool: self,
-            current_pair: 0,
-        }
+        U8PoolPairIter::new(self)
     }
 }

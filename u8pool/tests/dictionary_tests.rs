@@ -46,8 +46,8 @@ fn test_dictionary_iterator_even_elements() {
 
     let pairs: Vec<_> = u8pool.pairs().collect();
     assert_eq!(pairs.len(), 2);
-    assert_eq!(pairs[0], (&b"key1"[..], Some(&b"value1"[..])));
-    assert_eq!(pairs[1], (&b"key2"[..], Some(&b"value2"[..])));
+    assert_eq!(pairs[0], (&b"key1"[..], &b"value1"[..]));
+    assert_eq!(pairs[1], (&b"key2"[..], &b"value2"[..]));
 }
 
 #[test]
@@ -57,12 +57,11 @@ fn test_dictionary_iterator_odd_elements() {
 
     u8pool.push(b"key1").unwrap();
     u8pool.push(b"value1").unwrap();
-    u8pool.push(b"key2").unwrap();
+    u8pool.push(b"key2").unwrap(); // incomplete pair - should be ignored
 
     let pairs: Vec<_> = u8pool.pairs().collect();
-    assert_eq!(pairs.len(), 2);
-    assert_eq!(pairs[0], (&b"key1"[..], Some(&b"value1"[..])));
-    assert_eq!(pairs[1], (&b"key2"[..], None));
+    assert_eq!(pairs.len(), 1); // Only the complete pair
+    assert_eq!(pairs[0], (&b"key1"[..], &b"value1"[..]));
 }
 
 #[test]
@@ -79,11 +78,10 @@ fn test_dictionary_iterator_single_key() {
     let mut buffer = [0u8; 600];
     let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
-    u8pool.push(b"lonely_key").unwrap();
+    u8pool.push(b"lonely_key").unwrap(); // incomplete pair - should be ignored
 
     let pairs: Vec<_> = u8pool.pairs().collect();
-    assert_eq!(pairs.len(), 1);
-    assert_eq!(pairs[0], (&b"lonely_key"[..], None));
+    assert_eq!(pairs.len(), 0); // No complete pairs
 }
 
 #[test]
@@ -104,15 +102,15 @@ fn test_mixed_usage_vector_and_dictionary() {
 
     // Test dictionary interface works
     let pairs: Vec<_> = u8pool.pairs().collect();
-    assert_eq!(pairs[0], (&b"name"[..], Some(&b"Alice"[..])));
-    assert_eq!(pairs[1], (&b"age"[..], Some(&b"30"[..])));
+    assert_eq!(pairs.len(), 2);
+    assert_eq!(pairs[0], (&b"name"[..], &b"Alice"[..]));
+    assert_eq!(pairs[1], (&b"age"[..], &b"30"[..]));
 
     // Test that popping works and affects dictionary view
     let popped = u8pool.pop();
     assert_eq!(popped, Some(&b"30"[..]));
 
     let pairs_after_pop: Vec<_> = u8pool.pairs().collect();
-    assert_eq!(pairs_after_pop.len(), 2);
-    assert_eq!(pairs_after_pop[0], (&b"name"[..], Some(&b"Alice"[..])));
-    assert_eq!(pairs_after_pop[1], (&b"age"[..], None));
+    assert_eq!(pairs_after_pop.len(), 1); // Only complete pairs
+    assert_eq!(pairs_after_pop[0], (&b"name"[..], &b"Alice"[..]));
 }

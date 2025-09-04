@@ -11,9 +11,13 @@ impl<'a> Iterator for U8PoolIter<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.current < self.u8pool.len() {
-            let result = self.u8pool.get(self.current)?;
+            // Direct access to avoid redundant bounds checks
+            let (start, length) = self.u8pool.get_slice_descriptor(self.current);
             self.current += 1;
-            Some(result)
+            // Safety: get_slice_descriptor returns valid bounds that were validated during push
+            unsafe {
+                Some(self.u8pool.buffer.get_unchecked(start..start + length))
+            }
         } else {
             None
         }
@@ -41,38 +45,32 @@ impl<'a> IntoIterator for &'a U8Pool<'a> {
 
 /// Iterator over key-value pairs in a U8Pool
 pub struct U8PoolPairIter<'a> {
-    pub(crate) u8pool: &'a U8Pool<'a>,
-    pub(crate) current_pair: usize,
+    iter: U8PoolIter<'a>,
+}
+
+impl<'a> U8PoolPairIter<'a> {
+    pub(crate) fn new(u8pool: &'a U8Pool<'a>) -> Self {
+        Self {
+            iter: u8pool.iter(),
+        }
+    }
 }
 
 impl<'a> Iterator for U8PoolPairIter<'a> {
-    type Item = (&'a [u8], Option<&'a [u8]>);
+    type Item = (&'a [u8], &'a [u8]);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let key_index = self.current_pair * 2;
-
-        if key_index >= self.u8pool.len() {
-            return None;
-        }
-
-        let key = self.u8pool.get(key_index)?;
-        let value = if key_index + 1 < self.u8pool.len() {
-            self.u8pool.get(key_index + 1)
-        } else {
-            None
-        };
-
-        self.current_pair += 1;
+        let key = self.iter.next()?;
+        let value = self.iter.next()?;
         Some((key, value))
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let remaining_pairs = if self.u8pool.is_empty() {
-            0
-        } else {
-            self.u8pool.len().div_ceil(2) - self.current_pair
-        };
-        (remaining_pairs, Some(remaining_pairs))
+        let (lower, upper) = self.iter.size_hint();
+        // Each pair consumes exactly 2 items, so divide by 2 (ignore incomplete pairs)
+        let pairs_lower = lower / 2;
+        let pairs_upper = upper.map(|u| u / 2);
+        (pairs_lower, pairs_upper)
     }
 }
 
