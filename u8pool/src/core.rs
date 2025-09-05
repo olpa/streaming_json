@@ -19,28 +19,29 @@ impl<'a> U8Pool<'a> {
     ///
     /// # Errors
     ///
-    /// Returns `U8PoolError::BufferTooSmall` if:
+    /// Returns `U8PoolError::InvalidInitialization` if:
     /// - `max_slices` is 0
+    /// - The buffer is empty
     /// - The buffer is too small to hold the metadata for `max_slices`
     pub fn new(buffer: &'a mut [u8], max_slices: usize) -> Result<Self, U8PoolError> {
         if max_slices == 0 {
-            return Err(U8PoolError::InvalidConfiguration {
-                parameter: "max_slices",
-                value: max_slices,
+            return Err(U8PoolError::InvalidInitialization {
+                reason: "max_slices cannot be zero",
             });
         }
 
         if buffer.is_empty() {
-            return Err(U8PoolError::ZeroSizeBuffer);
+            return Err(U8PoolError::InvalidInitialization {
+                reason: "buffer cannot be empty",
+            });
         }
 
         let metadata_space = max_slices * SLICE_DESCRIPTOR_SIZE;
         let min_required = metadata_space + 1; // At least 1 byte for data
 
         if buffer.len() < min_required {
-            return Err(U8PoolError::BufferTooSmall {
-                required: min_required,
-                provided: buffer.len(),
+            return Err(U8PoolError::InvalidInitialization {
+                reason: "buffer too small for the requested max_slices",
             });
         }
 
@@ -59,7 +60,7 @@ impl<'a> U8Pool<'a> {
     ///
     /// # Errors
     ///
-    /// Returns `U8PoolError::BufferTooSmall` if the buffer is too small.
+    /// Returns `U8PoolError::InvalidInitialization` if the buffer is too small.
     pub fn with_default_max_slices(buffer: &'a mut [u8]) -> Result<Self, U8PoolError> {
         Self::new(buffer, DEFAULT_MAX_SLICES)
     }
