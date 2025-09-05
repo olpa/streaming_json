@@ -5,13 +5,13 @@ use crate::slice_descriptor::SliceDescriptor;
 const SLICE_DESCRIPTOR_SIZE: usize = 4; // 2 bytes start + 2 bytes length
 const DEFAULT_MAX_SLICES: usize = 32;
 
-/// A zero-allocation stack implementation using client-provided buffers
+/// A zero-allocation stack for u8 slices copied to a client-provided buffer
 #[derive(Debug)]
 pub struct U8Pool<'a> {
-    data: &'a mut [u8],
-    count: usize,
     max_slices: usize,
+    count: usize,
     descriptor: SliceDescriptor<'a>,
+    data: &'a mut [u8],
 }
 
 impl<'a> U8Pool<'a> {
@@ -55,7 +55,7 @@ impl<'a> U8Pool<'a> {
         })
     }
 
-    /// Creates a new `U8Pool` with the default maximum number of slices (8).
+    /// Creates a new `U8Pool` with the default maximum number of slices (32).
     ///
     /// # Errors
     ///
@@ -64,11 +64,13 @@ impl<'a> U8Pool<'a> {
         Self::new(buffer, DEFAULT_MAX_SLICES)
     }
 
+    /// Returns the number of slices currently stored in the pool.
     #[must_use]
     pub fn len(&self) -> usize {
         self.count
     }
 
+    /// Returns `true` if the pool contains no slices.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.count == 0
@@ -161,9 +163,11 @@ impl<'a> U8Pool<'a> {
         self.data.get(start..start + length)
     }
 
+    /// Removes all slices from the pool, making it empty.
+    ///
+    /// This does not affect the underlying data buffer, only the slice count.
     pub fn clear(&mut self) {
         self.count = 0;
-        // data_used is now derived from slice descriptors, so no need to reset it
     }
 
     /// Returns an iterator over the slices in the vector.
