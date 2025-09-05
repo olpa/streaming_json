@@ -11,13 +11,9 @@ impl<'a> Iterator for U8PoolIter<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.current < self.u8pool.len() {
-            // Direct access to avoid redundant bounds checks
-            let (start, length) = self.u8pool.get_slice_descriptor(self.current);
+            let result = self.u8pool.get(self.current);
             self.current += 1;
-            // Safety: get_slice_descriptor returns valid bounds that were validated during push
-            unsafe {
-                Some(self.u8pool.buffer.get_unchecked(start..start + length))
-            }
+            result
         } else {
             None
         }
@@ -64,12 +60,7 @@ impl<'a> Iterator for U8PoolRevIter<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         if self.current > 0 {
             self.current -= 1;
-            // Direct access to avoid redundant bounds checks
-            let (start, length) = self.u8pool.get_slice_descriptor(self.current);
-            // Safety: get_slice_descriptor returns valid bounds that were validated during push
-            unsafe {
-                Some(self.u8pool.buffer.get_unchecked(start..start + length))
-            }
+            self.u8pool.get(self.current)
         } else {
             None
         }

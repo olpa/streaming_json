@@ -76,8 +76,13 @@ impl<'a> U8Pool<'a> {
         if self.count == 0 {
             0
         } else {
-            let (last_start, last_length) = self.get_slice_descriptor(self.count - 1);
-            last_start + last_length - self.data_start()
+            if let Some((last_start, last_length)) = self.get_slice_descriptor(self.count - 1) {
+                last_start + last_length - self.data_start()
+            } else {
+                // This branch should never happen. However, defend against it.
+                // If descriptor is corrupted, assume whole data buffer is used.
+                self.buffer.len() - self.data_start()
+            }
         }
     }
 
@@ -101,35 +106,35 @@ impl<'a> U8Pool<'a> {
         Ok(())
     }
 
-    #[allow(clippy::expect_used)]
-    pub(crate) fn get_slice_descriptor(&self, index: usize) -> (usize, usize) {
+    pub(crate) fn get_slice_descriptor(&self, index: usize) -> Option<(usize, usize)> {
         let offset = index * SLICE_DESCRIPTOR_SIZE;
 
         // Read both values in a single 16-byte slice operation for better cache efficiency
         let descriptor_bytes = self
             .buffer
-            .get(offset..offset + SLICE_DESCRIPTOR_SIZE)
-            .expect("Buffer bounds checked during construction");
+            .get(offset..offset + SLICE_DESCRIPTOR_SIZE)?;
 
-        let start = usize::from_le_bytes(descriptor_bytes[0..8].try_into().expect("First 8 bytes"));
-        let length =
-            usize::from_le_bytes(descriptor_bytes[8..16].try_into().expect("Last 8 bytes"));
+        let start = usize::from_le_bytes(descriptor_bytes[0..8].try_into().ok()?);
+        let length = usize::from_le_bytes(descriptor_bytes[8..16].try_into().ok()?);
 
-        (start, length)
+        Some((start, length))
     }
 
-    #[allow(clippy::expect_used)]
-    fn set_slice_descriptor(&mut self, index: usize, start: usize, length: usize) {
+    fn set_slice_descriptor(&mut self, index: usize, start: usize, length: usize) -> Result<(), U8PoolError> {
         let offset = index * SLICE_DESCRIPTOR_SIZE;
 
         // Write both values in a single slice operation for better cache efficiency
         let descriptor_bytes = self
             .buffer
             .get_mut(offset..offset + SLICE_DESCRIPTOR_SIZE)
-            .expect("Buffer bounds checked during construction");
+            .ok_or(U8PoolError::InvalidConfiguration {
+                parameter: "descriptor_offset",
+                value: offset,
+            })?;
 
         descriptor_bytes[0..8].copy_from_slice(&start.to_le_bytes());
         descriptor_bytes[8..16].copy_from_slice(&length.to_le_bytes());
+        Ok(())
     }
 
     /// Pushes a slice onto the stack.
@@ -140,21 +145,21 @@ impl<'a> U8Pool<'a> {
     /// - The maximum number of slices has been reached
     /// - There is insufficient space in the buffer for the data
     ///
-    /// # Panics
-    ///
-    /// May panic if buffer integrity is compromised (internal validation failure).
-    #[allow(clippy::expect_used)]
     pub fn push(&mut self, data: &[u8]) -> Result<(), U8PoolError> {
         self.ensure_capacity(data.len())?;
 
         let start = self.data_start() + self.data_used();
         let end = start + data.len();
+        let buffer_len = self.buffer.len();
 
-        self.buffer
+        let buffer_slice = self.buffer
             .get_mut(start..end)
-            .expect("Buffer capacity checked by ensure_capacity")
-            .copy_from_slice(data);
-        self.set_slice_descriptor(self.count, start, data.len());
+            .ok_or(U8PoolError::BufferOverflow {
+                requested: data.len(),
+                available: buffer_len.saturating_sub(start),
+            })?;
+        buffer_slice.copy_from_slice(data);
+        self.set_slice_descriptor(self.count, start, data.len())?;
         self.count += 1;
 
         Ok(())
@@ -169,7 +174,7 @@ impl<'a> U8Pool<'a> {
         }
 
         self.count -= 1;
-        let (start, length) = self.get_slice_descriptor(self.count);
+        let (start, length) = self.get_slice_descriptor(self.count)?;
 
         self.buffer.get(start..start + length)
     }
@@ -178,21 +183,13 @@ impl<'a> U8Pool<'a> {
     ///
     /// Returns `None` if the index is out of bounds.
     ///
-    /// # Panics
-    ///
-    /// May panic if buffer integrity is compromised (internal validation failure).
     #[must_use]
-    #[allow(clippy::expect_used)]
     pub fn get(&self, index: usize) -> Option<&[u8]> {
         if index >= self.count {
             return None;
         }
-        let (start, length) = self.get_slice_descriptor(index);
-        Some(
-            self.buffer
-                .get(start..start + length)
-                .expect("Slice bounds validated during add operation"),
-        )
+        let (start, length) = self.get_slice_descriptor(index)?;
+        self.buffer.get(start..start + length)
     }
 
     pub fn clear(&mut self) {
