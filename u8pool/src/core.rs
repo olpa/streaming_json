@@ -189,4 +189,19 @@ impl<'a> U8Pool<'a> {
     pub fn pairs(&self) -> U8PoolPairIter<'_> {
         U8PoolPairIter::new(self)
     }
+
+    /// Returns the descriptor iterator (internal use).
+    pub(crate) fn descriptor_iter(&self) -> crate::slice_descriptor::SliceDescriptorIter<'_> {
+        self.descriptor.iter(self.count)
+    }
+
+    /// Returns the reverse descriptor iterator (internal use).
+    pub(crate) fn descriptor_iter_rev(&self) -> crate::slice_descriptor::SliceDescriptorRevIter<'_> {
+        self.descriptor.iter_rev(self.count)
+    }
+
+    /// Returns the data buffer (internal use).
+    pub(crate) fn data(&self) -> &[u8] {
+        self.data
+    }
 }

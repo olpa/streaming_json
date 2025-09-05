@@ -1,27 +1,22 @@
 use crate::core::U8Pool;
+use crate::slice_descriptor::{SliceDescriptorIter, SliceDescriptorRevIter};
 
 /// Iterator over slices in a U8Pool
 pub struct U8PoolIter<'a> {
-    u8pool: &'a U8Pool<'a>,
-    current: usize,
+    data: &'a [u8],
+    descriptor_iter: SliceDescriptorIter<'a>,
 }
 
 impl<'a> Iterator for U8PoolIter<'a> {
     type Item = &'a [u8];
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.current < self.u8pool.len() {
-            let result = self.u8pool.get(self.current);
-            self.current += 1;
-            result
-        } else {
-            None
-        }
+        let (start, length) = self.descriptor_iter.next()?;
+        self.data.get(start..start + length)
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let remaining = self.u8pool.len() - self.current;
-        (remaining, Some(remaining))
+        self.descriptor_iter.size_hint()
     }
 }
 
@@ -33,23 +28,23 @@ impl<'a> IntoIterator for &'a U8Pool<'a> {
 
     fn into_iter(self) -> Self::IntoIter {
         U8PoolIter {
-            u8pool: self,
-            current: 0,
+            data: self.data(),
+            descriptor_iter: self.descriptor_iter(),
         }
     }
 }
 
 /// Reverse iterator over slices in a U8Pool
 pub struct U8PoolRevIter<'a> {
-    u8pool: &'a U8Pool<'a>,
-    current: usize,
+    data: &'a [u8],
+    descriptor_iter: SliceDescriptorRevIter<'a>,
 }
 
 impl<'a> U8PoolRevIter<'a> {
     pub(crate) fn new(u8pool: &'a U8Pool<'a>) -> Self {
         Self {
-            u8pool,
-            current: u8pool.len(),
+            data: u8pool.data(),
+            descriptor_iter: u8pool.descriptor_iter_rev(),
         }
     }
 }
@@ -58,16 +53,12 @@ impl<'a> Iterator for U8PoolRevIter<'a> {
     type Item = &'a [u8];
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.current > 0 {
-            self.current -= 1;
-            self.u8pool.get(self.current)
-        } else {
-            None
-        }
+        let (start, length) = self.descriptor_iter.next()?;
+        self.data.get(start..start + length)
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.current, Some(self.current))
+        self.descriptor_iter.size_hint()
     }
 }
 

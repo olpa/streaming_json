@@ -61,4 +61,72 @@ impl<'a> SliceDescriptor<'a> {
         
         Ok(())
     }
+
+    pub fn iter(&self, count: usize) -> SliceDescriptorIter<'_> {
+        SliceDescriptorIter {
+            descriptor: self,
+            current: 0,
+            count,
+        }
+    }
+
+    pub fn iter_rev(&self, count: usize) -> SliceDescriptorRevIter<'_> {
+        SliceDescriptorRevIter {
+            descriptor: self,
+            current: count,
+        }
+    }
 }
+
+/// Forward iterator over slice descriptors
+pub struct SliceDescriptorIter<'a> {
+    descriptor: &'a SliceDescriptor<'a>,
+    current: usize,
+    count: usize,
+}
+
+impl<'a> Iterator for SliceDescriptorIter<'a> {
+    type Item = (usize, usize);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.current < self.count {
+            let result = self.descriptor.get(self.current);
+            self.current += 1;
+            result
+        } else {
+            None
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = self.count - self.current;
+        (remaining, Some(remaining))
+    }
+}
+
+impl<'a> ExactSizeIterator for SliceDescriptorIter<'a> {}
+
+/// Reverse iterator over slice descriptors
+pub struct SliceDescriptorRevIter<'a> {
+    descriptor: &'a SliceDescriptor<'a>,
+    current: usize,
+}
+
+impl<'a> Iterator for SliceDescriptorRevIter<'a> {
+    type Item = (usize, usize);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.current > 0 {
+            self.current -= 1;
+            self.descriptor.get(self.current)
+        } else {
+            None
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.current, Some(self.current))
+    }
+}
+
+impl<'a> ExactSizeIterator for SliceDescriptorRevIter<'a> {}
