@@ -100,6 +100,7 @@
 mod core;
 mod error;
 mod iter;
+mod slice_descriptor;
 
 // Re-export public types and traits
 pub use core::U8Pool;

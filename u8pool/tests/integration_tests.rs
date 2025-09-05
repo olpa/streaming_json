@@ -54,7 +54,7 @@ fn test_no_internal_allocation() {
 
 #[test]
 fn test_buffer_overflow() {
-    let mut buffer = [0u8; 600];
+    let mut buffer = [0u8; 150]; // 32*4=128 metadata + 22 data
     let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
     // Fill up the buffer with data

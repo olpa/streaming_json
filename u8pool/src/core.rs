@@ -1,44 +1,10 @@
 use crate::error::U8PoolError;
 use crate::iter::{U8PoolIter, U8PoolPairIter, U8PoolRevIter};
+use crate::slice_descriptor::SliceDescriptor;
 
-const SLICE_DESCRIPTOR_SIZE: usize = 16; // 2 * size_of::<usize>() on 64-bit
+const SLICE_DESCRIPTOR_SIZE: usize = 4; // 2 bytes start + 2 bytes length
 const DEFAULT_MAX_SLICES: usize = 32;
 
-/// Handles reading and writing slice descriptor data from/to buffer
-#[derive(Debug)]
-struct SliceDescriptor<'a> {
-    buffer: &'a mut [u8],
-}
-
-impl<'a> SliceDescriptor<'a> {
-    fn new(buffer: &'a mut [u8]) -> Self {
-        Self { buffer }
-    }
-
-    fn get(&self, index: usize) -> Option<(usize, usize)> {
-        let offset = index * SLICE_DESCRIPTOR_SIZE;
-        
-        let start = unsafe {
-            *(self.buffer.as_ptr().add(offset) as *const usize)
-        };
-        let length = unsafe {
-            *(self.buffer.as_ptr().add(offset + 8) as *const usize)
-        };
-
-        Some((start, length))
-    }
-
-    fn set(&mut self, index: usize, start: usize, length: usize) -> Result<(), U8PoolError> {
-        let offset = index * SLICE_DESCRIPTOR_SIZE;
-
-        unsafe {
-            *(self.buffer.as_mut_ptr().add(offset) as *mut usize) = start;
-            *(self.buffer.as_mut_ptr().add(offset + 8) as *mut usize) = length;
-        }
-
-        Ok(())
-    }
-}
 
 /// A zero-allocation stack implementation using client-provided buffers
 #[derive(Debug)]

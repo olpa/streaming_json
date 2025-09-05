@@ -83,7 +83,7 @@ fn test_stack_interface_doesnt_break_vector_operations() {
 
 #[test]
 fn test_stack_buffer_overflow() {
-    let mut buffer = [0u8; 600];
+    let mut buffer = [0u8; 150]; // 32*4=128 metadata + 22 data
     let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
     // Fill buffer to near capacity
@@ -91,7 +91,7 @@ fn test_stack_buffer_overflow() {
     u8pool.push(b"data2").unwrap();
 
     // Try to push data that won't fit
-    let large_data = vec![b'x'; 100];
+    let large_data = vec![b'x'; 20]; // Should exceed remaining space
     assert!(u8pool.push(&large_data).is_err());
 
     // Stack should be unchanged

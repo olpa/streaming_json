@@ -47,4 +47,12 @@ pub enum U8PoolError {
         /// Provided value
         value: usize,
     },
+    /// Value too large for 2-byte storage
+    #[error("Value too large: {value} exceeds maximum of {max}")]
+    ValueTooLarge {
+        /// Value that was too large
+        value: usize,
+        /// Maximum allowed value
+        max: usize,
+    },
 }
