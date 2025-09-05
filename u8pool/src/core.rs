@@ -4,12 +4,49 @@ use crate::iter::{U8PoolIter, U8PoolPairIter, U8PoolRevIter};
 const SLICE_DESCRIPTOR_SIZE: usize = 16; // 2 * size_of::<usize>() on 64-bit
 const DEFAULT_MAX_SLICES: usize = 32;
 
+/// Handles reading and writing slice descriptor data from/to buffer
+#[derive(Debug)]
+struct SliceDescriptor<'a> {
+    buffer: &'a mut [u8],
+}
+
+impl<'a> SliceDescriptor<'a> {
+    fn new(buffer: &'a mut [u8]) -> Self {
+        Self { buffer }
+    }
+
+    fn get(&self, index: usize) -> Option<(usize, usize)> {
+        let offset = index * SLICE_DESCRIPTOR_SIZE;
+        
+        let start = unsafe {
+            *(self.buffer.as_ptr().add(offset) as *const usize)
+        };
+        let length = unsafe {
+            *(self.buffer.as_ptr().add(offset + 8) as *const usize)
+        };
+
+        Some((start, length))
+    }
+
+    fn set(&mut self, index: usize, start: usize, length: usize) -> Result<(), U8PoolError> {
+        let offset = index * SLICE_DESCRIPTOR_SIZE;
+
+        unsafe {
+            *(self.buffer.as_mut_ptr().add(offset) as *mut usize) = start;
+            *(self.buffer.as_mut_ptr().add(offset + 8) as *mut usize) = length;
+        }
+
+        Ok(())
+    }
+}
+
 /// A zero-allocation stack implementation using client-provided buffers
 #[derive(Debug)]
 pub struct U8Pool<'a> {
-    pub(crate) buffer: &'a mut [u8],
+    data: &'a mut [u8],
     count: usize,
     max_slices: usize,
+    descriptor: SliceDescriptor<'a>,
 }
 
 impl<'a> U8Pool<'a> {
@@ -42,16 +79,17 @@ impl<'a> U8Pool<'a> {
             });
         }
 
+        let (descriptor_buffer, data) = buffer.split_at_mut(metadata_space);
+        let descriptor = SliceDescriptor::new(descriptor_buffer);
+
         Ok(Self {
-            buffer,
+            data,
             count: 0,
             max_slices,
+            descriptor,
         })
     }
 
-    fn data_start(&self) -> usize {
-        self.max_slices * SLICE_DESCRIPTOR_SIZE
-    }
 
     /// Creates a new `U8Pool` with the default maximum number of slices (8).
     ///
@@ -76,12 +114,12 @@ impl<'a> U8Pool<'a> {
         if self.count == 0 {
             0
         } else {
-            if let Some((last_start, last_length)) = self.get_slice_descriptor(self.count - 1) {
-                last_start + last_length - self.data_start()
+            if let Some((last_start, last_length)) = self.descriptor.get(self.count - 1) {
+                last_start + last_length
             } else {
                 // This branch should never happen. However, defend against it.
                 // If descriptor is corrupted, assume whole data buffer is used.
-                self.buffer.len() - self.data_start()
+                self.data.len()
             }
         }
     }
@@ -96,7 +134,7 @@ impl<'a> U8Pool<'a> {
         }
 
         // Check if we have enough space for the additional bytes
-        let available_data_space = self.buffer.len() - self.data_start() - self.data_used();
+        let available_data_space = self.data.len() - self.data_used();
         if additional_bytes > available_data_space {
             return Err(U8PoolError::BufferOverflow {
                 requested: additional_bytes,
@@ -106,36 +144,6 @@ impl<'a> U8Pool<'a> {
         Ok(())
     }
 
-    pub(crate) fn get_slice_descriptor(&self, index: usize) -> Option<(usize, usize)> {
-        let offset = index * SLICE_DESCRIPTOR_SIZE;
-
-        // Read both values in a single 16-byte slice operation for better cache efficiency
-        let descriptor_bytes = self
-            .buffer
-            .get(offset..offset + SLICE_DESCRIPTOR_SIZE)?;
-
-        let start = usize::from_le_bytes(descriptor_bytes[0..8].try_into().ok()?);
-        let length = usize::from_le_bytes(descriptor_bytes[8..16].try_into().ok()?);
-
-        Some((start, length))
-    }
-
-    fn set_slice_descriptor(&mut self, index: usize, start: usize, length: usize) -> Result<(), U8PoolError> {
-        let offset = index * SLICE_DESCRIPTOR_SIZE;
-
-        // Write both values in a single slice operation for better cache efficiency
-        let descriptor_bytes = self
-            .buffer
-            .get_mut(offset..offset + SLICE_DESCRIPTOR_SIZE)
-            .ok_or(U8PoolError::InvalidConfiguration {
-                parameter: "descriptor_offset",
-                value: offset,
-            })?;
-
-        descriptor_bytes[0..8].copy_from_slice(&start.to_le_bytes());
-        descriptor_bytes[8..16].copy_from_slice(&length.to_le_bytes());
-        Ok(())
-    }
 
     /// Pushes a slice onto the stack.
     ///
@@ -148,18 +156,18 @@ impl<'a> U8Pool<'a> {
     pub fn push(&mut self, data: &[u8]) -> Result<(), U8PoolError> {
         self.ensure_capacity(data.len())?;
 
-        let start = self.data_start() + self.data_used();
+        let start = self.data_used();
         let end = start + data.len();
-        let buffer_len = self.buffer.len();
+        let available = self.data.len().saturating_sub(start);
 
-        let buffer_slice = self.buffer
+        let data_slice = self.data
             .get_mut(start..end)
             .ok_or(U8PoolError::BufferOverflow {
                 requested: data.len(),
-                available: buffer_len.saturating_sub(start),
+                available,
             })?;
-        buffer_slice.copy_from_slice(data);
-        self.set_slice_descriptor(self.count, start, data.len())?;
+        data_slice.copy_from_slice(data);
+        self.descriptor.set(self.count, start, data.len())?;
         self.count += 1;
 
         Ok(())
@@ -174,9 +182,9 @@ impl<'a> U8Pool<'a> {
         }
 
         self.count -= 1;
-        let (start, length) = self.get_slice_descriptor(self.count)?;
+        let (start, length) = self.descriptor.get(self.count)?;
 
-        self.buffer.get(start..start + length)
+        self.data.get(start..start + length)
     }
 
     /// Gets a slice at the specified index.
@@ -188,8 +196,8 @@ impl<'a> U8Pool<'a> {
         if index >= self.count {
             return None;
         }
-        let (start, length) = self.get_slice_descriptor(index)?;
-        self.buffer.get(start..start + length)
+        let (start, length) = self.descriptor.get(index)?;
+        self.data.get(start..start + length)
     }
 
     pub fn clear(&mut self) {
