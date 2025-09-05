@@ -1,7 +1,7 @@
 use crate::core::U8Pool;
 use crate::slice_descriptor::{SliceDescriptorIter, SliceDescriptorRevIter};
 
-/// Iterator over slices in a U8Pool
+/// Iterator over slices in a `U8Pool`
 pub struct U8PoolIter<'a> {
     data: &'a [u8],
     descriptor_iter: SliceDescriptorIter<'a>,
@@ -20,7 +20,7 @@ impl<'a> Iterator for U8PoolIter<'a> {
     }
 }
 
-impl<'a> ExactSizeIterator for U8PoolIter<'a> {}
+impl ExactSizeIterator for U8PoolIter<'_> {}
 
 impl<'a> IntoIterator for &'a U8Pool<'a> {
     type Item = &'a [u8];
@@ -34,7 +34,7 @@ impl<'a> IntoIterator for &'a U8Pool<'a> {
     }
 }
 
-/// Reverse iterator over slices in a U8Pool
+/// Reverse iterator over slices in a `U8Pool`
 pub struct U8PoolRevIter<'a> {
     data: &'a [u8],
     descriptor_iter: SliceDescriptorRevIter<'a>,
@@ -62,9 +62,9 @@ impl<'a> Iterator for U8PoolRevIter<'a> {
     }
 }
 
-impl<'a> ExactSizeIterator for U8PoolRevIter<'a> {}
+impl ExactSizeIterator for U8PoolRevIter<'_> {}
 
-/// Iterator over key-value pairs in a U8Pool
+/// Iterator over key-value pairs in a `U8Pool`
 pub struct U8PoolPairIter<'a> {
     iter: U8PoolIter<'a>,
 }
@@ -95,4 +95,4 @@ impl<'a> Iterator for U8PoolPairIter<'a> {
     }
 }
 
-impl<'a> ExactSizeIterator for U8PoolPairIter<'a> {}
+impl ExactSizeIterator for U8PoolPairIter<'_> {}

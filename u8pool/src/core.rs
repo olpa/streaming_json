@@ -77,14 +77,12 @@ impl<'a> U8Pool<'a> {
     fn data_used(&self) -> usize {
         if self.count == 0 {
             0
+        } else if let Some((last_start, last_length)) = self.descriptor.get(self.count - 1) {
+            last_start + last_length
         } else {
-            if let Some((last_start, last_length)) = self.descriptor.get(self.count - 1) {
-                last_start + last_length
-            } else {
-                // This branch should never happen. However, defend against it.
-                // If descriptor is corrupted, assume whole data buffer is used.
-                self.data.len()
-            }
+            // This branch should never happen. However, defend against it.
+            // If descriptor is corrupted, assume whole data buffer is used.
+            self.data.len()
         }
     }
 

@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-/// Error types for U8Pool operations
+/// Error types for `U8Pool` operations
 #[derive(Error, Debug, PartialEq, Eq, Clone)]
 pub enum U8PoolError {
     /// Buffer has insufficient space for the requested operation

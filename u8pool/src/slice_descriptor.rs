@@ -14,19 +14,21 @@ impl<'a> SliceDescriptor<'a> {
         Self { buffer }
     }
 
+    #[allow(clippy::indexing_slicing)]
     pub fn get(&self, index: usize) -> Option<(usize, usize)> {
         let offset = index * SLICE_DESCRIPTOR_SIZE;
         if offset + SLICE_DESCRIPTOR_SIZE > self.buffer.len() {
             return None;
         }
 
-        let start = (self.buffer[offset] as u16) | ((self.buffer[offset + 1] as u16) << 8);
+        let start = u16::from(self.buffer[offset]) | (u16::from(self.buffer[offset + 1]) << 8);
 
-        let length = (self.buffer[offset + 2] as u16) | ((self.buffer[offset + 3] as u16) << 8);
+        let length = u16::from(self.buffer[offset + 2]) | (u16::from(self.buffer[offset + 3]) << 8);
 
         Some((start as usize, length as usize))
     }
 
+    #[allow(clippy::cast_possible_truncation, clippy::indexing_slicing)]
     pub fn set(&mut self, index: usize, start: usize, length: usize) -> Result<(), U8PoolError> {
         if start > u16::MAX as usize {
             return Err(U8PoolError::ValueTooLarge {
@@ -83,7 +85,7 @@ pub struct SliceDescriptorIter<'a> {
     count: usize,
 }
 
-impl<'a> Iterator for SliceDescriptorIter<'a> {
+impl Iterator for SliceDescriptorIter<'_> {
     type Item = (usize, usize);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -102,7 +104,7 @@ impl<'a> Iterator for SliceDescriptorIter<'a> {
     }
 }
 
-impl<'a> ExactSizeIterator for SliceDescriptorIter<'a> {}
+impl ExactSizeIterator for SliceDescriptorIter<'_> {}
 
 /// Reverse iterator over slice descriptors
 pub struct SliceDescriptorRevIter<'a> {
@@ -110,7 +112,7 @@ pub struct SliceDescriptorRevIter<'a> {
     current: usize,
 }
 
-impl<'a> Iterator for SliceDescriptorRevIter<'a> {
+impl Iterator for SliceDescriptorRevIter<'_> {
     type Item = (usize, usize);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -127,4 +129,4 @@ impl<'a> Iterator for SliceDescriptorRevIter<'a> {
     }
 }
 
-impl<'a> ExactSizeIterator for SliceDescriptorRevIter<'a> {}
+impl ExactSizeIterator for SliceDescriptorRevIter<'_> {}
