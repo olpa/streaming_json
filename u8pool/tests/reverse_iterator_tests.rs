@@ -64,13 +64,13 @@ fn test_reverse_iterator_size_hint() {
 
     let mut iter = u8pool.iter_rev();
     assert_eq!(iter.size_hint(), (3, Some(3)));
-    
+
     iter.next();
     assert_eq!(iter.size_hint(), (2, Some(2)));
-    
+
     iter.next();
     assert_eq!(iter.size_hint(), (1, Some(1)));
-    
+
     iter.next();
     assert_eq!(iter.size_hint(), (0, Some(0)));
 }

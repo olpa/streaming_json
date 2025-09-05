@@ -5,7 +5,6 @@ use crate::slice_descriptor::SliceDescriptor;
 const SLICE_DESCRIPTOR_SIZE: usize = 4; // 2 bytes start + 2 bytes length
 const DEFAULT_MAX_SLICES: usize = 32;
 
-
 /// A zero-allocation stack implementation using client-provided buffers
 #[derive(Debug)]
 pub struct U8Pool<'a> {
@@ -56,7 +55,6 @@ impl<'a> U8Pool<'a> {
         })
     }
 
-
     /// Creates a new `U8Pool` with the default maximum number of slices (8).
     ///
     /// # Errors
@@ -90,7 +88,6 @@ impl<'a> U8Pool<'a> {
         }
     }
 
-
     fn ensure_capacity(&self, additional_bytes: usize) -> Result<(), U8PoolError> {
         // Check if we've reached the maximum number of slices
         if self.count >= self.max_slices {
@@ -110,7 +107,6 @@ impl<'a> U8Pool<'a> {
         Ok(())
     }
 
-
     /// Pushes a slice onto the stack.
     ///
     /// # Errors
@@ -126,7 +122,8 @@ impl<'a> U8Pool<'a> {
         let end = start + data.len();
         let available = self.data.len().saturating_sub(start);
 
-        let data_slice = self.data
+        let data_slice = self
+            .data
             .get_mut(start..end)
             .ok_or(U8PoolError::BufferOverflow {
                 requested: data.len(),
@@ -171,7 +168,6 @@ impl<'a> U8Pool<'a> {
         // data_used is now derived from slice descriptors, so no need to reset it
     }
 
-
     /// Returns an iterator over the slices in the vector.
     #[must_use]
     pub fn iter(&self) -> U8PoolIter<'_> {
@@ -196,7 +192,9 @@ impl<'a> U8Pool<'a> {
     }
 
     /// Returns the reverse descriptor iterator (internal use).
-    pub(crate) fn descriptor_iter_rev(&self) -> crate::slice_descriptor::SliceDescriptorRevIter<'_> {
+    pub(crate) fn descriptor_iter_rev(
+        &self,
+    ) -> crate::slice_descriptor::SliceDescriptorRevIter<'_> {
         self.descriptor.iter_rev(self.count)
     }
 

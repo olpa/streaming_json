@@ -25,8 +25,6 @@ fn test_stack_push_operations() {
     assert_eq!(u8pool.get(2).unwrap(), b"third");
 }
 
-
-
 #[test]
 fn test_stack_push_pop_operations() {
     let mut buffer = [0u8; 600];

@@ -139,4 +139,3 @@ fn test_custom_max_slices() {
     assert_eq!(u8pool.get(2).unwrap(), b"world");
     assert_eq!(u8pool.len(), 3);
 }
-

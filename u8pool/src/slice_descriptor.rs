@@ -19,13 +19,11 @@ impl<'a> SliceDescriptor<'a> {
         if offset + SLICE_DESCRIPTOR_SIZE > self.buffer.len() {
             return None;
         }
-        
-        let start = (self.buffer[offset] as u16) | 
-                   ((self.buffer[offset + 1] as u16) << 8);
-        
-        let length = (self.buffer[offset + 2] as u16) | 
-                    ((self.buffer[offset + 3] as u16) << 8);
-        
+
+        let start = (self.buffer[offset] as u16) | ((self.buffer[offset + 1] as u16) << 8);
+
+        let length = (self.buffer[offset + 2] as u16) | ((self.buffer[offset + 3] as u16) << 8);
+
         Some((start as usize, length as usize))
     }
 
@@ -42,7 +40,7 @@ impl<'a> SliceDescriptor<'a> {
                 max: u16::MAX as usize,
             });
         }
-        
+
         let offset = index * SLICE_DESCRIPTOR_SIZE;
         if offset + SLICE_DESCRIPTOR_SIZE > self.buffer.len() {
             return Err(U8PoolError::IndexOutOfBounds {
@@ -50,15 +48,15 @@ impl<'a> SliceDescriptor<'a> {
                 length: self.buffer.len() / SLICE_DESCRIPTOR_SIZE,
             });
         }
-        
+
         let start_u16 = start as u16;
         let length_u16 = length as u16;
-        
+
         self.buffer[offset] = start_u16 as u8;
         self.buffer[offset + 1] = (start_u16 >> 8) as u8;
         self.buffer[offset + 2] = length_u16 as u8;
         self.buffer[offset + 3] = (length_u16 >> 8) as u8;
-        
+
         Ok(())
     }
 
