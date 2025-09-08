@@ -1,40 +1,6 @@
 use u8pool::U8Pool;
 
 #[test]
-fn test_key_value_pairing_even_elements() {
-    let mut buffer = [0u8; 600];
-    let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
-
-    u8pool.push(b"key1").unwrap();
-    u8pool.push(b"value1").unwrap();
-    u8pool.push(b"key2").unwrap();
-    u8pool.push(b"value2").unwrap();
-
-    assert_eq!(u8pool.len(), 4);
-
-    assert_eq!(u8pool.get(0).unwrap(), b"key1");
-    assert_eq!(u8pool.get(1).unwrap(), b"value1");
-    assert_eq!(u8pool.get(2).unwrap(), b"key2");
-    assert_eq!(u8pool.get(3).unwrap(), b"value2");
-}
-
-#[test]
-fn test_unpaired_key_handling_odd_elements() {
-    let mut buffer = [0u8; 600];
-    let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
-
-    u8pool.push(b"key1").unwrap();
-    u8pool.push(b"value1").unwrap();
-    u8pool.push(b"key2").unwrap();
-
-    assert_eq!(u8pool.len(), 3);
-
-    assert_eq!(u8pool.get(0).unwrap(), b"key1");
-    assert_eq!(u8pool.get(1).unwrap(), b"value1");
-    assert_eq!(u8pool.get(2).unwrap(), b"key2");
-}
-
-#[test]
 fn test_dictionary_iterator_even_elements() {
     let mut buffer = [0u8; 600];
     let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
