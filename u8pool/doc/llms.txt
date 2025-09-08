@@ -1,0 +1,2 @@
+U8Pool: Uses preallocated memory to store byte slices. The interface is stack-based, with `Vec` and `Map` iterators.
+See "llms-all.txt" for details.
