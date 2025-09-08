@@ -91,3 +91,14 @@ All operations that can fail return `Result<T, U8PoolError>` with these error ty
 - `SliceLimitExceeded` - Too many slices added
 - `BufferOverflow` - Insufficient space for data
 - `ValueTooLarge` - Slice position or length exceeds u16::MAX
+
+
+## Colophon
+
+License: MIT
+
+Author: Oleg Parashchenko, olpa@ <https://uucode.com/>
+
+Contact: via email or [Ailets Discord](https://discord.gg/HEBE3gv2)
+
+`u8pool` is a part of the [streaming json](https://github.com/olpa/streaming_json) project, with other crates [rjiter](https://crates.io/crates/rjiter) and [scan_json](https://crates.io/crates/scan_json).
