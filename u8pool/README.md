@@ -81,7 +81,7 @@ Each slice descriptor is stored as 4 bytes, with 2 bytes for the offset and 2 by
 
 - `iter(&self)` - Returns a forward iterator over slices
 - `iter_rev(&self)` - Returns a reverse iterator over slices
-- `pairs(&self)` - Returns an iterator over key-value pairs (even/odd slices)
+- `pairs(&self)` - Returns an iterator over key-value pairs (even/odd slices). If there is an odd number of slices, the last slice is ignored
 
 **Error Handling:**
 
