@@ -1,6 +1,6 @@
 # U8Pool
 
-Use preallocated memory to store byte slices. The interface is stack-based, and there are `Vec` and `Map` iterators.
+Use preallocated memory to store byte slices. The interface is stack-based, with `Vec` and `Map` iterators.
 
 ```rust
 use u8pool::U8Pool;
@@ -42,12 +42,14 @@ Memory layout for the example above:
 │                              Buffer (1000 bytes)                        │
 ├─────────────────────────────────┬───────────────────────────────────────┤
 │        Metadata Section         │            Data Section               │
-│         (16 * 32 = 512)         │            (488 bytes)                │
+│         (4 * 32 = 128)          │            (872 bytes)                │
 ├─────────────────────────────────┼───────────────────────────────────────┤
 │ Slice 0: [0,4) len=4       →→→→→┼→→ nameAliceage30                      │
 │ Slice 1: [4,9) len=5       →→→→→┼→→→→→→→┘    ↑  ↑                       │
 │ Slice 2: [9,12) len=3      →→→→→┼→→→→→→→→→→→→┘  ↑                       │
 │ Slice 3: [12,14) len=2     →→→→→┼→→→→→→→→→→→→→→→┘                       │
-│ ... (28 unused slots)           │ ... (474 unused bytes)                │
+│ ... (28 unused slots)           │ ... (858 unused bytes)                │
 └─────────────────────────────────┴───────────────────────────────────────┘
 ```
+
+Each slice descriptor is stored as 4 bytes, with 2 bytes for the offset and 2 bytes for the length.
