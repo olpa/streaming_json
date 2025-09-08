@@ -2,6 +2,8 @@
 
 Use preallocated memory to store byte slices. The interface is stack-based, with `Vec` and `Map` iterators. The code is `no_std`, with the only dependency `thiserror`.
 
+## Example
+
 ```rust
 use u8pool::U8Pool;
 
@@ -35,6 +37,8 @@ for (key, value) in u8pool.pairs() {
 // "age" = "30"
 ```
 
+## Memory Layout
+
 Memory layout for the example above:
 
 ```
@@ -53,3 +57,37 @@ Memory layout for the example above:
 ```
 
 Each slice descriptor is stored as 4 bytes, with 2 bytes for the offset and 2 bytes for the length.
+
+## API Summary
+
+**Construction:**
+
+- `U8Pool::new(buffer: &mut [u8], max_slices: usize)` - Create pool with custom slice limit
+- `U8Pool::with_default_max_slices(buffer: &mut [u8])` - Create pool with default limit (32 slices)
+
+**Stack Operations:**
+
+- `push(&mut self, data: &[u8])` - Add slice to the pool
+- `pop(&mut self) -> Option<&[u8]>` - Remove and return last slice
+- `get(&self, index: usize) -> Option<&[u8]>` - Access slice by index
+- `clear(&mut self)` - Remove all slices
+
+**Information:**
+
+- `len(&self) -> usize` - Number of slices stored
+- `is_empty(&self) -> bool` - Check if pool is empty
+
+**Iteration:**
+
+- `iter(&self)` - Forward iterator over slices
+- `iter_rev(&self)` - Reverse iterator over slices  
+- `pairs(&self)` - Iterator over key-value pairs (even/odd slices)
+
+**Error Handling:**
+
+All operations that can fail return `Result<T, U8PoolError>` with these error types:
+
+- `InvalidInitialization` - Invalid buffer or max_slices parameter
+- `SliceLimitExceeded` - Too many slices added
+- `BufferOverflow` - Insufficient space for data
+- `ValueTooLarge` - Slice position or length exceeds u16::MAX
