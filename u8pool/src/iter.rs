@@ -65,6 +65,7 @@ impl<'a> Iterator for U8PoolRevIter<'a> {
 impl ExactSizeIterator for U8PoolRevIter<'_> {}
 
 /// Iterator over key-value pairs in a `U8Pool`
+/// If there is an odd number of slices, the last slice is ignored.
 pub struct U8PoolPairIter<'a> {
     iter: U8PoolIter<'a>,
 }

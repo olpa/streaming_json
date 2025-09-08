@@ -22,7 +22,6 @@ impl<'a> SliceDescriptor<'a> {
         }
 
         let start = u16::from(self.buffer[offset]) | (u16::from(self.buffer[offset + 1]) << 8);
-
         let length = u16::from(self.buffer[offset + 2]) | (u16::from(self.buffer[offset + 3]) << 8);
 
         Some((start as usize, length as usize))
