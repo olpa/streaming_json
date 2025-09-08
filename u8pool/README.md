@@ -1,6 +1,6 @@
 # U8Pool
 
-Use preallocated memory to store byte slices. The interface is stack-based, with `Vec` and `Map` iterators. The code is `no_std`, with the only dependency `thiserror`.
+Uses preallocated memory to store byte slices. The interface is stack-based, with `Vec` and `Map` iterators. The code is `no_std`, with `thiserror` as the only dependency.
 
 ## Example
 
@@ -62,33 +62,33 @@ Each slice descriptor is stored as 4 bytes, with 2 bytes for the offset and 2 by
 
 **Construction:**
 
-- `U8Pool::new(buffer: &mut [u8], max_slices: usize)` - Create pool with custom slice limit
-- `U8Pool::with_default_max_slices(buffer: &mut [u8])` - Create pool with default limit (32 slices)
+- `U8Pool::new(buffer: &mut [u8], max_slices: usize)` - Creates a pool with custom slice limit
+- `U8Pool::with_default_max_slices(buffer: &mut [u8])` - Creates a pool with default limit (32 slices)
 
 **Stack Operations:**
 
-- `push(&mut self, data: &[u8])` - Add slice to the pool
-- `pop(&mut self) -> Option<&[u8]>` - Remove and return last slice
-- `get(&self, index: usize) -> Option<&[u8]>` - Access slice by index
-- `clear(&mut self)` - Remove all slices
+- `push(&mut self, data: &[u8])` - Adds a slice to the pool
+- `pop(&mut self) -> Option<&[u8]>` - Removes and returns the last slice
+- `get(&self, index: usize) -> Option<&[u8]>` - Accesses a slice by index
+- `clear(&mut self)` - Removes all slices
 
 **Information:**
 
-- `len(&self) -> usize` - Number of slices stored
-- `is_empty(&self) -> bool` - Check if pool is empty
+- `len(&self) -> usize` - Returns the number of slices stored
+- `is_empty(&self) -> bool` - Checks if the pool is empty
 
 **Iteration:**
 
-- `iter(&self)` - Forward iterator over slices
-- `iter_rev(&self)` - Reverse iterator over slices  
-- `pairs(&self)` - Iterator over key-value pairs (even/odd slices)
+- `iter(&self)` - Returns a forward iterator over slices
+- `iter_rev(&self)` - Returns a reverse iterator over slices
+- `pairs(&self)` - Returns an iterator over key-value pairs (even/odd slices)
 
 **Error Handling:**
 
 All operations that can fail return `Result<T, U8PoolError>` with these error types:
 
 - `InvalidInitialization` - Invalid buffer or max_slices parameter
-- `SliceLimitExceeded` - Too many slices added
+- `SliceLimitExceeded` - Too many slices have been added
 - `BufferOverflow` - Insufficient space for data
 - `ValueTooLarge` - Slice position or length exceeds u16::MAX
 
