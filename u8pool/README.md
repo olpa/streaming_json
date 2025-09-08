@@ -1,4 +1,4 @@
-# U8Pool
+# `U8Pool`
 
 Uses preallocated memory to store byte slices. The interface is stack-based, with `Vec` and `Map` iterators. The code is `no_std`, with `thiserror` as the only dependency.
 
@@ -41,7 +41,7 @@ for (key, value) in u8pool.pairs() {
 
 Memory layout for the example above:
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                              Buffer (1000 bytes)                        │
 ├─────────────────────────────────┬───────────────────────────────────────┤
@@ -87,10 +87,10 @@ Each slice descriptor is stored as 4 bytes, with 2 bytes for the offset and 2 by
 
 All operations that can fail return `Result<T, U8PoolError>` with these error types:
 
-- `InvalidInitialization` - Invalid buffer or max_slices parameter
+- `InvalidInitialization` - Invalid buffer or `max_slices` parameter
 - `SliceLimitExceeded` - Too many slices have been added
 - `BufferOverflow` - Insufficient space for data
-- `ValueTooLarge` - Slice position or length exceeds u16::MAX
+- `ValueTooLarge` - Slice position or length exceeds `u16::MAX`
 
 
 ## Colophon
