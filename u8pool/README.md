@@ -1,6 +1,6 @@
 # U8Pool
 
-Use preallocated memory to store byte slices. The interface is stack-based, with `Vec` and `Map` iterators.
+Use preallocated memory to store byte slices. The interface is stack-based, with `Vec` and `Map` iterators. The code is `no_std`, with the only dependency `thiserror`.
 
 ```rust
 use u8pool::U8Pool;
