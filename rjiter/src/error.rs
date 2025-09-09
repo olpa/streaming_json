@@ -1,3 +1,6 @@
+#[cfg(feature = "std")]
+extern crate alloc;
+
 use crate::jiter::{JiterError, JiterErrorType, JsonErrorType, JsonType, LinePosition};
 use thiserror::Error;
 
