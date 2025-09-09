@@ -7,24 +7,36 @@ use thiserror::Error;
 #[cfg(feature = "std")]
 use alloc::{format, string::String};
 
+/// Convenient type alias for `RJiter` results.
 pub type Result<T> = core::result::Result<T, Error>;
 
-/// Custom I/O error for no_std compatibility
+/// Custom I/O error for `no_std` compatibility
 #[derive(Error, Debug, Clone, Copy, PartialEq, Eq)]
 #[error("I/O operation failed")]
 pub struct IoError;
+
+impl embedded_io::Error for IoError {
+    fn kind(&self) -> embedded_io::ErrorKind {
+        embedded_io::ErrorKind::Other
+    }
+}
 
 /// Like `Jiter::JiterErrorType`, but also with `IoError`
 #[derive(Error, Debug)]
 #[allow(clippy::module_name_repetitions)]
 pub enum ErrorType {
+    /// JSON parsing error from the underlying jiter.
     #[error("JSON parsing error: {0}")]
     JsonError(JsonErrorType),
+    /// Type mismatch error.
     #[error("expected {expected} but found {actual}")]
     WrongType {
+        /// The expected JSON type.
         expected: JsonType,
+        /// The actual JSON type found.
         actual: JsonType,
     },
+    /// I/O operation error.
     #[error("I/O operation failed")]
     IoError(IoError),
 }
@@ -32,7 +44,9 @@ pub enum ErrorType {
 /// An error from the `RJiter` iterator.
 #[derive(Debug)]
 pub struct Error {
+    /// The type of error that occurred.
     pub error_type: ErrorType,
+    /// The byte index in the input where the error occurred.
     pub index: usize,
 }
 

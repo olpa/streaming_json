@@ -13,7 +13,7 @@ pub struct RJiter<'rj, R: Read> {
     buffer: Buffer<'rj, R>,
 }
 
-impl<'rj, R: Read> core::fmt::Debug for RJiter<'rj, R> {
+impl<R: Read> core::fmt::Debug for RJiter<'_, R> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
@@ -30,6 +30,7 @@ impl<'rj, R: Read> RJiter<'rj, R> {
     /// - `reader`: The json stream
     /// - `buf`: The working buffer
     pub fn new(reader: &'rj mut R, buf: &'rj mut [u8]) -> Self {
+        #[allow(unsafe_code)]
         let buf_alias = unsafe {
             #[allow(mutable_transmutes)]
             #[allow(clippy::transmute_ptr_to_ptr)]
@@ -47,6 +48,7 @@ impl<'rj, R: Read> RJiter<'rj, R> {
         // `0 <= buffer.n_bytes <= buf.len()` by the `Buffer` contract
         #[allow(clippy::indexing_slicing)]
         let jiter_buffer_2 = &self.buffer.buf[..self.buffer.n_bytes];
+        #[allow(unsafe_code)]
         let jiter_buffer = unsafe { core::mem::transmute::<&[u8], &'rj [u8]>(jiter_buffer_2) };
         self.jiter = Jiter::new(jiter_buffer);
     }
@@ -80,6 +82,7 @@ impl<'rj, R: Read> RJiter<'rj, R> {
     /// # Errors
     /// `IoError` or `JiterError`
     pub fn known_bytes(&mut self) -> RJiterResult<&[u8]> {
+        #[allow(unsafe_code)]
         let f = |j: &mut Jiter<'rj>| unsafe {
             core::mem::transmute::<JiterResult<&[u8]>, JiterResult<&'rj [u8]>>(j.known_bytes())
         };
@@ -118,6 +121,7 @@ impl<'rj, R: Read> RJiter<'rj, R> {
     /// # Errors
     /// `IoError` or `JiterError`
     pub fn known_object(&mut self) -> RJiterResult<Option<&str>> {
+        #[allow(unsafe_code)]
         let f = |j: &mut Jiter<'rj>| unsafe {
             core::mem::transmute::<JiterResult<Option<&str>>, JiterResult<Option<&'rj str>>>(
                 j.known_object(),
@@ -137,6 +141,7 @@ impl<'rj, R: Read> RJiter<'rj, R> {
     /// # Errors
     /// `IoError` or `JiterError`
     pub fn known_str(&mut self) -> RJiterResult<&str> {
+        #[allow(unsafe_code)]
         let f = |j: &mut Jiter<'rj>| unsafe {
             core::mem::transmute::<JiterResult<&str>, JiterResult<&'rj str>>(j.known_str())
         };
@@ -182,6 +187,7 @@ impl<'rj, R: Read> RJiter<'rj, R> {
     /// # Errors
     /// `IoError` or `JiterError`
     pub fn next_bytes(&mut self) -> RJiterResult<&[u8]> {
+        #[allow(unsafe_code)]
         let f = |j: &mut Jiter<'rj>| unsafe {
             core::mem::transmute::<JiterResult<&[u8]>, JiterResult<&'rj [u8]>>(j.next_bytes())
         };
@@ -206,6 +212,7 @@ impl<'rj, R: Read> RJiter<'rj, R> {
     /// # Errors
     /// `IoError` or `JiterError`
     pub fn next_key(&mut self) -> RJiterResult<Option<&str>> {
+        #[allow(unsafe_code)]
         let f = |j: &mut Jiter<'rj>| unsafe {
             core::mem::transmute::<JiterResult<Option<&str>>, JiterResult<Option<&'rj str>>>(
                 j.next_key(),
@@ -218,6 +225,7 @@ impl<'rj, R: Read> RJiter<'rj, R> {
     /// # Errors
     /// `IoError` or `JiterError`
     pub fn next_key_bytes(&mut self) -> RJiterResult<Option<&[u8]>> {
+        #[allow(unsafe_code)]
         let f = |j: &mut Jiter<'rj>| unsafe {
             core::mem::transmute::<JiterResult<Option<&[u8]>>, JiterResult<Option<&'rj [u8]>>>(
                 j.next_key_bytes(),
@@ -244,6 +252,7 @@ impl<'rj, R: Read> RJiter<'rj, R> {
     /// # Errors
     /// `IoError` or `JiterError`
     pub fn next_number_bytes(&mut self) -> RJiterResult<&[u8]> {
+        #[allow(unsafe_code)]
         let f = |j: &mut Jiter<'rj>| unsafe {
             core::mem::transmute::<JiterResult<&[u8]>, JiterResult<&'rj [u8]>>(
                 j.next_number_bytes(),
@@ -256,6 +265,7 @@ impl<'rj, R: Read> RJiter<'rj, R> {
     /// # Errors
     /// `IoError` or `JiterError`
     pub fn next_object(&mut self) -> RJiterResult<Option<&str>> {
+        #[allow(unsafe_code)]
         let f = |j: &mut Jiter<'rj>| unsafe {
             core::mem::transmute::<JiterResult<Option<&str>>, JiterResult<Option<&'rj str>>>(
                 j.next_object(),
@@ -268,6 +278,7 @@ impl<'rj, R: Read> RJiter<'rj, R> {
     /// # Errors
     /// `IoError` or `JiterError`
     pub fn next_object_bytes(&mut self) -> RJiterResult<Option<&[u8]>> {
+        #[allow(unsafe_code)]
         let f = |j: &mut Jiter<'rj>| unsafe {
             core::mem::transmute::<JiterResult<Option<&[u8]>>, JiterResult<Option<&'rj [u8]>>>(
                 j.next_object_bytes(),
@@ -287,6 +298,7 @@ impl<'rj, R: Read> RJiter<'rj, R> {
     /// # Errors
     /// `IoError` or `JiterError`
     pub fn next_str(&mut self) -> RJiterResult<&str> {
+        #[allow(unsafe_code)]
         let f = |j: &mut Jiter<'rj>| unsafe {
             core::mem::transmute::<JiterResult<&str>, JiterResult<&'rj str>>(j.next_str())
         };
@@ -401,7 +413,6 @@ impl<'rj, R: Read> RJiter<'rj, R> {
                 }
                 Ok(_) => {
                     self.create_new_jiter();
-                    continue;
                 }
             }
         }
@@ -421,31 +432,29 @@ impl<'rj, R: Read> RJiter<'rj, R> {
         if jiter_pos > to_pos {
             self.buffer.shift_buffer(to_pos, jiter_pos);
         }
-        if let Err(_) = self.buffer.skip_spaces(to_pos) {
+        if self.buffer.skip_spaces(to_pos).is_err() {
             return Err(RJiterError {
                 error_type: crate::error::ErrorType::IoError(crate::error::IoError),
                 index: self.current_index(),
             });
         }
         if let Some(transparent_token) = transparent_token {
-            if to_pos >= self.buffer.n_bytes {
-                if let Err(_) = self.buffer.read_more() {
+            if to_pos >= self.buffer.n_bytes
+                && self.buffer.read_more().is_err() {
                     return Err(RJiterError {
                         error_type: crate::error::ErrorType::IoError(crate::error::IoError),
                         index: self.current_index(),
                     });
                 }
-            }
             // `0 <= to_pos` (usize), `to_pos < buffer.n_bytes` (if check), `n_bytes <= buf.len()` by the `Buffer` contract
             #[allow(clippy::indexing_slicing)]
-            if to_pos < self.buffer.n_bytes && self.buffer.buf[to_pos] == transparent_token {
-                if let Err(_) = self.buffer.skip_spaces(to_pos + 1) {
+            if to_pos < self.buffer.n_bytes && self.buffer.buf[to_pos] == transparent_token
+                && self.buffer.skip_spaces(to_pos + 1).is_err() {
                     return Err(RJiterError {
                         error_type: crate::error::ErrorType::IoError(crate::error::IoError),
                         index: self.current_index(),
                     });
                 }
-            }
         }
 
         if change_flag.is_changed(&self.buffer) {
@@ -468,7 +477,7 @@ impl<'rj, R: Read> RJiter<'rj, R> {
             // The current buffer was all only spaces. Read more.
             if self.jiter.current_index() < self.buffer.buf.len() {
                 let n_new_bytes = self.buffer.read_more();
-                if let Err(_) = n_new_bytes {
+                if n_new_bytes.is_err() {
                     return Err(RJiterError {
                         error_type: crate::error::ErrorType::IoError(crate::error::IoError),
                         index: self.current_index(),
@@ -662,6 +671,7 @@ impl<'rj, R: Read> RJiter<'rj, R> {
                     index,
                 })
         }
+        #[allow(unsafe_code)]
         let parser = |j: &mut Jiter<'rj>| unsafe {
             core::mem::transmute::<JiterResult<&[u8]>, JiterResult<&'rj [u8]>>(j.known_bytes())
         };
@@ -705,6 +715,7 @@ impl<'rj, R: Read> RJiter<'rj, R> {
             }
             #[allow(clippy::indexing_slicing)]
             let sub_jiter_buf = &bytes[..=end_pos];
+            #[allow(unsafe_code)]
             let sub_jiter_buf = unsafe { core::mem::transmute::<&[u8], &[u8]>(sub_jiter_buf) };
             let mut sub_jiter = Jiter::new(sub_jiter_buf);
             let sub_result = sub_jiter.known_str();
@@ -723,6 +734,7 @@ impl<'rj, R: Read> RJiter<'rj, R> {
                 Err(e) => Err(RJiterError::from_jiter_error(index, e)),
             }
         }
+        #[allow(unsafe_code)]
         let parser = |j: &mut Jiter<'rj>| unsafe {
             core::mem::transmute::<JiterResult<&str>, JiterResult<&'rj str>>(j.known_str())
         };
@@ -750,7 +762,7 @@ impl<'rj, R: Read> RJiter<'rj, R> {
         }
         while self.buffer.n_bytes < pos + token.len() {
             let n_new_bytes = self.buffer.read_more();
-            if let Err(_) = n_new_bytes {
+            if n_new_bytes.is_err() {
                 // Fatal error, the caller can't do anything anymore
                 return Err(RJiterError {
                     error_type: crate::error::ErrorType::IoError(crate::error::IoError),

@@ -8,13 +8,18 @@ use crate::jiter::LinePosition;
 /// Is a private struct, the "pub" is only for testing.
 pub struct Buffer<'buf, R: Read> {
     reader: &'buf mut R,
+    /// The working buffer for reading JSON data.
     pub buf: &'buf mut [u8],
-    pub n_bytes: usize, // Size of the buffer. Contract: `n_bytes <= buf.len()`
-    pub n_shifted_out: usize, // Number of bytes shifted out
-    pub pos_shifted: LinePosition, // Correction for the error position due to shifting
+    /// Number of valid bytes in the buffer. Contract: `n_bytes <= buf.len()`
+    pub n_bytes: usize,
+    /// Number of bytes that have been shifted out of the buffer.
+    pub n_shifted_out: usize,
+    /// Line position correction due to shifting operations.
+    pub pos_shifted: LinePosition,
 }
 
 impl<'buf, R: Read> Buffer<'buf, R> {
+    /// Creates a new buffer with the given reader and buffer.
     #[must_use]
     pub fn new(reader: &'buf mut R, buf: &'buf mut [u8]) -> Self {
         Buffer {
@@ -119,7 +124,7 @@ impl<'buf, R: Read> Buffer<'buf, R> {
     }
 }
 
-impl<'buf, R: Read> core::fmt::Debug for Buffer<'buf, R> {
+impl<R: Read> core::fmt::Debug for Buffer<'_, R> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
