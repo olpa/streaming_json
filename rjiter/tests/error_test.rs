@@ -1,6 +1,5 @@
 use rjiter::jiter::LinePosition;
 use rjiter::RJiter;
-use std::io::Cursor;
 
 #[test]
 fn index_in_error() {
@@ -8,7 +7,7 @@ fn index_in_error() {
     let lot_of_spaces = " ".repeat(token_pos);
     let input = format!(r#"{lot_of_spaces}"hello""#);
     let mut buffer = [0u8; 16];
-    let mut reader = Cursor::new(input.as_bytes());
+    let mut reader = input.as_bytes();
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
     let result = rjiter.next_bool();
@@ -21,7 +20,7 @@ fn position_for_error() {
     let leading_text = "\n \n  \n   \n    \n      \n   ";
     let input = format!(r#"{leading_text}null null"#);
     let mut buffer = [0u8; 10];
-    let mut reader = Cursor::new(input.as_bytes());
+    let mut reader = input.as_bytes();
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
     let result = rjiter.next_str();
@@ -39,7 +38,7 @@ fn description_of_error() {
     let leading_text = "\n \n  \n   \n    \n      \n   ";
     let input = format!(r#"{leading_text}null null"#);
     let mut buffer = [0u8; 10];
-    let mut reader = Cursor::new(input.as_bytes());
+    let mut reader = input.as_bytes();
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
     let result = rjiter.next_str();
@@ -57,7 +56,7 @@ fn display_of_error() {
     let leading_text = "\n \n  \n   \n    \n      \n   ";
     let input = format!(r#"{leading_text}null null"#);
     let mut buffer = [0u8; 10];
-    let mut reader = Cursor::new(input.as_bytes());
+    let mut reader = input.as_bytes();
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
     let result = rjiter.next_str();

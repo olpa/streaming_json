@@ -1,4 +1,4 @@
-use std::io::{self, Read};
+use embedded_io::Read;
 
 pub struct ChunkReader<'a> {
     data: &'a Vec<u8>,
@@ -16,8 +16,12 @@ impl<'a> ChunkReader<'a> {
     }
 }
 
+impl<'a> embedded_io::ErrorType for ChunkReader<'a> {
+    type Error = rjiter::error::IoError;
+}
+
 impl<'a> Read for ChunkReader<'a> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
         if self.position >= self.data.len() {
             return Ok(0);
         }
