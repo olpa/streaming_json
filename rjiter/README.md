@@ -17,7 +17,6 @@ The example repeats the one of `Jiter`. The only difference is how `RJiter` is c
 ```rust
 use rjiter::jiter::{NumberInt, Peek};
 use rjiter::RJiter;
-use std::io::Cursor;
 
 let json_data = r#"
 {
@@ -31,7 +30,7 @@ let json_data = r#"
 
 // Create RJiter
 let mut buffer = [0u8; 16];
-let mut reader = Cursor::new(json_data.as_bytes());
+let mut reader = json_data.as_bytes();
 let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
 // The rest is again the same as in Jiter
@@ -81,13 +80,12 @@ Strings can be longer than the buffer, therefore the default logic doesn't work 
 
 ```rust
 use rjiter::RJiter;
-use std::io::Cursor;
 
 let cdata = r#"\"\u4F60\u597d\",\n\\\\\\\\\\\\\\\\\\\\\\\\ how can I help you today?"#;
 let input = format!("\"{cdata}\"\"{cdata}\"");
 
 let mut buffer = [0u8; 10];
-let mut reader = Cursor::new(input.as_bytes());
+let mut reader = input.as_bytes();
 let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
 //
@@ -123,14 +121,13 @@ For the case when JSON fragments are mixed with known text, `RJiter` provides th
 ```rust
 use rjiter::{RJiter, Result as RJiterResult};
 use rjiter::jiter::Peek;
-use std::io::Cursor;
 
 let json_data = r#"
     event: ping
     data: {"type": "ping"}
 "#;
 
-fn peek_skipping_tokens(rjiter: &mut RJiter, tokens: &[&str]) -> RJiterResult<Peek> {
+fn peek_skipping_tokens<R: embedded_io::Read>(rjiter: &mut RJiter<R>, tokens: &[&str]) -> RJiterResult<Peek> {
     'outer: loop {
         let peek = rjiter.peek();
         for token in tokens {
@@ -144,7 +141,7 @@ fn peek_skipping_tokens(rjiter: &mut RJiter, tokens: &[&str]) -> RJiterResult<Pe
 }
 
 let mut buffer = [0u8; 10];
-let mut reader = Cursor::new(json_data.as_bytes());
+let mut reader = json_data.as_bytes();
 let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
 // Skip non-json
