@@ -155,7 +155,18 @@ assert_eq!(key.unwrap(), Some("type"));
 ```
 
 
-# Colophon
+## Integration
+
+`RJiter` is compatible with the `no_std` environment:
+
+- It uses **`embedded-io`** instead of `std::io` traits
+- It uses **`thiserror`** instead of `std::Error` traits, specifically `std::io::Error`
+- **Feature flags**: Enable `std` feature for `Display` trait implementation for errors
+
+Note that while `RJiter` itself is `no_std` compatible, the underlying `Jiter` dependency is not yet `no_std` compatible.
+
+
+## Colophon
 
 License: MIT
 
