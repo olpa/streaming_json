@@ -1,3 +1,10 @@
+## [1.2.0] - 2025-09-10
+
+- Support `no_std` environment
+- Use `thiserror` instead of `std::Error` traits
+- Use `embedded-io` instead of `std::io` traits
+
+
 ## [1.1.4] - 2025-05-03
 
 - Fix incorrest detection of an utf8 leading byte

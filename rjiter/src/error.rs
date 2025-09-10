@@ -1,43 +1,58 @@
+#[cfg(feature = "std")]
+extern crate alloc;
+
 use crate::jiter::{JiterError, JiterErrorType, JsonErrorType, JsonType, LinePosition};
-use crate::rjiter::RJiter;
+use thiserror::Error;
 
-pub type Result<T> = std::result::Result<T, Error>;
+#[cfg(feature = "std")]
+use alloc::{format, string::String};
 
-/// Like `Jiter::JiterErrorType`, but also with `IoError`
-#[derive(Debug)]
-#[allow(clippy::module_name_repetitions)]
-pub enum ErrorType {
-    JsonError(JsonErrorType),
-    WrongType {
-        expected: JsonType,
-        actual: JsonType,
-    },
-    IoError(std::io::Error),
+/// Convenient type alias for `RJiter` results.
+pub type Result<T> = core::result::Result<T, Error>;
+
+/// Custom I/O error for `no_std` compatibility
+#[derive(Error, Debug, Clone, Copy, PartialEq, Eq)]
+#[error("I/O operation failed")]
+pub struct IoError;
+
+impl embedded_io::Error for IoError {
+    fn kind(&self) -> embedded_io::ErrorKind {
+        embedded_io::ErrorKind::Other
+    }
 }
 
-impl std::fmt::Display for ErrorType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::JsonError(error_type) => write!(f, "{error_type}"),
-            Self::WrongType { expected, actual } => {
-                write!(f, "expected {expected} but found {actual}")
-            }
-            Self::IoError(ioe) => write!(f, "{ioe}"),
-        }
-    }
+/// Like `Jiter::JiterErrorType`, but also with `IoError`
+#[derive(Error, Debug)]
+#[allow(clippy::module_name_repetitions)]
+pub enum ErrorType {
+    /// JSON parsing error from the underlying jiter.
+    #[error("JSON parsing error: {0}")]
+    JsonError(JsonErrorType),
+    /// Type mismatch error.
+    #[error("expected {expected} but found {actual}")]
+    WrongType {
+        /// The expected JSON type.
+        expected: JsonType,
+        /// The actual JSON type found.
+        actual: JsonType,
+    },
+    /// I/O operation error.
+    #[error("I/O operation failed")]
+    IoError(IoError),
 }
 
 /// An error from the `RJiter` iterator.
 #[derive(Debug)]
 pub struct Error {
+    /// The type of error that occurred.
     pub error_type: ErrorType,
+    /// The byte index in the input where the error occurred.
     pub index: usize,
 }
 
-impl std::error::Error for Error {}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+#[cfg(any(feature = "std", feature = "display"))]
+impl core::fmt::Display for Error {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{} at index {}", self.error_type, self.index)
     }
 }
@@ -62,22 +77,28 @@ impl Error {
         }
     }
 
-    pub(crate) fn from_io_error(index: usize, io_error: std::io::Error) -> Error {
-        Error {
-            error_type: ErrorType::IoError(io_error),
-            index,
-        }
-    }
-
     /// Get the position of the error in the stream.
     #[must_use]
-    pub fn get_position(&self, rjiter: &RJiter) -> LinePosition {
+    pub fn get_position<R: embedded_io::Read>(&self, rjiter: &crate::RJiter<R>) -> LinePosition {
         rjiter.error_position(self.index)
     }
 
-    /// Get the description of the error, with the position in the stream.
-    #[must_use]
-    pub fn description(&self, rjiter: &RJiter) -> String {
+    /// Write a description of the error with position information to the provided formatter.
+    /// This is more embedded-friendly than returning a String as it doesn't allocate.
+    #[cfg(any(feature = "std", feature = "display"))]
+    pub fn write_description<R: embedded_io::Read>(
+        &self,
+        rjiter: &crate::RJiter<R>,
+        f: &mut core::fmt::Formatter<'_>,
+    ) -> core::fmt::Result {
+        let position = self.get_position(rjiter);
+        write!(f, "{} at {}", self.error_type, position)
+    }
+
+    /// Get the description of the error with position information as a String.
+    /// This is only available with std feature as it allocates.
+    #[cfg(feature = "std")]
+    pub fn description<R: embedded_io::Read>(&self, rjiter: &crate::RJiter<R>) -> String {
         let position = self.get_position(rjiter);
         format!("{} at {}", self.error_type, position)
     }

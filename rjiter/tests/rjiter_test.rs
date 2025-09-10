@@ -1,4 +1,3 @@
-use std::io::Cursor;
 use std::sync::Arc;
 
 use rjiter::jiter::{JsonValue, LazyIndexMap, NumberInt, Peek};
@@ -13,7 +12,7 @@ use crate::chunk_reader::ChunkReader;
 fn sanity_check() {
     let input = r#"{}"#;
     let mut buffer = [0u8; 16];
-    let mut reader = Cursor::new(input.as_bytes());
+    let mut reader = input.as_bytes();
 
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
@@ -75,7 +74,7 @@ fn jiter_doc_example() {
         ]
     }"#;
     let mut buffer = [0u8; 16];
-    let mut reader = Cursor::new(json_data.as_bytes());
+    let mut reader = json_data.as_bytes();
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
     assert_eq!(rjiter.next_object().unwrap(), Some("name"));
@@ -107,7 +106,7 @@ fn skip_spaces() {
     // Use a 16-byte buffer
     let input = "               {}".as_bytes();
     let mut buffer = [0u8; 16];
-    let mut reader = Cursor::new(input);
+    let mut reader = input;
 
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
@@ -122,7 +121,7 @@ fn skip_spaces() {
 fn pass_through_small_bytes() {
     let input = r#""small text""#;
     let mut buffer = [0u8; 100];
-    let mut reader = Cursor::new(input.as_bytes());
+    let mut reader = input.as_bytes();
     let mut writer = Vec::new();
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
@@ -166,7 +165,7 @@ fn pass_through_long_string() {
 fn regression_pass_through_long_string_with_chunk_reader() {
     let input = r#""very very very long string""#;
     let mut buffer = [0u8; 5];
-    let mut reader = Cursor::new(input.as_bytes());
+    let mut reader = input.as_bytes();
     let mut writer = Vec::new();
 
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
@@ -251,7 +250,7 @@ fn long_write_regression_segment_from_quote() {
     let input = r#"      "bar" true"#;
     let buf_len = input.find("a").unwrap();
     let mut buffer = vec![0u8; buf_len];
-    let mut reader = Cursor::new(input.as_bytes());
+    let mut reader = input.as_bytes();
     let mut writer = Vec::new();
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
     rjiter.finish().unwrap_err();
@@ -270,7 +269,7 @@ fn long_write_regression_quote_last_buffer_byte() {
     let input = r#"      "bar" true"#;
     let buf_len = input.find("b").unwrap();
     let mut buffer = vec![0u8; buf_len];
-    let mut reader = Cursor::new(input.as_bytes());
+    let mut reader = input.as_bytes();
     let mut writer = Vec::new();
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
     rjiter.finish().unwrap_err();
@@ -289,7 +288,7 @@ fn write_long_with_bs_in_first_position() {
     let input = r#""\\ how can I help you?""#;
 
     let mut buffer = [0u8; 10];
-    let mut reader = Cursor::new(input.as_bytes());
+    let mut reader = input.as_bytes();
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
     let mut writer = Vec::new();
@@ -303,7 +302,7 @@ fn write_long_with_unicode_bs_in_first_position() {
     let input = r#""\u4F60\u597d, how can I help you?""#;
 
     let mut buffer = [0u8; 10];
-    let mut reader = Cursor::new(input.as_bytes());
+    let mut reader = input.as_bytes();
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
     let mut writer = Vec::new();
@@ -321,7 +320,7 @@ fn skip_spaces_for_next_key() {
     let lot_of_spaces = " ".repeat(32);
     let input = format!(r#"{lot_of_spaces},{lot_of_spaces}"foo": "bar""#);
     let mut buffer = [0u8; 10];
-    let mut reader = Cursor::new(input.as_bytes());
+    let mut reader = input.as_bytes();
 
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
@@ -382,7 +381,7 @@ fn next_str_with_spaces_one_byte_reader() {
 fn finish_yes_when_in_buffer() {
     let input = "  \n\t  ".as_bytes();
     let mut buffer = [0u8; 10];
-    let mut reader = Cursor::new(input);
+    let mut reader = input;
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
     let result = rjiter.finish();
@@ -393,7 +392,7 @@ fn finish_yes_when_in_buffer() {
 fn finish_no_when_in_buffer() {
     let input = "    x".as_bytes();
     let mut buffer = [0u8; 10];
-    let mut reader = Cursor::new(input);
+    let mut reader = input;
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
     let result = rjiter.finish();
@@ -428,7 +427,7 @@ fn handle_buffer_end_pos_in_finish() {
     let input = r#"true  }  false"#;
     let pos = input.find("}").unwrap();
     let mut buffer = vec![0u8; pos + 1];
-    let mut reader = Cursor::new(input);
+    let mut reader = input.as_bytes();
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
     // Move the jiter position to the end of buffer
@@ -454,7 +453,7 @@ fn known_skip_token() {
     let input = format!(r#"{some_spaces}trux true"#);
     for buffer_len in n_spaces..input.len() {
         let mut buffer = vec![0u8; buffer_len];
-        let mut reader = Cursor::new(input.as_bytes());
+        let mut reader = input.as_bytes();
         let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
         // Position Jiter on the token
@@ -487,7 +486,10 @@ fn skip_tokens_example_for_readme() {
         data: {"type": "ping"}
     "#;
 
-    fn peek_skipping_tokens(rjiter: &mut RJiter, tokens: &[&str]) -> RJiterResult<Peek> {
+    fn peek_skipping_tokens<R: embedded_io::Read>(
+        rjiter: &mut RJiter<R>,
+        tokens: &[&str],
+    ) -> RJiterResult<Peek> {
         'outer: loop {
             let peek = rjiter.peek();
             for token in tokens {
@@ -501,7 +503,7 @@ fn skip_tokens_example_for_readme() {
     }
 
     let mut buffer = [0u8; 10];
-    let mut reader = Cursor::new(json_data.as_bytes());
+    let mut reader = json_data.as_bytes();
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
     let tokens = vec!["data:", "event:", "ping"];
@@ -529,7 +531,7 @@ fn current_index() {
 
     for buffer_len in 8..input.len() {
         let mut buffer = vec![0u8; buffer_len];
-        let mut reader = Cursor::new(input.as_bytes());
+        let mut reader = input.as_bytes();
         let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
         let result = rjiter.finish();
@@ -548,7 +550,8 @@ fn current_index() {
         assert_eq!(result.unwrap(), Peek::String);
         assert_eq!(rjiter.current_index(), pos_value_pre);
 
-        let result = rjiter.write_long_str(&mut std::io::sink());
+        let mut sink = Vec::new();
+        let result = rjiter.write_long_str(&mut sink);
         assert!(result.is_ok());
         assert_eq!(rjiter.current_index(), pos_value_post);
 
@@ -570,7 +573,7 @@ fn current_index() {
 fn regression_next_value_empty_object_with_extra_bracket() {
     let input = r#"{}}"#; // extra bracket
     let mut buffer = [0u8; 16];
-    let mut reader = Cursor::new(input.as_bytes());
+    let mut reader = input.as_bytes();
 
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
@@ -585,7 +588,7 @@ fn regression_next_value_empty_object_with_extra_bracket() {
 fn regression_oversize_string_with_long_unicode_code_point() {
     let input = r#""AAA\n├AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA""#;
     let mut buffer = [0u8; 16];
-    let mut reader = Cursor::new(input.as_bytes());
+    let mut reader = input.as_bytes();
     let mut writer = Vec::new();
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 

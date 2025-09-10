@@ -1,21 +1,27 @@
-use std::cmp::min;
-use std::io::Read;
+use core::cmp::min;
+use embedded_io::Read;
 
+use crate::error::Result as RJiterResult;
 use crate::jiter::LinePosition;
 
 /// A buffer for reading JSON data.
 /// Is a private struct, the "pub" is only for testing.
-pub struct Buffer<'buf> {
-    reader: &'buf mut dyn Read,
+pub struct Buffer<'buf, R: Read> {
+    reader: &'buf mut R,
+    /// The working buffer for reading JSON data.
     pub buf: &'buf mut [u8],
-    pub n_bytes: usize, // Size of the buffer. Contract: `n_bytes <= buf.len()`
-    pub n_shifted_out: usize, // Number of bytes shifted out
-    pub pos_shifted: LinePosition, // Correction for the error position due to shifting
+    /// Number of valid bytes in the buffer. Contract: `n_bytes <= buf.len()`
+    pub n_bytes: usize,
+    /// Number of bytes that have been shifted out of the buffer.
+    pub n_shifted_out: usize,
+    /// Line position correction due to shifting operations.
+    pub pos_shifted: LinePosition,
 }
 
-impl<'buf> Buffer<'buf> {
+impl<'buf, R: Read> Buffer<'buf, R> {
+    /// Creates a new buffer with the given reader and buffer.
     #[must_use]
-    pub fn new(reader: &'buf mut dyn Read, buf: &'buf mut [u8]) -> Self {
+    pub fn new(reader: &'buf mut R, buf: &'buf mut [u8]) -> Self {
         Buffer {
             reader,
             buf,
@@ -32,11 +38,17 @@ impl<'buf> Buffer<'buf> {
     /// # Errors
     ///
     /// From the underlying reader.
-    pub fn read_more(&mut self) -> std::io::Result<usize> {
+    pub fn read_more(&mut self) -> RJiterResult<usize> {
         // The only place where `n_bytes` is increased is this `read_more` function.
         // As long as `read` works correctly, `n_bytes` is less or equal to the buffer size.
         #[allow(clippy::indexing_slicing)]
-        let n_new_bytes = self.reader.read(&mut self.buf[self.n_bytes..])?;
+        let n_new_bytes = self
+            .reader
+            .read(&mut self.buf[self.n_bytes..])
+            .map_err(|_| crate::error::Error {
+                error_type: crate::error::ErrorType::IoError(crate::error::IoError),
+                index: self.n_bytes,
+            })?;
         self.n_bytes += n_new_bytes;
         Ok(n_new_bytes)
     }
@@ -82,7 +94,7 @@ impl<'buf> Buffer<'buf> {
     /// # Errors
     ///
     /// From the underlying reader.
-    pub fn skip_spaces(&mut self, pos: usize) -> std::io::Result<()> {
+    pub fn skip_spaces(&mut self, pos: usize) -> RJiterResult<()> {
         let mut i = pos;
         loop {
             // `i >= 0` (`usize`), `self.n_bytes <= buf.len()` (contract)
@@ -112,8 +124,8 @@ impl<'buf> Buffer<'buf> {
     }
 }
 
-impl<'buf> std::fmt::Debug for Buffer<'buf> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<R: Read> core::fmt::Debug for Buffer<'_, R> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
             "Buffer {{ n_bytes: {:?}, buf: {:?}, n_shifted_out: {:?}, pos_shifted: {:?} }}",
@@ -131,7 +143,7 @@ pub(crate) struct ChangeFlag {
 
 impl ChangeFlag {
     #[must_use]
-    pub fn new(buf: &Buffer) -> Self {
+    pub fn new<R: Read>(buf: &Buffer<R>) -> Self {
         ChangeFlag {
             n_shifted: buf.n_shifted_out,
             n_bytes: buf.n_bytes,
@@ -139,7 +151,7 @@ impl ChangeFlag {
     }
 
     #[must_use]
-    pub fn is_changed(&self, buf: &Buffer) -> bool {
+    pub fn is_changed<R: Read>(&self, buf: &Buffer<R>) -> bool {
         self.n_shifted != buf.n_shifted_out || self.n_bytes != buf.n_bytes
     }
 }
