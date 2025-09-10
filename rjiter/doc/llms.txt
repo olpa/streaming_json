@@ -2,7 +2,7 @@ RJiter - Streaming JSON Parser for Rust
 
 ## Overview
 
-RJiter is a streaming JSON parser that allows processing of large JSON files using a small buffer. It wraps the Jiter library and adds streaming capabilities by automatically managing buffer reads and shifts.
+RJiter is a streaming JSON parser that processes large JSON files using a small buffer. It wraps the `J iter` library and adds streaming capabilities by automatically reading more data when needed. RJiter is `no_std` compatible and uses `embedded-io` traits.
 
 ## Key Concepts
 
@@ -10,16 +10,17 @@ RJiter is a streaming JSON parser that allows processing of large JSON files usi
 - **Small Buffer**: Uses a configurable buffer size (e.g., 16 bytes) to control memory usage
 - **Automatic Buffer Management**: Handles buffer shifts and reads transparently
 - **Pass-through**: Supports writing long strings directly to output without buffering
+- **No_std Compatible**: Works in embedded environments without standard library
+- **Embedded-IO**: Uses `embedded-io` traits
 
 ## Basic Usage
 
 ```rust
 use rjiter::{RJiter, jiter::{Peek, NumberInt}};
-use std::io::Cursor;
 
 // Create a small buffer and reader
 let mut buffer = [0u8; 16];
-let mut reader = Cursor::new(json_data.as_bytes());
+let mut reader = json_data.as_bytes();  // &[u8] implements embedded_io::Read
 let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 
 // Parse JSON elements
@@ -28,6 +29,12 @@ rjiter.next_str()?;     // Returns string value
 rjiter.next_int()?;     // Returns NumberInt
 rjiter.finish()?;       // Ensures all JSON is consumed
 ```
+
+## Crate Features
+
+- **default**: No features enabled (no_std compatible)
+- **std**: Enables std library features including Display trait and String allocation
+- **display**: Enables Display implementations without requiring full std
 
 ## Main API Categories
 
@@ -66,9 +73,12 @@ The buffer must be large enough to contain complete JSON elements. If a JSON ele
 ## Error Handling
 
 All methods return `Result<T, Error>` where Error can be:
-- IO errors from reading the input stream
+- IoError from reading the input stream (embedded-io compatible)
 - JSON parsing errors from malformed JSON
 - Buffer overflow errors when elements are too large
+- Type mismatch errors when expected type doesn't match actual JSON type
+
+Error types are based on `thiserror`.
 
 ## Advanced Features
 
@@ -88,8 +98,10 @@ rjiter.write_long_str(&mut output)?;  // Streams string content
 ## Integration Notes
 
 - Built on top of the fast Jiter parser
-- Compatible with std::io::Read trait for input
-- Uses std::io::Write trait for long string output
+- Compatible with embedded_io::Read trait for input
+- Uses embedded_io::Write trait for long string output
 - Requires mutable borrows of buffer and reader
+- No_std compatible by default
+- Optional std feature provides additional convenience methods
 
-For complete API documentation with all method signatures, see llms-all.txt
+For complete API documentation with all method signatures, see `llms-all.txt`.

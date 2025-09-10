@@ -439,22 +439,23 @@ impl<'rj, R: Read> RJiter<'rj, R> {
             });
         }
         if let Some(transparent_token) = transparent_token {
-            if to_pos >= self.buffer.n_bytes
-                && self.buffer.read_more().is_err() {
-                    return Err(RJiterError {
-                        error_type: crate::error::ErrorType::IoError(crate::error::IoError),
-                        index: self.current_index(),
-                    });
-                }
+            if to_pos >= self.buffer.n_bytes && self.buffer.read_more().is_err() {
+                return Err(RJiterError {
+                    error_type: crate::error::ErrorType::IoError(crate::error::IoError),
+                    index: self.current_index(),
+                });
+            }
             // `0 <= to_pos` (usize), `to_pos < buffer.n_bytes` (if check), `n_bytes <= buf.len()` by the `Buffer` contract
             #[allow(clippy::indexing_slicing)]
-            if to_pos < self.buffer.n_bytes && self.buffer.buf[to_pos] == transparent_token
-                && self.buffer.skip_spaces(to_pos + 1).is_err() {
-                    return Err(RJiterError {
-                        error_type: crate::error::ErrorType::IoError(crate::error::IoError),
-                        index: self.current_index(),
-                    });
-                }
+            if to_pos < self.buffer.n_bytes
+                && self.buffer.buf[to_pos] == transparent_token
+                && self.buffer.skip_spaces(to_pos + 1).is_err()
+            {
+                return Err(RJiterError {
+                    error_type: crate::error::ErrorType::IoError(crate::error::IoError),
+                    index: self.current_index(),
+                });
+            }
         }
 
         if change_flag.is_changed(&self.buffer) {

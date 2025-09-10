@@ -486,7 +486,10 @@ fn skip_tokens_example_for_readme() {
         data: {"type": "ping"}
     "#;
 
-    fn peek_skipping_tokens<R: embedded_io::Read>(rjiter: &mut RJiter<R>, tokens: &[&str]) -> RJiterResult<Peek> {
+    fn peek_skipping_tokens<R: embedded_io::Read>(
+        rjiter: &mut RJiter<R>,
+        tokens: &[&str],
+    ) -> RJiterResult<Peek> {
         'outer: loop {
             let peek = rjiter.peek();
             for token in tokens {

@@ -1,6 +1,21 @@
-# RJiter - Complete Cargo Doc Documentation
+# RJiter API Documentation
 
-This file contains all public interfaces and documentation that would be available through `cargo doc`.
+See `llms.txt` for `RJiter` description.
+
+## File: src/lib.rs
+
+### Public Re-exports
+```rust
+pub use error::Result;
+pub use error::{Error, IoError};
+pub use rjiter::RJiter;
+pub use jiter;
+```
+
+### Modules
+- `buffer` - Buffer management for streaming JSON parsing.
+- `error` - Error types and handling for `RJiter`.
+- `rjiter` - Streaming JSON parser implementation.
 
 ## File: src/rjiter.rs
 
@@ -8,16 +23,17 @@ This file contains all public interfaces and documentation that would be availab
 #### RJiter
 Streaming JSON parser, a wrapper around `Jiter`.
 ```rust
-pub struct RJiter<'rj> {
+pub struct RJiter<'rj, R: embedded_io::Read> {
     jiter: Jiter<'rj>,
-    buffer: Buffer<'rj>,
+    buffer: Buffer<'rj, R>,
 }
 ```
 **Fields:**
-- `jiter: Jiter<'rj>`
-- `buffer: Buffer<'rj>`
+- `jiter: Jiter<'rj>` - The underlying Jiter parser
+- `buffer: Buffer<'rj, R>` - Buffer management for streaming
 
 ### Functions
+
 #### new
 Constructs a new `RJiter`.
 
@@ -25,13 +41,15 @@ Constructs a new `RJiter`.
 - `reader`: The json stream
 - `buf`: The working buffer
 ```rust
-pub fn new(reader: &'rj mut dyn Read, buf: &'rj mut [u8]) -> Self
+pub fn new(reader: &'rj mut R, buf: &'rj mut [u8]) -> Self
+where
+    R: embedded_io::Read
 ```
 
 #### peek
 See `Jiter::peek`
 # Errors
-`std::io::Error` or `JiterError`
+`IoError` or `JiterError`
 ```rust
 pub fn peek(&mut self) -> RJiterResult<Peek>
 ```
@@ -39,7 +57,7 @@ pub fn peek(&mut self) -> RJiterResult<Peek>
 #### known_array
 See `Jiter::known_array`
 # Errors
-`std::io::Error` or `JiterError`
+`IoError` or `JiterError`
 ```rust
 pub fn known_array(&mut self) -> RJiterResult<Option<Peek>>
 ```
@@ -47,7 +65,7 @@ pub fn known_array(&mut self) -> RJiterResult<Option<Peek>>
 #### known_bool
 See `Jiter::known_bool`
 # Errors
-`std::io::Error` or `JiterError`
+`IoError` or `JiterError`
 ```rust
 pub fn known_bool(&mut self, peek: Peek) -> RJiterResult<bool>
 ```
@@ -55,7 +73,7 @@ pub fn known_bool(&mut self, peek: Peek) -> RJiterResult<bool>
 #### known_bytes
 See `Jiter::known_bytes`
 # Errors
-`std::io::Error` or `JiterError`
+`IoError` or `JiterError`
 ```rust
 pub fn known_bytes(&mut self) -> RJiterResult<&[u8]>
 ```
@@ -63,7 +81,7 @@ pub fn known_bytes(&mut self) -> RJiterResult<&[u8]>
 #### known_float
 See `Jiter::known_float`
 # Errors
-`std::io::Error` or `JiterError`
+`IoError` or `JiterError`
 ```rust
 pub fn known_float(&mut self, peek: Peek) -> RJiterResult<f64>
 ```
@@ -71,7 +89,7 @@ pub fn known_float(&mut self, peek: Peek) -> RJiterResult<f64>
 #### known_int
 See `Jiter::known_int`
 # Errors
-`std::io::Error` or `JiterError`
+`IoError` or `JiterError`
 ```rust
 pub fn known_int(&mut self, peek: Peek) -> RJiterResult<NumberInt>
 ```
@@ -79,7 +97,7 @@ pub fn known_int(&mut self, peek: Peek) -> RJiterResult<NumberInt>
 #### known_null
 See `Jiter::known_null`
 # Errors
-`std::io::Error` or `JiterError`
+`IoError` or `JiterError`
 ```rust
 pub fn known_null(&mut self) -> RJiterResult<()>
 ```
@@ -87,7 +105,7 @@ pub fn known_null(&mut self) -> RJiterResult<()>
 #### known_number
 See `Jiter::known_number`
 # Errors
-`std::io::Error` or `JiterError`
+`IoError` or `JiterError`
 ```rust
 pub fn known_number(&mut self, peek: Peek) -> RJiterResult<NumberAny>
 ```
@@ -95,7 +113,7 @@ pub fn known_number(&mut self, peek: Peek) -> RJiterResult<NumberAny>
 #### known_object
 See `Jiter::known_object`
 # Errors
-`std::io::Error` or `JiterError`
+`IoError` or `JiterError`
 ```rust
 pub fn known_object(&mut self) -> RJiterResult<Option<&str>>
 ```
@@ -103,7 +121,7 @@ pub fn known_object(&mut self) -> RJiterResult<Option<&str>>
 #### known_skip
 See `Jiter::known_skip`
 # Errors
-`std::io::Error` or `JiterError`
+`IoError` or `JiterError`
 ```rust
 pub fn known_skip(&mut self, peek: Peek) -> RJiterResult<()>
 ```
@@ -111,7 +129,7 @@ pub fn known_skip(&mut self, peek: Peek) -> RJiterResult<()>
 #### known_str
 See `Jiter::known_str`
 # Errors
-`std::io::Error` or `JiterError`
+`IoError` or `JiterError`
 ```rust
 pub fn known_str(&mut self) -> RJiterResult<&str>
 ```
@@ -119,7 +137,7 @@ pub fn known_str(&mut self) -> RJiterResult<&str>
 #### known_value
 See `Jiter::known_value`
 # Errors
-`std::io::Error` or `JiterError`
+`IoError` or `JiterError`
 ```rust
 pub fn known_value(&mut self, peek: Peek) -> RJiterResult<JsonValue<'rj>>
 ```
@@ -127,7 +145,7 @@ pub fn known_value(&mut self, peek: Peek) -> RJiterResult<JsonValue<'rj>>
 #### known_value_owned
 See `Jiter::known_value_owned`
 # Errors
-`std::io::Error` or `JiterError`
+`IoError` or `JiterError`
 ```rust
 pub fn known_value_owned(&mut self, peek: Peek) -> RJiterResult<JsonValue<'static>>
 ```
@@ -135,7 +153,7 @@ pub fn known_value_owned(&mut self, peek: Peek) -> RJiterResult<JsonValue<'stati
 #### next_array
 See `Jiter::next_array`
 # Errors
-`std::io::Error` or `JiterError`
+`IoError` or `JiterError`
 ```rust
 pub fn next_array(&mut self) -> RJiterResult<Option<Peek>>
 ```
@@ -143,7 +161,7 @@ pub fn next_array(&mut self) -> RJiterResult<Option<Peek>>
 #### array_step
 See `Jiter::array_step`
 # Errors
-`std::io::Error` or `JiterError`
+`IoError` or `JiterError`
 ```rust
 pub fn array_step(&mut self) -> RJiterResult<Option<Peek>>
 ```
@@ -151,7 +169,7 @@ pub fn array_step(&mut self) -> RJiterResult<Option<Peek>>
 #### next_bool
 See `Jiter::next_bool`
 # Errors
-`std::io::Error` or `JiterError`
+`IoError` or `JiterError`
 ```rust
 pub fn next_bool(&mut self) -> RJiterResult<bool>
 ```
@@ -159,7 +177,7 @@ pub fn next_bool(&mut self) -> RJiterResult<bool>
 #### next_bytes
 See `Jiter::next_bytes`
 # Errors
-`std::io::Error` or `JiterError`
+`IoError` or `JiterError`
 ```rust
 pub fn next_bytes(&mut self) -> RJiterResult<&[u8]>
 ```
@@ -167,7 +185,7 @@ pub fn next_bytes(&mut self) -> RJiterResult<&[u8]>
 #### next_float
 See `Jiter::next_float`
 # Errors
-`std::io::Error` or `JiterError`
+`IoError` or `JiterError`
 ```rust
 pub fn next_float(&mut self) -> RJiterResult<f64>
 ```
@@ -175,7 +193,7 @@ pub fn next_float(&mut self) -> RJiterResult<f64>
 #### next_int
 See `Jiter::next_int`
 # Errors
-`std::io::Error` or `JiterError`
+`IoError` or `JiterError`
 ```rust
 pub fn next_int(&mut self) -> RJiterResult<NumberInt>
 ```
@@ -183,7 +201,7 @@ pub fn next_int(&mut self) -> RJiterResult<NumberInt>
 #### next_key
 See `Jiter::next_key`
 # Errors
-`std::io::Error` or `JiterError`
+`IoError` or `JiterError`
 ```rust
 pub fn next_key(&mut self) -> RJiterResult<Option<&str>>
 ```
@@ -191,7 +209,7 @@ pub fn next_key(&mut self) -> RJiterResult<Option<&str>>
 #### next_key_bytes
 See `Jiter::next_key_bytes`
 # Errors
-`std::io::Error` or `JiterError`
+`IoError` or `JiterError`
 ```rust
 pub fn next_key_bytes(&mut self) -> RJiterResult<Option<&[u8]>>
 ```
@@ -199,7 +217,7 @@ pub fn next_key_bytes(&mut self) -> RJiterResult<Option<&[u8]>>
 #### next_null
 See `Jiter::next_null`
 # Errors
-`std::io::Error` or `JiterError`
+`IoError` or `JiterError`
 ```rust
 pub fn next_null(&mut self) -> RJiterResult<()>
 ```
@@ -207,7 +225,7 @@ pub fn next_null(&mut self) -> RJiterResult<()>
 #### next_number
 See `Jiter::next_number`
 # Errors
-`std::io::Error` or `JiterError`
+`IoError` or `JiterError`
 ```rust
 pub fn next_number(&mut self) -> RJiterResult<NumberAny>
 ```
@@ -215,7 +233,7 @@ pub fn next_number(&mut self) -> RJiterResult<NumberAny>
 #### next_number_bytes
 See `Jiter::next_number_bytes`
 # Errors
-`std::io::Error` or `JiterError`
+`IoError` or `JiterError`
 ```rust
 pub fn next_number_bytes(&mut self) -> RJiterResult<&[u8]>
 ```
@@ -223,7 +241,7 @@ pub fn next_number_bytes(&mut self) -> RJiterResult<&[u8]>
 #### next_object
 See `Jiter::next_object`
 # Errors
-`std::io::Error` or `JiterError`
+`IoError` or `JiterError`
 ```rust
 pub fn next_object(&mut self) -> RJiterResult<Option<&str>>
 ```
@@ -231,7 +249,7 @@ pub fn next_object(&mut self) -> RJiterResult<Option<&str>>
 #### next_object_bytes
 See `Jiter::next_object_bytes`
 # Errors
-`std::io::Error` or `JiterError`
+`IoError` or `JiterError`
 ```rust
 pub fn next_object_bytes(&mut self) -> RJiterResult<Option<&[u8]>>
 ```
@@ -239,7 +257,7 @@ pub fn next_object_bytes(&mut self) -> RJiterResult<Option<&[u8]>>
 #### next_skip
 See `Jiter::next_skip`
 # Errors
-`std::io::Error` or `JiterError`
+`IoError` or `JiterError`
 ```rust
 pub fn next_skip(&mut self) -> RJiterResult<()>
 ```
@@ -247,7 +265,7 @@ pub fn next_skip(&mut self) -> RJiterResult<()>
 #### next_str
 See `Jiter::next_str`
 # Errors
-`std::io::Error` or `JiterError`
+`IoError` or `JiterError`
 ```rust
 pub fn next_str(&mut self) -> RJiterResult<&str>
 ```
@@ -255,7 +273,7 @@ pub fn next_str(&mut self) -> RJiterResult<&str>
 #### next_value
 See `Jiter::next_value`
 # Errors
-`std::io::Error` or `JiterError`
+`IoError` or `JiterError`
 ```rust
 pub fn next_value(&mut self) -> RJiterResult<JsonValue<'rj>>
 ```
@@ -263,7 +281,7 @@ pub fn next_value(&mut self) -> RJiterResult<JsonValue<'rj>>
 #### next_value_owned
 See `Jiter::next_value_owned`
 # Errors
-`std::io::Error` or `JiterError`
+`IoError` or `JiterError`
 ```rust
 pub fn next_value_owned(&mut self) -> RJiterResult<JsonValue<'static>>
 ```
@@ -271,17 +289,19 @@ pub fn next_value_owned(&mut self) -> RJiterResult<JsonValue<'static>>
 #### finish
 See `Jiter::finish`
 # Errors
-`std::io::Error` or `JiterError`
+`IoError` or `JiterError`
 ```rust
 pub fn finish(&mut self) -> RJiterResult<()>
 ```
 
 #### current_index
+Get the current index of the parser.
 ```rust
 pub fn current_index(&self) -> usize
 ```
 
 #### error_position
+Get the current `LinePosition` of the parser.
 ```rust
 pub fn error_position(&self, index: usize) -> LinePosition
 ```
@@ -295,9 +315,9 @@ Rjiter should be positioned at the beginning of the json string, on a quote char
 Bounding quotes are not included in the output.
 
 # Errors
-`std::io::Error` or `JiterError`
+`IoError` or `JiterError`
 ```rust
-pub fn write_long_bytes(&mut self, writer: &mut dyn Write) -> RJiterResult<()>
+pub fn write_long_bytes<W: embedded_io::Write>(&mut self, writer: &mut W) -> RJiterResult<()>
 ```
 
 #### write_long_str
@@ -308,9 +328,9 @@ Rjiter should be positioned at the beginning of the json string, on a quote char
 Bounding quotes are not included in the output.
 
 # Errors
-`std::io::Error` or `JiterError`
+`IoError` or `JiterError`
 ```rust
-pub fn write_long_str(&mut self, writer: &mut dyn Write) -> RJiterResult<()>
+pub fn write_long_str<W: embedded_io::Write>(&mut self, writer: &mut W) -> RJiterResult<()>
 ```
 
 #### known_skip_token
@@ -318,7 +338,7 @@ Skip the token if found, otherwise return an error.
 `RJiter` should be positioned at the beginning of the potential token using `peek()` or `finish()`
 
 # Errors
-`std::io::Error` or `RJiterError(ExpectedSomeIdent)`
+`IoError` or `RJiterError(ExpectedSomeIdent)`
 ```rust
 pub fn known_skip_token(&mut self, token: &[u8]) -> RJiterResult<()>
 ```
@@ -326,16 +346,89 @@ pub fn known_skip_token(&mut self, token: &[u8]) -> RJiterResult<()>
 ### Implementations
 #### impl RJiter
 **Methods:**
-##### new
-Constructs a new `RJiter`.
+All the methods listed above under Functions section.
 
-# Arguments
-- `reader`: The json stream
-- `buf`: The working buffer
+## File: src/error.rs
+
+### Type Aliases
 ```rust
-pub fn new(reader: &'rj mut dyn Read, buf: &'rj mut [u8]) -> Self
+pub type Result<T> = core::result::Result<T, Error>;
 ```
 
+### Structs
+#### Error
+An error from the `RJiter` iterator.
+```rust
+pub struct Error {
+    pub error_type: ErrorType,
+    pub index: usize,
+}
+```
+**Fields:**
+- `error_type: ErrorType` - The type of error that occurred
+- `index: usize` - The byte index in the input where the error occurred
+
+#### IoError
+Custom I/O error for `no_std` compatibility
+```rust
+#[derive(Error, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct IoError;
+```
+
+### Enums
+#### ErrorType
+Like `Jiter::JiterErrorType`, but also with `IoError`
+```rust
+pub enum ErrorType {
+    JsonError(JsonErrorType),
+    WrongType {
+        expected: JsonType,
+        actual: JsonType,
+    },
+    IoError(IoError),
+}
+```
+**Variants:**
+- `JsonError(JsonErrorType)` - JSON parsing error from the underlying jiter
+- `WrongType { expected: JsonType, actual: JsonType }` - Type mismatch error
+- `IoError(IoError)` - I/O operation error
+
+### Functions
+#### get_position
+Get the position of the error in the stream.
+```rust
+pub fn get_position<R: embedded_io::Read>(&self, rjiter: &RJiter<R>) -> LinePosition
+```
+
+#### write_description
+Write a description of the error with position information to the provided formatter.
+This is more embedded-friendly than returning a String as it doesn't allocate.
+Available with `std` or `display` feature.
+```rust
+#[cfg(any(feature = "std", feature = "display"))]
+pub fn write_description<R: embedded_io::Read>(
+    &self,
+    rjiter: &RJiter<R>,
+    f: &mut core::fmt::Formatter<'_>,
+) -> core::fmt::Result
+```
+
+#### description
+Get the description of the error with position information as a String.
+This is only available with std feature as it allocates.
+```rust
+#[cfg(feature = "std")]
+pub fn description<R: embedded_io::Read>(&self, rjiter: &RJiter<R>) -> String
+```
+
+### Implementations
+#### impl Error
+**Methods:**
+##### get_position
+Get the position of the error in the stream.
+```rust
+pub fn get_position<R: embedded_io::Read>(&self, rjiter: &RJiter<R>) -> LinePosition
+```
 
 ## File: src/buffer.rs
 
@@ -344,26 +437,28 @@ pub fn new(reader: &'rj mut dyn Read, buf: &'rj mut [u8]) -> Self
 A buffer for reading JSON data.
 Is a private struct, the "pub" is only for testing.
 ```rust
-pub struct Buffer<'buf> {
-    reader: &'buf mut dyn Read,
+pub struct Buffer<'buf, R: embedded_io::Read> {
+    reader: &'buf mut R,
     pub buf: &'buf mut [u8],
-    pub n_bytes: usize, // Size of the buffer. Contract: `n_bytes <= buf.len()`
-    pub n_shifted_out: usize, // Number of bytes shifted out
-    pub pos_shifted: LinePosition, // Correction for the error position due to shifting
+    pub n_bytes: usize,
+    pub n_shifted_out: usize,
+    pub pos_shifted: LinePosition,
 }
 ```
 **Fields:**
-- `reader: &'buf mut dyn Read`
-- `buf: &'buf mut [u8]`
-- `n_bytes: usize`
-- `Contract: `n_bytes <= buf.len()``
-- `n_shifted_out: usize`
-- `pos_shifted: LinePosition`
+- `reader: &'buf mut R` - The underlying reader
+- `buf: &'buf mut [u8]` - The working buffer for reading JSON data
+- `n_bytes: usize` - Number of valid bytes in the buffer. Contract: `n_bytes <= buf.len()`
+- `n_shifted_out: usize` - Number of bytes that have been shifted out of the buffer
+- `pos_shifted: LinePosition` - Line position correction due to shifting operations
 
 ### Functions
 #### new
+Creates a new buffer with the given reader and buffer.
 ```rust
-pub fn new(reader: &'buf mut dyn Read, buf: &'buf mut [u8]) -> Self
+pub fn new(reader: &'buf mut R, buf: &'buf mut [u8]) -> Self
+where
+    R: embedded_io::Read
 ```
 
 #### read_more
@@ -375,7 +470,7 @@ Returns the number of bytes read.
 
 From the underlying reader.
 ```rust
-pub fn read_more(&mut self) -> std::io::Result<usize>
+pub fn read_more(&mut self) -> Result<usize, IoError>
 ```
 
 #### shift_buffer
@@ -401,99 +496,14 @@ Read-shift-read-shift-read-shift... until non-whitespace is found or EOF is reac
 
 From the underlying reader.
 ```rust
-pub fn skip_spaces(&mut self, pos: usize) -> std::io::Result<()>
-```
-
-#### new
-```rust
-pub fn new(buf: &Buffer) -> Self
-```
-
-#### is_changed
-```rust
-pub fn is_changed(&self, buf: &Buffer) -> bool
+pub fn skip_spaces(&mut self, pos: usize) -> Result<(), IoError>
 ```
 
 ### Implementations
 #### impl Buffer
 **Methods:**
 ##### new
+Creates a new buffer with the given reader and buffer.
 ```rust
 pub fn new(reader: &'buf mut dyn Read, buf: &'buf mut [u8]) -> Self
-```
-
-
-#### impl ChangeFlag
-**Methods:**
-##### new
-```rust
-pub fn new(buf: &Buffer) -> Self
-```
-
-
-## File: src/error.rs
-
-### Type Aliases
-```rust
-pub type Result<T> = std::result::Result<T, Error>;
-```
-
-### Structs
-#### Error
-```rust
-pub struct Error {
-    pub error_type: ErrorType,
-    pub index: usize,
-}
-```
-**Fields:**
-- `error_type: ErrorType`
-- `index: usize`
-
-### Enums
-#### ErrorType
-```rust
-pub enum ErrorType {
-    JsonError(JsonErrorType),
-    WrongType {
-        expected: JsonType,
-        actual: JsonType,
-    }
-```
-**Variants:**
-- `JsonError`
-- `WrongType`
-- `expected`
-- `JsonType`
-- `actual`
-- `JsonType`
-
-### Functions
-#### get_position
-```rust
-pub fn get_position(&self, rjiter: &RJiter) -> LinePosition
-```
-
-#### description
-```rust
-pub fn description(&self, rjiter: &RJiter) -> String
-```
-
-### Implementations
-#### impl Error
-
-## File: src/lib.rs
-
-### Public Re-exports
-```rust
-pub use error::Error;
-```
-```rust
-pub use error::Result;
-```
-```rust
-pub use rjiter::RJiter;
-```
-```rust
-pub use jiter;
 ```
