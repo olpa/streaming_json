@@ -100,7 +100,29 @@ impl<'a> U8Pool<'a> {
         }
     }
 
-    fn allocate_buffer_space(&mut self, total_size: usize) -> Result<(usize, usize), U8PoolError> {
+    /// Helper function to validate capacity and reserve buffer space.
+    ///
+    /// Validates that there is capacity for another slice and sufficient buffer space
+    /// for the requested size, then returns the buffer positions for the reservation.
+    ///
+    /// # Returns
+    ///
+    /// `Ok((start, end))` where:
+    /// - `start`: Start position for the new data in the buffer
+    /// - `end`: End position for the new data (`start` + `total_size`)
+    ///
+    /// Returns an error if:
+    /// - Maximum slice limit is reached (`SliceLimitExceeded`)
+    /// - Insufficient buffer space for the requested size (`BufferOverflow`)
+    ///
+    /// # Contract
+    ///
+    /// When this function returns `Ok((start, end))`:
+    /// - `self.data[start..end]` is guaranteed to be within bounds
+    /// - The range `start..end` has exactly `total_size` bytes
+    /// - The range is available for writing (not overlapping with existing data)
+    /// - `self.count < self.max_slices` (space for another slice descriptor)
+    fn reserve_buffer_space(&mut self, total_size: usize) -> Result<(usize, usize), U8PoolError> {
         // Check if we've reached the maximum number of slices
         if self.count >= self.max_slices {
             return Err(U8PoolError::SliceLimitExceeded {
@@ -142,8 +164,10 @@ impl<'a> U8Pool<'a> {
     /// - There is insufficient space in the buffer for the data
     ///
     pub fn push(&mut self, data: &[u8]) -> Result<(), U8PoolError> {
-        let (start, end) = self.allocate_buffer_space(data.len())?;
+        let (start, end) = self.reserve_buffer_space(data.len())?;
 
+        // Safe: reserve_buffer_space() guarantees start..end is within bounds
+        #[allow(clippy::indexing_slicing)]
         let data_slice = &mut self.data[start..end];
         data_slice.copy_from_slice(data);
 
@@ -161,6 +185,8 @@ impl<'a> U8Pool<'a> {
         self.count -= 1;
         let (start, length) = self.descriptor.get(self.count)?;
 
+        // Safe: descriptor.get() guarantees start..start+length is within bounds
+        #[allow(clippy::indexing_slicing)]
         Some(&self.data[start..start + length])
     }
 
@@ -174,6 +200,8 @@ impl<'a> U8Pool<'a> {
             return None;
         }
         let (start, length) = self.descriptor.get(index)?;
+        // Safe: descriptor.get() guarantees start..start+length is within bounds
+        #[allow(clippy::indexing_slicing)]
         Some(&self.data[start..start + length])
     }
 
@@ -192,17 +220,22 @@ impl<'a> U8Pool<'a> {
     pub fn push_assoc<T: Sized>(&mut self, assoc: T, data: &[u8]) -> Result<(), U8PoolError> {
         let assoc_size = core::mem::size_of::<T>();
         let total_size = assoc_size + data.len();
-        let (start, _end) = self.allocate_buffer_space(total_size)?;
+        let (start, _end) = self.reserve_buffer_space(total_size)?;
 
         let assoc_end = start + assoc_size;
         let data_end = assoc_end + data.len();
 
+        // Safe: reserve_buffer_space() guarantees all ranges are within bounds
+        #[allow(clippy::indexing_slicing)]
         let assoc_slice = &mut self.data[start..assoc_end];
+        #[allow(unsafe_code)]
         unsafe {
-            let assoc_ptr = assoc_slice.as_mut_ptr() as *mut T;
+            let assoc_ptr = assoc_slice.as_mut_ptr().cast::<T>();
             core::ptr::write(assoc_ptr, assoc);
         }
 
+        // Safe: reserve_buffer_space() guarantees all ranges are within bounds
+        #[allow(clippy::indexing_slicing)]
         let data_slice = &mut self.data[assoc_end..data_end];
         data_slice.copy_from_slice(data);
 
@@ -261,16 +294,20 @@ impl<'a> U8Pool<'a> {
     /// - The data in `self.data[start..assoc_end]` was written as type `T` using `core::ptr::write`
     /// - Type `T` matches the original type used when storing the data
     /// - All positions are within bounds of `self.data`
-    unsafe fn extract_assoc_ref<'b, T: Sized>(
-        &'b self,
+    #[allow(unsafe_code)]
+    unsafe fn extract_assoc_ref<T: Sized>(
+        &self,
         start: usize,
         assoc_end: usize,
         data_end: usize,
-    ) -> (&'b T, &'b [u8]) {
+    ) -> (&T, &[u8]) {
+        // Safe: caller guarantees all positions are within bounds (see safety contract above)
+        #[allow(clippy::indexing_slicing)]
         let assoc_slice = &self.data[start..assoc_end];
+        #[allow(clippy::indexing_slicing)]
         let data_slice = &self.data[assoc_end..data_end];
 
-        let assoc_ptr = assoc_slice.as_ptr() as *const T;
+        let assoc_ptr = assoc_slice.as_ptr().cast::<T>();
         let assoc_ref = &*assoc_ptr;
         (assoc_ref, data_slice)
     }
@@ -287,7 +324,11 @@ impl<'a> U8Pool<'a> {
     pub fn get_assoc<T: Sized>(&self, index: usize) -> Option<(&T, &[u8])> {
         let (start, assoc_end, data_end) = self.get_validated_assoc_positions::<T>(index)?;
 
-        unsafe { Some(self.extract_assoc_ref::<T>(start, assoc_end, data_end)) }
+        // Safe: get_validated_assoc_positions() guarantees all contracts for extract_assoc_ref()
+        #[allow(unsafe_code)]
+        unsafe {
+            Some(self.extract_assoc_ref::<T>(start, assoc_end, data_end))
+        }
     }
 
     /// Removes and returns the last associated value and data slice from the vector.
@@ -308,7 +349,11 @@ impl<'a> U8Pool<'a> {
 
         self.count -= 1;
 
-        unsafe { Some(self.extract_assoc_ref::<T>(start, assoc_end, data_end)) }
+        // Safe: get_validated_assoc_positions() guarantees all contracts for extract_assoc_ref()
+        #[allow(unsafe_code)]
+        unsafe {
+            Some(self.extract_assoc_ref::<T>(start, assoc_end, data_end))
+        }
     }
 
     // -------------------------------------------------------------------------

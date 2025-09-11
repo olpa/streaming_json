@@ -14,7 +14,24 @@ impl<'a> SliceDescriptor<'a> {
         Self { buffer }
     }
 
-    #[allow(clippy::indexing_slicing)]
+    /// Retrieves the slice descriptor at the specified index.
+    ///
+    /// Reads the stored start position and length from the descriptor buffer
+    /// using little-endian byte order for both 16-bit values.
+    ///
+    /// # Returns
+    ///
+    /// `Some((start, length))` where:
+    /// - `start`: The starting byte position of the slice in the data buffer
+    /// - `length`: The length of the slice in bytes
+    ///
+    /// Returns `None` if the index is out of bounds for the descriptor buffer.
+    ///
+    /// # Contract
+    ///
+    /// There is NO check that `start` and `start + length` are within the data
+    /// buffer bounds, but we rely on `set()` to enforce valid values when writing.
+    #[allow(clippy::indexing_slicing)] // Bounds checked above
     pub fn get(&self, index: usize) -> Option<(usize, usize)> {
         let offset = index * SLICE_DESCRIPTOR_SIZE;
         if offset + SLICE_DESCRIPTOR_SIZE > self.buffer.len() {
