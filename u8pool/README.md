@@ -8,13 +8,13 @@ Uses preallocated memory to store byte slices. The interface is stack-based, wit
 use u8pool::U8Pool;
 
 let mut buffer = [0u8; 1000];
-let mut u8pool = U8Pool::with_default_max_slices(&mut buffer)?;
+let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
 // Add key-value pairs
-u8pool.push(b"name")?;
-u8pool.push(b"Alice")?;
-u8pool.push(b"age")?;
-u8pool.push(b"30")?;
+u8pool.push(b"name").unwrap();
+u8pool.push(b"Alice").unwrap();
+u8pool.push(b"age").unwrap();
+u8pool.push(b"30").unwrap();
 
 // Iterate over all elements
 for element in &u8pool {
@@ -30,7 +30,7 @@ for element in &u8pool {
 for (key, value) in u8pool.pairs() {
     println!("{:?} = {:?}", 
              std::str::from_utf8(key).unwrap(),
-             std::str::from_utf8(value.unwrap()).unwrap());
+             std::str::from_utf8(value).unwrap());
 }
 // Output:
 // "name" = "Alice"
@@ -72,6 +72,12 @@ Each slice descriptor is stored as 4 bytes, with 2 bytes for the offset and 2 by
 - `get(&self, index: usize) -> Option<&[u8]>` - Accesses a slice by index
 - `clear(&mut self)` - Removes all slices
 
+**Associative Operations:**
+
+- `push_assoc<T: Sized>(&mut self, assoc: T, data: &[u8])` - Adds an associated value followed by a data slice
+- `pop_assoc<T: Sized>(&mut self) -> Option<(&T, &[u8])>` - Removes and returns the last associated value and data slice
+- `get_assoc<T: Sized>(&self, index: usize) -> Option<(&T, &[u8])>` - Accesses an associated value and data slice by index
+
 **Information:**
 
 - `len(&self) -> usize` - Returns the number of slices stored
@@ -82,6 +88,8 @@ Each slice descriptor is stored as 4 bytes, with 2 bytes for the offset and 2 by
 - `iter(&self)` - Returns a forward iterator over slices
 - `iter_rev(&self)` - Returns a reverse iterator over slices
 - `pairs(&self)` - Returns an iterator over key-value pairs (even/odd slices). If there is an odd number of slices, the last slice is ignored
+- `iter_assoc<T: Sized>(&self)` - Returns a forward iterator over associated values and data slices
+- `iter_assoc_rev<T: Sized>(&self)` - Returns a reverse iterator over associated values and data slices
 
 **Error Handling:**
 
