@@ -97,3 +97,72 @@ impl<'a> Iterator for U8PoolPairIter<'a> {
 }
 
 impl ExactSizeIterator for U8PoolPairIter<'_> {}
+
+/// Iterator over associated values and data slices in a `U8Pool`
+pub struct U8PoolAssocIter<'a, T> {
+    pool: &'a U8Pool<'a>,
+    current_index: usize,
+    _phantom: core::marker::PhantomData<T>,
+}
+
+impl<'a, T: Sized> U8PoolAssocIter<'a, T> {
+    pub(crate) fn new(u8pool: &'a U8Pool<'a>) -> Self {
+        Self {
+            pool: u8pool,
+            current_index: 0,
+            _phantom: core::marker::PhantomData,
+        }
+    }
+}
+
+impl<'a, T: Sized + 'a> Iterator for U8PoolAssocIter<'a, T> {
+    type Item = (&'a T, &'a [u8]);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let result = self.pool.get_assoc::<T>(self.current_index);
+        self.current_index += 1;
+        result
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = self.pool.len().saturating_sub(self.current_index);
+        (remaining, Some(remaining))
+    }
+}
+
+impl<'a, T: Sized + 'a> ExactSizeIterator for U8PoolAssocIter<'a, T> {}
+
+/// Reverse iterator over associated values and data slices in a `U8Pool`
+pub struct U8PoolAssocRevIter<'a, T> {
+    pool: &'a U8Pool<'a>,
+    current_index: usize,
+    _phantom: core::marker::PhantomData<T>,
+}
+
+impl<'a, T: Sized> U8PoolAssocRevIter<'a, T> {
+    pub(crate) fn new(u8pool: &'a U8Pool<'a>) -> Self {
+        Self {
+            pool: u8pool,
+            current_index: u8pool.len(),
+            _phantom: core::marker::PhantomData,
+        }
+    }
+}
+
+impl<'a, T: Sized + 'a> Iterator for U8PoolAssocRevIter<'a, T> {
+    type Item = (&'a T, &'a [u8]);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.current_index == 0 {
+            return None;
+        }
+        self.current_index -= 1;
+        self.pool.get_assoc::<T>(self.current_index)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.current_index, Some(self.current_index))
+    }
+}
+
+impl<'a, T: Sized + 'a> ExactSizeIterator for U8PoolAssocRevIter<'a, T> {}

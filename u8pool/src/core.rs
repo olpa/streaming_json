@@ -1,5 +1,5 @@
 use crate::error::U8PoolError;
-use crate::iter::{U8PoolIter, U8PoolPairIter, U8PoolRevIter};
+use crate::iter::{U8PoolAssocIter, U8PoolAssocRevIter, U8PoolIter, U8PoolPairIter, U8PoolRevIter};
 use crate::slice_descriptor::SliceDescriptor;
 
 const SLICE_DESCRIPTOR_SIZE: usize = 4; // 2 bytes start + 2 bytes length
@@ -77,6 +77,17 @@ impl<'a> U8Pool<'a> {
         self.count == 0
     }
 
+    /// Removes all slices from the pool, making it empty.
+    ///
+    /// This does not affect the underlying data buffer, only the slice count.
+    pub fn clear(&mut self) {
+        self.count = 0;
+    }
+
+    // -------------------------------------------------------------------------
+    // Internal accounting
+    //
+
     fn data_used(&self) -> usize {
         if self.count == 0 {
             0
@@ -89,7 +100,7 @@ impl<'a> U8Pool<'a> {
         }
     }
 
-    fn ensure_capacity(&self, additional_bytes: usize) -> Result<(), U8PoolError> {
+    fn allocate_buffer_space(&mut self, total_size: usize) -> Result<(usize, usize), U8PoolError> {
         // Check if we've reached the maximum number of slices
         if self.count >= self.max_slices {
             return Err(U8PoolError::SliceLimitExceeded {
@@ -97,16 +108,30 @@ impl<'a> U8Pool<'a> {
             });
         }
 
+        let start = self.data_used();
+        let end = start + total_size;
+        let available = self.data.len().saturating_sub(start);
+
         // Check if we have enough space for the additional bytes
-        let available_data_space = self.data.len() - self.data_used();
-        if additional_bytes > available_data_space {
+        if total_size > available {
             return Err(U8PoolError::BufferOverflow {
-                requested: additional_bytes,
-                available: available_data_space,
+                requested: total_size,
+                available,
             });
         }
+
+        Ok((start, end))
+    }
+
+    fn finalize_push(&mut self, start: usize, total_size: usize) -> Result<(), U8PoolError> {
+        self.descriptor.set(self.count, start, total_size)?;
+        self.count += 1;
         Ok(())
     }
+
+    // -------------------------------------------------------------------------
+    // Basic push/pop/get methods
+    //
 
     /// Pushes a slice onto the stack.
     ///
@@ -117,24 +142,12 @@ impl<'a> U8Pool<'a> {
     /// - There is insufficient space in the buffer for the data
     ///
     pub fn push(&mut self, data: &[u8]) -> Result<(), U8PoolError> {
-        self.ensure_capacity(data.len())?;
+        let (start, end) = self.allocate_buffer_space(data.len())?;
 
-        let start = self.data_used();
-        let end = start + data.len();
-        let available = self.data.len().saturating_sub(start);
-
-        let data_slice = self
-            .data
-            .get_mut(start..end)
-            .ok_or(U8PoolError::BufferOverflow {
-                requested: data.len(),
-                available,
-            })?;
+        let data_slice = &mut self.data[start..end];
         data_slice.copy_from_slice(data);
-        self.descriptor.set(self.count, start, data.len())?;
-        self.count += 1;
 
-        Ok(())
+        self.finalize_push(start, data.len())
     }
 
     /// Removes and returns the last slice from the vector.
@@ -148,7 +161,7 @@ impl<'a> U8Pool<'a> {
         self.count -= 1;
         let (start, length) = self.descriptor.get(self.count)?;
 
-        self.data.get(start..start + length)
+        Some(&self.data[start..start + length])
     }
 
     /// Gets a slice at the specified index.
@@ -161,15 +174,146 @@ impl<'a> U8Pool<'a> {
             return None;
         }
         let (start, length) = self.descriptor.get(index)?;
-        self.data.get(start..start + length)
+        Some(&self.data[start..start + length])
     }
 
-    /// Removes all slices from the pool, making it empty.
+    // -------------------------------------------------------------------------
+    // Associated push/pop/get methods
+    //
+
+    /// Pushes an associated value followed by a data slice onto the stack.
     ///
-    /// This does not affect the underlying data buffer, only the slice count.
-    pub fn clear(&mut self) {
-        self.count = 0;
+    /// # Errors
+    ///
+    /// Returns `U8PoolError::BufferOverflow` if:
+    /// - The maximum number of slices has been reached
+    /// - There is insufficient space in the buffer for the associated value and data
+    ///
+    pub fn push_assoc<T: Sized>(&mut self, assoc: T, data: &[u8]) -> Result<(), U8PoolError> {
+        let assoc_size = core::mem::size_of::<T>();
+        let total_size = assoc_size + data.len();
+        let (start, _end) = self.allocate_buffer_space(total_size)?;
+
+        let assoc_end = start + assoc_size;
+        let data_end = assoc_end + data.len();
+
+        let assoc_slice = &mut self.data[start..assoc_end];
+        unsafe {
+            let assoc_ptr = assoc_slice.as_mut_ptr() as *mut T;
+            core::ptr::write(assoc_ptr, assoc);
+        }
+
+        let data_slice = &mut self.data[assoc_end..data_end];
+        data_slice.copy_from_slice(data);
+
+        self.finalize_push(start, total_size)
     }
+
+    /// Helper function to validate and compute buffer positions for associated data access.
+    ///
+    /// Validates that the index is within bounds and that the stored data is large enough
+    /// to contain an associated value of type T, then returns the buffer positions needed
+    /// to access both the associated value and the data portion.
+    ///
+    /// # Returns
+    ///
+    /// `Some((assoc_start, assoc_end, data_end))` where:
+    /// - `assoc_start`: Start position of the associated value in the buffer
+    /// - `assoc_end`: End position of the associated value / start position of data
+    /// - `data_end`: End position of the data portion
+    ///
+    /// Returns `None` if:
+    /// - Index is out of bounds
+    /// - Descriptor lookup fails
+    /// - Stored data is too small to contain an associated value of type T
+    ///
+    /// # Contract
+    ///
+    /// When this function returns `Some((start, assoc_end, data_end))`:
+    /// - `self.data[start..assoc_end]` is guaranteed to be valid for reading type T
+    /// - `self.data[assoc_end..data_end]` is guaranteed to be valid for data access
+    /// - Both ranges are within the bounds of `self.data`
+    fn get_validated_assoc_positions<T: Sized>(
+        &self,
+        index: usize,
+    ) -> Option<(usize, usize, usize)> {
+        if index >= self.count {
+            return None;
+        }
+        let (start, total_length) = self.descriptor.get(index)?;
+        let assoc_size = core::mem::size_of::<T>();
+
+        if total_length < assoc_size {
+            return None;
+        }
+
+        let assoc_end = start + assoc_size;
+        let data_end = start + total_length;
+        Some((start, assoc_end, data_end))
+    }
+
+    /// Helper function to extract associated value reference from buffer positions.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that:
+    /// - `assoc_end - start >= core::mem::size_of::<T>()`
+    /// - The data in `self.data[start..assoc_end]` was written as type `T` using `core::ptr::write`
+    /// - Type `T` matches the original type used when storing the data
+    /// - All positions are within bounds of `self.data`
+    unsafe fn extract_assoc_ref<'b, T: Sized>(
+        &'b self,
+        start: usize,
+        assoc_end: usize,
+        data_end: usize,
+    ) -> (&'b T, &'b [u8]) {
+        let assoc_slice = &self.data[start..assoc_end];
+        let data_slice = &self.data[assoc_end..data_end];
+
+        let assoc_ptr = assoc_slice.as_ptr() as *const T;
+        let assoc_ref = &*assoc_ptr;
+        (assoc_ref, data_slice)
+    }
+
+    /// Gets an associated value and data slice at the specified index.
+    ///
+    /// Returns `None` if the index is out of bounds.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that the item at the specified index was pushed with `push_assoc`
+    /// and that the type `T` matches the original associated type.
+    #[must_use]
+    pub fn get_assoc<T: Sized>(&self, index: usize) -> Option<(&T, &[u8])> {
+        let (start, assoc_end, data_end) = self.get_validated_assoc_positions::<T>(index)?;
+
+        unsafe { Some(self.extract_assoc_ref::<T>(start, assoc_end, data_end)) }
+    }
+
+    /// Removes and returns the last associated value and data slice from the vector.
+    ///
+    /// Returns `None` if the vector is empty.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that the last pushed item was indeed pushed with `push_assoc`
+    /// and that the type `T` matches the original associated type.
+    pub fn pop_assoc<T: Sized>(&mut self) -> Option<(&T, &[u8])> {
+        if self.count == 0 {
+            return None;
+        }
+
+        let last_index = self.count - 1;
+        let (start, assoc_end, data_end) = self.get_validated_assoc_positions::<T>(last_index)?;
+
+        self.count -= 1;
+
+        unsafe { Some(self.extract_assoc_ref::<T>(start, assoc_end, data_end)) }
+    }
+
+    // -------------------------------------------------------------------------
+    // Iterators
+    //
 
     /// Returns an iterator over the slices in the vector.
     #[must_use]
@@ -187,6 +331,28 @@ impl<'a> U8Pool<'a> {
     #[must_use]
     pub fn pairs(&self) -> U8PoolPairIter<'_> {
         U8PoolPairIter::new(self)
+    }
+
+    /// Returns an iterator over associated values and data slices.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that all items in the pool were pushed with `push_assoc`
+    /// and that the type `T` matches the original associated type for all items.
+    #[must_use]
+    pub fn iter_assoc<T: Sized>(&self) -> U8PoolAssocIter<'_, T> {
+        U8PoolAssocIter::new(self)
+    }
+
+    /// Returns a reverse iterator over associated values and data slices.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that all items in the pool were pushed with `push_assoc`
+    /// and that the type `T` matches the original associated type for all items.
+    #[must_use]
+    pub fn iter_assoc_rev<T: Sized>(&self) -> U8PoolAssocRevIter<'_, T> {
+        U8PoolAssocRevIter::new(self)
     }
 
     /// Returns the descriptor iterator (internal use).
