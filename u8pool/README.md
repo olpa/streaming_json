@@ -86,7 +86,7 @@ assert_eq!(*retrieved_point, Point { x: 42, y: 100 });
 assert_eq!(data, b"center point");
 ```
 
-Associated values must implement the `Sized` trait and are stored using their memory representation.
+Associated values must implement the `Sized` trait and are stored using their memory representation. The library automatically adds alignment padding as needed to ensure proper memory alignment for each associated type, which may result in some unused bytes between data items for types with strict alignment requirements.
 
 ## API Summary
 

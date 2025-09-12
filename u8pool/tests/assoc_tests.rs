@@ -6,6 +6,12 @@ struct Point {
     y: i32,
 }
 
+/// Helper function to get the length of the top (most recently added) slice
+/// without popping it, using the reverse iterator.
+fn top_full_len(pool: &U8Pool) -> usize {
+    pool.iter_rev().next().expect("Pool should not be empty").len()
+}
+
 #[test]
 fn test_push_pop_assoc_basic() {
     let mut buffer = [0u8; 256];
@@ -232,4 +238,171 @@ fn test_assoc_slice_limit_exceeded() {
         result,
         Err(U8PoolError::SliceLimitExceeded { max_slices: 2 })
     ));
+}
+
+#[test]
+fn test_alignment_padding() {
+    // Test alignment padding verification using top_full_len pattern
+    let mut buffer = [0u8; 1024];
+    let mut pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+    // Define test types with different alignment requirements
+    #[repr(C)]
+    #[derive(Debug, PartialEq, Clone, Copy)]
+    struct SingleByte {
+        value: u8,
+    }
+
+    #[repr(C)]
+    #[derive(Debug, PartialEq, Clone, Copy)]
+    struct TwoBytes {
+        value: u16,
+    }
+
+    #[repr(C)]
+    #[derive(Debug, PartialEq, Clone, Copy)]
+    struct FourBytes {
+        value: u32,
+    }
+
+    #[repr(C)]
+    #[derive(Debug, PartialEq, Clone, Copy)]
+    struct EightBytes {
+        value: u64,
+    }
+
+    // Add a single byte to create misalignment for subsequent types
+    pool.push(b"x").unwrap();
+
+    // --- SingleByte (u8, 1-byte alignment)
+    {
+        let struct_size = core::mem::size_of::<SingleByte>();
+        let data_bytes = b"single";
+        let data_size = data_bytes.len();
+        
+        let expected_padding = 0;
+        let expected_total_with_padding = expected_padding + struct_size + data_size;
+        
+        pool.push_assoc(SingleByte { value: 0x42 }, data_bytes).unwrap();
+        let actual_slice_size = top_full_len(&pool);
+        
+        assert_eq!(actual_slice_size, expected_total_with_padding, 
+            "SingleByte: padding({}) + struct({}) + data({}) = {}, got {}", 
+            expected_padding, struct_size, data_size, expected_total_with_padding, actual_slice_size);
+        
+        let (retrieved_val, retrieved_data) = pool.pop_assoc::<SingleByte>().unwrap();
+        assert_eq!(retrieved_val.value, 0x42);
+        assert_eq!(retrieved_data, data_bytes);
+    }
+
+    // --- TwoBytes (u16, 2-byte alignment)
+    {
+        let struct_size = core::mem::size_of::<TwoBytes>();
+        let data_bytes = b"two";
+        let data_size = data_bytes.len();
+        
+        let expected_padding = 1;
+        let expected_total_with_padding = expected_padding + struct_size + data_size;
+        
+        pool.push_assoc(TwoBytes { value: 0x1234 }, data_bytes).unwrap();
+        let actual_slice_size = top_full_len(&pool);
+        
+        assert_eq!(actual_slice_size, expected_total_with_padding, 
+            "TwoBytes: padding({}) + struct({}) + data({}) = {}, got {}", 
+            expected_padding, struct_size, data_size, expected_total_with_padding, actual_slice_size);
+        
+        let (retrieved_val, retrieved_data) = pool.pop_assoc::<TwoBytes>().unwrap();
+        assert_eq!(retrieved_val.value, 0x1234);
+        assert_eq!(retrieved_data, data_bytes);
+    }
+
+    // --- FourBytes (u32, 4-byte alignment)
+    {
+        let struct_size = core::mem::size_of::<FourBytes>();
+        let data_bytes = b"four";
+        let data_size = data_bytes.len();
+        
+        let expected_padding = 3;
+        let expected_total_with_padding = expected_padding + struct_size + data_size;
+        
+        pool.push_assoc(FourBytes { value: 0x12345678 }, data_bytes).unwrap();
+        let actual_slice_size = top_full_len(&pool);
+        
+        assert_eq!(actual_slice_size, expected_total_with_padding, 
+            "FourBytes: padding({}) + struct({}) + data({}) = {}, got {}", 
+            expected_padding, struct_size, data_size, expected_total_with_padding, actual_slice_size);
+        
+        let (retrieved_val, retrieved_data) = pool.pop_assoc::<FourBytes>().unwrap();
+        assert_eq!(retrieved_val.value, 0x12345678);
+        assert_eq!(retrieved_data, data_bytes);
+    }
+
+    // --- EightBytes (u64, 8-byte alignment)
+    {
+        let struct_size = core::mem::size_of::<EightBytes>();
+        let data_bytes = b"eight";
+        let data_size = data_bytes.len();
+        
+        let expected_padding = 7;
+        let expected_total_with_padding = expected_padding + struct_size + data_size;
+        
+        pool.push_assoc(EightBytes { value: 0x123456789ABCDEF0 }, data_bytes).unwrap();
+        let actual_slice_size = top_full_len(&pool);
+        
+        assert_eq!(actual_slice_size, expected_total_with_padding, 
+            "EightBytes: padding({}) + struct({}) + data({}) = {}, got {}", 
+            expected_padding, struct_size, data_size, expected_total_with_padding, actual_slice_size);
+        
+        let (retrieved_val, retrieved_data) = pool.pop_assoc::<EightBytes>().unwrap();
+        assert_eq!(retrieved_val.value, 0x123456789ABCDEF0);
+        assert_eq!(retrieved_data, data_bytes);
+    }
+}
+
+#[test]
+fn test_alignment_with_complex_struct() {
+    // Test alignment padding verification using top_full_len pattern with complex struct
+    let mut buffer = [0u8; 512];
+    let mut pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+    #[repr(C)]
+    #[derive(Debug, PartialEq, Clone, Copy)]
+    struct ComplexStruct {
+        small: u8,    // 1 byte
+        big: u64,     // 8 bytes, needs 8-byte alignment
+        medium: u32,  // 4 bytes
+    }
+
+    // Add some unaligned data first
+    pool.push(b"abc").unwrap(); // 3 bytes, leaves next position unaligned
+
+    // --- ComplexStruct (8-byte alignment due to u64 field)
+    {
+        let test_struct = ComplexStruct {
+            small: 0x12,
+            big: 0xFEDCBA9876543210,
+            medium: 0x87654321,
+        };
+
+        let struct_size = core::mem::size_of::<ComplexStruct>();
+        let data_bytes = b"complex";
+        let data_size = data_bytes.len();
+
+        let expected_padding = 5; // base_offset=3, need to align to 8-byte boundary
+        let expected_total_with_padding = expected_padding + struct_size + data_size;
+
+        pool.push_assoc(test_struct, data_bytes).unwrap();
+        let actual_slice_size = top_full_len(&pool);
+
+        assert_eq!(actual_slice_size, expected_total_with_padding,
+            "ComplexStruct: padding({}) + struct({}) + data({}) = {}, got {}",
+            expected_padding, struct_size, data_size, expected_total_with_padding, actual_slice_size);
+
+        let (retrieved, retrieved_data) = pool.pop_assoc::<ComplexStruct>().unwrap();
+        assert_eq!(*retrieved, test_struct);
+        assert_eq!(retrieved_data, data_bytes);
+        assert_eq!(retrieved.small, 0x12);
+        assert_eq!(retrieved.big, 0xFEDCBA9876543210);
+        assert_eq!(retrieved.medium, 0x87654321);
+    }
 }
