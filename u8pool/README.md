@@ -58,6 +58,36 @@ Memory layout for the example above:
 
 Each slice descriptor is stored as 4 bytes, with 2 bytes for the offset and 2 bytes for the length.
 
+## Associated Values
+
+In addition to storing byte slices, `U8Pool` supports associated values - structured data that can be paired with each byte slice. Associated values are stored directly in the buffer's metadata section before their corresponding data slice.
+
+For example, you can store coordinates along with description strings:
+
+```rust
+use u8pool::U8Pool;
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+let mut buffer = [0u8; 256];
+let mut pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+// Store a Point with associated data
+let point = Point { x: 42, y: 100 };
+pool.push_assoc(point, b"center point").unwrap();
+
+// Retrieve both the Point and its data
+let (retrieved_point, data) = pool.get_assoc::<Point>(0).unwrap();
+assert_eq!(*retrieved_point, Point { x: 42, y: 100 });
+assert_eq!(data, b"center point");
+```
+
+Associated values must implement the `Sized` trait and are stored using their memory representation.
+
 ## API Summary
 
 **Construction:**
