@@ -1,6 +1,6 @@
 # `U8Pool`
 
-Uses preallocated memory to store byte slices. The interface is stack-based, with `Vec` and `Map` iterators. The code is `no_std`, with `thiserror` as the only dependency.
+Uses preallocated memory to store byte slices, optionally with a companion `Sized` object. The interface is stack-based, with `Vec` and `Map` iterators. The code is `no_std`, with `thiserror` as the only dependency.
 
 ## Example
 
@@ -8,13 +8,13 @@ Uses preallocated memory to store byte slices. The interface is stack-based, wit
 use u8pool::U8Pool;
 
 let mut buffer = [0u8; 1000];
-let mut u8pool = U8Pool::with_default_max_slices(&mut buffer)?;
+let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
 // Add key-value pairs
-u8pool.push(b"name")?;
-u8pool.push(b"Alice")?;
-u8pool.push(b"age")?;
-u8pool.push(b"30")?;
+u8pool.push(b"name").unwrap();
+u8pool.push(b"Alice").unwrap();
+u8pool.push(b"age").unwrap();
+u8pool.push(b"30").unwrap();
 
 // Iterate over all elements
 for element in &u8pool {
@@ -30,7 +30,7 @@ for element in &u8pool {
 for (key, value) in u8pool.pairs() {
     println!("{:?} = {:?}", 
              std::str::from_utf8(key).unwrap(),
-             std::str::from_utf8(value.unwrap()).unwrap());
+             std::str::from_utf8(value).unwrap());
 }
 // Output:
 // "name" = "Alice"
@@ -58,6 +58,36 @@ Memory layout for the example above:
 
 Each slice descriptor is stored as 4 bytes, with 2 bytes for the offset and 2 bytes for the length.
 
+## Associated Values
+
+In addition to storing byte slices, `U8Pool` supports associated values - structured data that can be paired with each byte slice. Associated values are stored directly in the buffer's metadata section before their corresponding data slice.
+
+For example, you can store coordinates along with description strings:
+
+```rust
+use u8pool::U8Pool;
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+let mut buffer = [0u8; 256];
+let mut pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+// Store a Point with associated data
+let point = Point { x: 42, y: 100 };
+pool.push_assoc(point, b"center point").unwrap();
+
+// Retrieve both the Point and its data
+let (retrieved_point, data) = pool.get_assoc::<Point>(0).unwrap();
+assert_eq!(*retrieved_point, Point { x: 42, y: 100 });
+assert_eq!(data, b"center point");
+```
+
+Associated values must implement the `Sized` trait and are stored using their memory representation. The library automatically ensures proper memory alignment for associated values by adding padding bytes when necessary.
+
 ## API Summary
 
 **Construction:**
@@ -70,7 +100,14 @@ Each slice descriptor is stored as 4 bytes, with 2 bytes for the offset and 2 by
 - `push(&mut self, data: &[u8])` - Adds a slice to the pool
 - `pop(&mut self) -> Option<&[u8]>` - Removes and returns the last slice
 - `get(&self, index: usize) -> Option<&[u8]>` - Accesses a slice by index
+- `top(&self) -> Option<&[u8]>` - Returns the last slice without removing it. Can be implemented as `self.iter_rev().next()`
 - `clear(&mut self)` - Removes all slices
+
+**Associative Operations:**
+
+- `push_assoc<T: Sized>(&mut self, assoc: T, data: &[u8])` - Adds an associated value followed by a data slice. Automatically handles memory alignment with padding as needed.
+- `pop_assoc<T: Sized>(&mut self) -> Option<(&T, &[u8])>` - Removes and returns the last associated value and data slice
+- `get_assoc<T: Sized>(&self, index: usize) -> Option<(&T, &[u8])>` - Accesses an associated value and data slice by index
 
 **Information:**
 
@@ -82,6 +119,8 @@ Each slice descriptor is stored as 4 bytes, with 2 bytes for the offset and 2 by
 - `iter(&self)` - Returns a forward iterator over slices
 - `iter_rev(&self)` - Returns a reverse iterator over slices
 - `pairs(&self)` - Returns an iterator over key-value pairs (even/odd slices). If there is an odd number of slices, the last slice is ignored
+- `iter_assoc<T: Sized>(&self)` - Returns a forward iterator over associated values and data slices
+- `iter_assoc_rev<T: Sized>(&self)` - Returns a reverse iterator over associated values and data slices
 
 **Error Handling:**
 
