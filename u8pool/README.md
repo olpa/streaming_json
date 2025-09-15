@@ -1,6 +1,6 @@
 # `U8Pool`
 
-Uses preallocated memory to store byte slices. The interface is stack-based, with `Vec` and `Map` iterators. The code is `no_std`, with `thiserror` as the only dependency.
+Uses preallocated memory to store byte slices, optionally with a companion `Sized` object. The interface is stack-based, with `Vec` and `Map` iterators. The code is `no_std`, with `thiserror` as the only dependency.
 
 ## Example
 
