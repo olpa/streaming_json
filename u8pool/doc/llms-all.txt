@@ -16,7 +16,7 @@ U8Pool: Uses preallocated memory to store byte slices. The interface is stack-ba
 
 **Associative Operations:**
 
-- `push_assoc<T: Sized>(&mut self, assoc: T, data: &[u8])` - Adds an associated value followed by a data slice
+- `push_assoc<T: Sized>(&mut self, assoc: T, data: &[u8])` - Adds an associated value followed by a data slice. Automatically handles memory alignment with padding as needed.
 - `pop_assoc<T: Sized>(&mut self) -> Option<(&T, &[u8])>` - Removes and returns the last associated value and data slice
 - `get_assoc<T: Sized>(&self, index: usize) -> Option<(&T, &[u8])>` - Accesses an associated value and data slice by index
 

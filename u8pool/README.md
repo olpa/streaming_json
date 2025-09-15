@@ -86,7 +86,7 @@ assert_eq!(*retrieved_point, Point { x: 42, y: 100 });
 assert_eq!(data, b"center point");
 ```
 
-Associated values must implement the `Sized` trait and are stored using their memory representation. The library automatically adds alignment padding as needed to ensure proper memory alignment for each associated type, which may result in some unused bytes between data items for types with strict alignment requirements.
+Associated values must implement the `Sized` trait and are stored using their memory representation. The library automatically ensures proper memory alignment for associated values by adding padding bytes when necessary.
 
 ## API Summary
 
@@ -104,7 +104,7 @@ Associated values must implement the `Sized` trait and are stored using their me
 
 **Associative Operations:**
 
-- `push_assoc<T: Sized>(&mut self, assoc: T, data: &[u8])` - Adds an associated value followed by a data slice
+- `push_assoc<T: Sized>(&mut self, assoc: T, data: &[u8])` - Adds an associated value followed by a data slice. Automatically handles memory alignment with padding as needed.
 - `pop_assoc<T: Sized>(&mut self) -> Option<(&T, &[u8])>` - Removes and returns the last associated value and data slice
 - `get_assoc<T: Sized>(&self, index: usize) -> Option<(&T, &[u8])>` - Accesses an associated value and data slice by index
 

@@ -218,11 +218,27 @@ impl<'a> U8Pool<'a> {
 
     /// Pushes an associated value followed by a data slice onto the stack.
     ///
+    /// The associated value is stored with proper memory alignment for type `T`.
+    /// Padding bytes may be inserted before the value to ensure correct alignment,
+    /// which means the total space used may exceed `size_of::<T>() + data.len()`.
+    /// These padding bytes are left untouched in the buffer.
+    ///
+    /// # Memory Layout
+    ///
+    /// ```text
+    /// [padding bytes] [associated value T] [data slice]
+    /// ```
+    ///
+    /// Where:
+    /// - Padding bytes align the start of `T` to its alignment requirement
+    /// - Associated value `T` is stored using its native memory representation
+    /// - Data slice follows immediately after the associated value
+    ///
     /// # Errors
     ///
     /// Returns `U8PoolError::BufferOverflow` if:
     /// - The maximum number of slices has been reached
-    /// - There is insufficient space in the buffer for the associated value and data
+    /// - There is insufficient space in the buffer for the aligned associated value and data
     ///
     pub fn push_assoc<T: Sized>(&mut self, assoc: T, data: &[u8]) -> Result<(), U8PoolError> {
         let (aligned_start, end) = self.reserve_aligned_buffer_space::<T>(data.len())?;
