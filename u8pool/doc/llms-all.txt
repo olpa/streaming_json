@@ -12,6 +12,7 @@ U8Pool: Uses preallocated memory to store byte slices. The interface is stack-ba
 - `push(&mut self, data: &[u8])` - Adds a slice to the pool
 - `pop(&mut self) -> Option<&[u8]>` - Removes and returns the last slice
 - `get(&self, index: usize) -> Option<&[u8]>` - Accesses a slice by index
+- `top(&self) -> Option<&[u8]>` - Returns the last slice without removing it. Can be implemented as `self.iter_rev().next()`
 - `clear(&mut self)` - Removes all slices
 
 **Associative Operations:**
