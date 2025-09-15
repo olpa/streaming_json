@@ -152,6 +152,13 @@ impl<'a> U8Pool<'a> {
         Ok((aligned_start, end))
     }
 
+    /// Finalizes a push operation by storing the slice descriptor.
+    ///
+    /// # Contract
+    ///
+    /// For associated values (push_assoc), `start` must be the aligned start position
+    /// for the associated type. For regular slices (push), `start` is the actual
+    /// start position (which equals aligned start since no alignment is required).
     fn finalize_push(&mut self, start: usize, total_size: usize) -> Result<(), U8PoolError> {
         self.descriptor.set(self.count, start, total_size)?;
         self.count += 1;
@@ -269,6 +276,9 @@ impl<'a> U8Pool<'a> {
     /// to contain an associated value of type T, then returns the buffer positions needed
     /// to access both the associated value and the data portion.
     ///
+    /// The function relies on the invariant that descriptors store aligned start positions
+    /// for associated values, eliminating the need for alignment calculations during retrieval.
+    ///
     /// # Returns
     ///
     /// `Some((assoc_start, assoc_end, data_end))` where:
@@ -283,10 +293,11 @@ impl<'a> U8Pool<'a> {
     ///
     /// # Contract
     ///
-    /// When this function returns `Some((start, assoc_end, data_end))`:
-    /// - `self.data[start..assoc_end]` is guaranteed to be valid for reading type T
+    /// When this function returns `Some((assoc_start, assoc_end, data_end))`:
+    /// - `self.data[assoc_start..assoc_end]` is guaranteed to be valid for reading type T
     /// - `self.data[assoc_end..data_end]` is guaranteed to be valid for data access
     /// - Both ranges are within the bounds of `self.data`
+    /// - `assoc_start` is guaranteed to be properly aligned for type T (stored in descriptor)
     fn get_validated_assoc_positions<T: Sized>(
         &self,
         index: usize,
@@ -314,6 +325,7 @@ impl<'a> U8Pool<'a> {
     ///
     /// The caller must ensure that:
     /// - `assoc_end - start >= core::mem::size_of::<T>()`
+    /// - `start` is properly aligned for type `T` (guaranteed when retrieved from descriptor)
     /// - The data in `self.data[start..assoc_end]` was written as type `T` using `core::ptr::write`
     /// - Type `T` matches the original type used when storing the data
     /// - All positions are within bounds of `self.data`
