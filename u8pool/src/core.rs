@@ -100,29 +100,33 @@ impl<'a> U8Pool<'a> {
         }
     }
 
-    /// Helper function to validate capacity and reserve buffer space.
+    /// Helper function to validate capacity and reserve aligned buffer space.
     ///
     /// Validates that there is capacity for another slice and sufficient buffer space
-    /// for the requested size, then returns the buffer positions for the reservation.
+    /// for the requested size, with alignment for the specified type.
     ///
     /// # Returns
     ///
-    /// `Ok((start, end))` where:
-    /// - `start`: Start position for the new data in the buffer
-    /// - `end`: End position for the new data (`start` + `total_size`)
+    /// `Ok((aligned_start, end))` where:
+    /// - `aligned_start`: Aligned start position for type T (to be stored in descriptor)
+    /// - `end`: End position of the data
     ///
     /// Returns an error if:
     /// - Maximum slice limit is reached (`SliceLimitExceeded`)
-    /// - Insufficient buffer space for the requested size (`BufferOverflow`)
+    /// - Insufficient buffer space for the aligned data (`BufferOverflow`)
     ///
     /// # Contract
     ///
-    /// When this function returns `Ok((start, end))`:
-    /// - `self.data[start..end]` is guaranteed to be within bounds
-    /// - The range `start..end` has exactly `total_size` bytes
+    /// When this function returns `Ok((aligned_start, end))`:
+    /// - `self.data[aligned_start..end]` is guaranteed to be within bounds
+    /// - `aligned_start` is properly aligned for type T
     /// - The range is available for writing (not overlapping with existing data)
     /// - `self.count < self.max_slices` (space for another slice descriptor)
-    fn reserve_buffer_space(&mut self, total_size: usize) -> Result<(usize, usize), U8PoolError> {
+    /// - The aligned_start should be stored in the descriptor for later retrieval
+    fn reserve_aligned_buffer_space<T: Sized>(
+        &mut self,
+        data_size: usize,
+    ) -> Result<(usize, usize), U8PoolError> {
         // Check if we've reached the maximum number of slices
         if self.count >= self.max_slices {
             return Err(U8PoolError::SliceLimitExceeded {
@@ -130,11 +134,14 @@ impl<'a> U8Pool<'a> {
             });
         }
 
-        let start = self.data_used();
-        let end = start + total_size;
-        let available = self.data.len().saturating_sub(start);
+        let current_pos = self.data_used();
+        let aligned_start = current_pos.next_multiple_of(core::mem::align_of::<T>());
+        let total_size = (aligned_start - current_pos) + core::mem::size_of::<T>() + data_size;
+        let end = aligned_start + core::mem::size_of::<T>() + data_size;
 
-        // Check if we have enough space for the additional bytes
+        let available = self.data.len().saturating_sub(current_pos);
+
+        // Check if we have enough space for the aligned data
         if total_size > available {
             return Err(U8PoolError::BufferOverflow {
                 requested: total_size,
@@ -142,7 +149,7 @@ impl<'a> U8Pool<'a> {
             });
         }
 
-        Ok((start, end))
+        Ok((aligned_start, end))
     }
 
     fn finalize_push(&mut self, start: usize, total_size: usize) -> Result<(), U8PoolError> {
@@ -164,14 +171,14 @@ impl<'a> U8Pool<'a> {
     /// - There is insufficient space in the buffer for the data
     ///
     pub fn push(&mut self, data: &[u8]) -> Result<(), U8PoolError> {
-        let (start, end) = self.reserve_buffer_space(data.len())?;
+        let (aligned_start, end) = self.reserve_aligned_buffer_space::<()>(data.len())?;
 
-        // Safe: reserve_buffer_space() guarantees start..end is within bounds
+        // Safe: reserve_aligned_buffer_space() guarantees the range is within bounds
         #[allow(clippy::indexing_slicing)]
-        let data_slice = &mut self.data[start..end];
+        let data_slice = &mut self.data[aligned_start..end];
         data_slice.copy_from_slice(data);
 
-        self.finalize_push(start, data.len())
+        self.finalize_push(aligned_start, end - aligned_start)
     }
 
     /// Removes and returns the last slice from the vector.
@@ -218,28 +225,26 @@ impl<'a> U8Pool<'a> {
     /// - There is insufficient space in the buffer for the associated value and data
     ///
     pub fn push_assoc<T: Sized>(&mut self, assoc: T, data: &[u8]) -> Result<(), U8PoolError> {
+        let (aligned_start, end) = self.reserve_aligned_buffer_space::<T>(data.len())?;
+
         let assoc_size = core::mem::size_of::<T>();
-        let total_size = assoc_size + data.len();
-        let (start, _end) = self.reserve_buffer_space(total_size)?;
+        let assoc_end = aligned_start + assoc_size;
 
-        let assoc_end = start + assoc_size;
-        let data_end = assoc_end + data.len();
-
-        // Safe: reserve_buffer_space() guarantees all ranges are within bounds
+        // Safe: reserve_aligned_buffer_space() guarantees all ranges are within bounds
         #[allow(clippy::indexing_slicing)]
-        let assoc_slice = &mut self.data[start..assoc_end];
+        let assoc_slice = &mut self.data[aligned_start..assoc_end];
         #[allow(unsafe_code)]
         unsafe {
             let assoc_ptr = assoc_slice.as_mut_ptr().cast::<T>();
             core::ptr::write(assoc_ptr, assoc);
         }
 
-        // Safe: reserve_buffer_space() guarantees all ranges are within bounds
+        // Safe: reserve_aligned_buffer_space() guarantees all ranges are within bounds
         #[allow(clippy::indexing_slicing)]
-        let data_slice = &mut self.data[assoc_end..data_end];
+        let data_slice = &mut self.data[assoc_end..end];
         data_slice.copy_from_slice(data);
 
-        self.finalize_push(start, total_size)
+        self.finalize_push(aligned_start, end - aligned_start)
     }
 
     /// Helper function to validate and compute buffer positions for associated data access.
@@ -273,16 +278,19 @@ impl<'a> U8Pool<'a> {
         if index >= self.count {
             return None;
         }
-        let (start, total_length) = self.descriptor.get(index)?;
+        let (aligned_start, total_length) = self.descriptor.get(index)?;
         let assoc_size = core::mem::size_of::<T>();
 
-        if total_length < assoc_size {
+        // The descriptor now stores the aligned start directly
+        let assoc_start = aligned_start;
+        let min_required_length = assoc_size;
+
+        if total_length < min_required_length {
             return None;
         }
-
-        let assoc_end = start + assoc_size;
-        let data_end = start + total_length;
-        Some((start, assoc_end, data_end))
+        let assoc_end = assoc_start + assoc_size;
+        let data_end = aligned_start + total_length;
+        Some((assoc_start, assoc_end, data_end))
     }
 
     /// Helper function to extract associated value reference from buffer positions.
