@@ -281,16 +281,15 @@ impl<'a> U8Pool<'a> {
         let (aligned_start, total_length) = self.descriptor.get(index)?;
         let assoc_size = core::mem::size_of::<T>();
 
-        // The descriptor now stores the aligned start directly
-        let assoc_start = aligned_start;
-        let min_required_length = assoc_size;
-
-        if total_length < min_required_length {
+        // Since we store aligned starts and validate during push, the stored data should always be valid
+        // The length check is kept as a safety measure for robustness
+        if total_length < assoc_size {
             return None;
         }
-        let assoc_end = assoc_start + assoc_size;
+
+        let assoc_end = aligned_start + assoc_size;
         let data_end = aligned_start + total_length;
-        Some((assoc_start, assoc_end, data_end))
+        Some((aligned_start, assoc_end, data_end))
     }
 
     /// Helper function to extract associated value reference from buffer positions.
