@@ -16,3 +16,4 @@ crate-type = ["lib"]
 
 [dependencies]
 rjiter = "1.1.4"
+u8pool = { version = "1.0.0", path = "../u8pool" }
