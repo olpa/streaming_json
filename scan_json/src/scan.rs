@@ -20,12 +20,13 @@ pub struct Options {
 
 impl Options {
     #[allow(clippy::must_use_candidate)]
+    /// Creates new default options
     pub fn new() -> Self {
         Self::default()
     }
 }
 
-/// Metadata associated with each context frame in the U8Pool stack
+/// Metadata associated with each context frame in the `U8Pool` stack
 #[derive(Debug, Clone, Copy)]
 struct StateFrame {
     is_in_object: bool,
@@ -36,6 +37,7 @@ struct StateFrame {
 /// Represents the current parsing context within the JSON structure
 #[derive(Debug)]
 pub struct ContextFrame {
+    /// The current key being processed in the JSON structure
     pub current_key: String,
     is_in_object: bool,
     is_in_array: bool,
@@ -53,7 +55,7 @@ pub fn mk_context_frame_for_test(current_key: String) -> ContextFrame {
     }
 }
 
-/// Helper function to convert U8Pool context to legacy ContextFrame format
+/// Helper function to convert `U8Pool` context to legacy `ContextFrame` format
 fn build_context_vec(pool: &U8Pool) -> Vec<ContextFrame> {
     let mut context = Vec::new();
     for i in 0..pool.len() {
@@ -70,7 +72,7 @@ fn build_context_vec(pool: &U8Pool) -> Vec<ContextFrame> {
     context
 }
 
-/// Helper function to convert ContextFrame to StateFrame and key
+/// Helper function to convert `ContextFrame` to `StateFrame` and key
 fn context_frame_to_parts(frame: &ContextFrame) -> (StateFrame, &str) {
     let state_frame = StateFrame {
         is_in_object: frame.is_in_object,
@@ -80,7 +82,7 @@ fn context_frame_to_parts(frame: &ContextFrame) -> (StateFrame, &str) {
     (state_frame, &frame.current_key)
 }
 
-/// Helper function to convert StateFrame and key back to ContextFrame
+/// Helper function to convert `StateFrame` and key back to `ContextFrame`
 fn parts_to_context_frame(state_frame: StateFrame, key: String) -> ContextFrame {
     ContextFrame {
         current_key: key,
@@ -308,7 +310,7 @@ fn skip_basic_values(peeked: Peek, rjiter: &mut RJiter) -> ScanResult<()> {
 }
 
 /// Pushes a new context frame onto the context stack
-fn push_context(context: &mut U8Pool, cur_level: ContextFrame, rjiter: &RJiter) -> ScanResult<()> {
+fn push_context(context: &mut U8Pool, cur_level: &ContextFrame, rjiter: &RJiter) -> ScanResult<()> {
     let metadata = StateFrame {
         is_in_object: cur_level.is_in_object,
         is_in_array: cur_level.is_in_array,
@@ -344,7 +346,7 @@ fn push_context(context: &mut U8Pool, cur_level: ContextFrame, rjiter: &RJiter) 
 /// * `triggers_end` - List of end action triggers to execute when a key is ended
 /// * `rjiter_cell` - Reference cell containing the JSON iterator
 /// * `baton_cell` - Reference cell containing the caller's state
-/// * `working_buffer` - Working buffer for context stack (U8Pool)
+/// * `working_buffer` - Working buffer for context stack (`U8Pool`)
 /// * `options` - Configuration options for the scan behavior
 ///
 /// # Errors
@@ -447,7 +449,7 @@ pub fn scan<T: ?Sized>(
             }
 
             peeked = Some(peekedr?);
-        };
+        }
 
         let peeked = peeked.ok_or(ScanError::InternalError(
             rjiter.current_index(),
@@ -455,7 +457,7 @@ pub fn scan<T: ?Sized>(
         ))?;
 
         if peeked == Peek::Array {
-            push_context(context, cur_level, &rjiter)?;
+            push_context(context, &cur_level, &rjiter)?;
             cur_level = ContextFrame {
                 current_key: "#array".to_string(),
                 is_in_array: true,
@@ -466,7 +468,7 @@ pub fn scan<T: ?Sized>(
         }
 
         if peeked == Peek::Object {
-            push_context(context, cur_level, &rjiter)?;
+            push_context(context, &cur_level, &rjiter)?;
             cur_level = ContextFrame {
                 current_key: "#object".to_string(),
                 is_in_array: false,
@@ -477,7 +479,7 @@ pub fn scan<T: ?Sized>(
         }
 
         // Handle basic (aka atomic) values
-        push_context(context, cur_level, &rjiter)?;
+        push_context(context, &cur_level, &rjiter)?;
         let context_vec = build_context_vec(context);
         let action = find_action(triggers, "#atom", &context_vec);
         cur_level = match context.pop_assoc::<StateFrame>() {

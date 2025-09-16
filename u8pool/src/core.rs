@@ -122,7 +122,7 @@ impl<'a> U8Pool<'a> {
     /// - `aligned_start` is properly aligned for type T
     /// - The range is available for writing (not overlapping with existing data)
     /// - `self.count < self.max_slices` (space for another slice descriptor)
-    /// - The aligned_start should be stored in the descriptor for later retrieval
+    /// - The `aligned_start` should be stored in the descriptor for later retrieval
     fn reserve_aligned_buffer_space<T: Sized>(
         &mut self,
         data_size: usize,
@@ -156,7 +156,7 @@ impl<'a> U8Pool<'a> {
     ///
     /// # Contract
     ///
-    /// For associated values (push_assoc), `start` must be the aligned start position
+    /// For associated values (`push_assoc`), `start` must be the aligned start position
     /// for the associated type. For regular slices (push), `start` is the actual
     /// start position (which equals aligned start since no alignment is required).
     fn finalize_push(&mut self, start: usize, total_size: usize) -> Result<(), U8PoolError> {

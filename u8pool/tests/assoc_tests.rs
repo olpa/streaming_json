@@ -6,7 +6,6 @@ struct Point {
     y: i32,
 }
 
-
 #[test]
 fn test_push_pop_assoc_basic() {
     let mut buffer = [0u8; 256];
@@ -268,21 +267,37 @@ fn test_alignment_padding() {
     #[repr(C)]
     #[derive(Debug, PartialEq, Clone, Copy)]
     struct ComplexStruct {
-        small: u8,    // 1 byte
-        big: u64,     // 8 bytes, needs 8-byte alignment
-        medium: u32,  // 4 bytes
+        small: u8,   // 1 byte
+        big: u64,    // 8 bytes, needs 8-byte alignment
+        medium: u32, // 4 bytes
     }
 
     // Add a single byte to create misalignment for subsequent types
     pool.push(b"x").unwrap();
 
     // Push all test structures
-    pool.push_assoc(SingleByte { value: 0x42 }, b"single").unwrap();
+    pool.push_assoc(SingleByte { value: 0x42 }, b"single")
+        .unwrap();
     pool.push_assoc(TwoBytes { value: 0x1234 }, b"two").unwrap();
-    pool.push_assoc(FourBytes { value: 0x12345678 }, b"four").unwrap();
-    pool.push_assoc(EightBytes { value: 0x123456789ABCDEF0 }, b"eight").unwrap();
+    pool.push_assoc(FourBytes { value: 0x12345678 }, b"four")
+        .unwrap();
+    pool.push_assoc(
+        EightBytes {
+            value: 0x123456789ABCDEF0,
+        },
+        b"eight",
+    )
+    .unwrap();
     pool.push_assoc(SingleByte { value: 0xFF }, b"y").unwrap(); // Add misalignment before ComplexStruct
-    pool.push_assoc(ComplexStruct { small: 0x12, big: 0xFEDCBA9876543210, medium: 0x87654321 }, b"complex").unwrap();
+    pool.push_assoc(
+        ComplexStruct {
+            small: 0x12,
+            big: 0xFEDCBA9876543210,
+            medium: 0x87654321,
+        },
+        b"complex",
+    )
+    .unwrap();
 
     // Pop all and verify correctness
     let (complex_val, complex_data) = pool.pop_assoc::<ComplexStruct>().unwrap();
@@ -337,26 +352,37 @@ fn test_alignment_padding() {
     // Data starts after the descriptor block (7 slices * 4 bytes = 28 bytes)
     let data_offset = 28;
 
-
     // Check if the stored start positions are actually aligned (they should be)
     // TwoBytes should be 2-byte aligned
     if desc2_start % 2 != 0 {
-        panic!("TwoBytes desc2_start {} is not 2-byte aligned!", desc2_start);
+        panic!(
+            "TwoBytes desc2_start {} is not 2-byte aligned!",
+            desc2_start
+        );
     }
 
     // FourBytes should be 4-byte aligned
     if desc3_start % 4 != 0 {
-        panic!("FourBytes desc3_start {} is not 4-byte aligned!", desc3_start);
+        panic!(
+            "FourBytes desc3_start {} is not 4-byte aligned!",
+            desc3_start
+        );
     }
 
     // EightBytes should be 8-byte aligned
     if desc4_start % 8 != 0 {
-        panic!("EightBytes desc4_start {} is not 8-byte aligned!", desc4_start);
+        panic!(
+            "EightBytes desc4_start {} is not 8-byte aligned!",
+            desc4_start
+        );
     }
 
     // ComplexStruct should be 8-byte aligned (due to u64 field)
     if desc6_start % 8 != 0 {
-        panic!("ComplexStruct desc6_start {} is not 8-byte aligned!", desc6_start);
+        panic!(
+            "ComplexStruct desc6_start {} is not 8-byte aligned!",
+            desc6_start
+        );
     }
 
     // Check padding bytes in the actual data buffer
@@ -364,20 +390,46 @@ fn test_alignment_padding() {
     // Based on our test setup, we know the expected padding amounts:
 
     // TwoBytes: expects 1 byte padding (after "x" + SingleByte we're at odd position, need even)
-    assert_eq!(buffer[data_offset + desc2_start - 1], 0xAA, "1 padding byte before TwoBytes should be untouched");
+    assert_eq!(
+        buffer[data_offset + desc2_start - 1],
+        0xAA,
+        "1 padding byte before TwoBytes should be untouched"
+    );
 
     // FourBytes: expects 3 bytes padding (to align to 4-byte boundary)
-    assert_eq!(buffer[data_offset + desc3_start - 3], 0xAA, "Padding byte 1 before FourBytes should be untouched");
-    assert_eq!(buffer[data_offset + desc3_start - 2], 0xAA, "Padding byte 2 before FourBytes should be untouched");
-    assert_eq!(buffer[data_offset + desc3_start - 1], 0xAA, "Padding byte 3 before FourBytes should be untouched");
+    assert_eq!(
+        buffer[data_offset + desc3_start - 3],
+        0xAA,
+        "Padding byte 1 before FourBytes should be untouched"
+    );
+    assert_eq!(
+        buffer[data_offset + desc3_start - 2],
+        0xAA,
+        "Padding byte 2 before FourBytes should be untouched"
+    );
+    assert_eq!(
+        buffer[data_offset + desc3_start - 1],
+        0xAA,
+        "Padding byte 3 before FourBytes should be untouched"
+    );
 
     // EightBytes: expects 7 bytes padding (to align to 8-byte boundary)
     for i in 1..=7 {
-        assert_eq!(buffer[data_offset + desc4_start - i], 0xAA, "Padding byte {} before EightBytes should be untouched", i);
+        assert_eq!(
+            buffer[data_offset + desc4_start - i],
+            0xAA,
+            "Padding byte {} before EightBytes should be untouched",
+            i
+        );
     }
 
     // ComplexStruct: expects 7 bytes padding (after SingleByte("y"), need 8-byte alignment)
     for i in 1..=7 {
-        assert_eq!(buffer[data_offset + desc6_start - i], 0xAA, "Padding byte {} before ComplexStruct should be untouched", i);
+        assert_eq!(
+            buffer[data_offset + desc6_start - i],
+            0xAA,
+            "Padding byte {} before ComplexStruct should be untouched",
+            i
+        );
     }
 }

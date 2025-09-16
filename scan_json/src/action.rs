@@ -21,6 +21,7 @@ impl<E: std::error::Error + 'static> From<E> for StreamOp {
     }
 }
 
+/// Type alias for a boxed matcher trait object
 pub type BoxedMatcher<'a> = Box<dyn Matcher + 'a>;
 
 /// Type alias for a boxed action function
@@ -46,12 +47,15 @@ pub type BoxedEndAction<'a, T> =
 /// Pair a matcher with an action.
 #[derive(Debug)]
 pub struct Trigger<'a, BoxedActionT> {
+    /// The matcher that determines when this trigger should activate
     pub matcher: BoxedMatcher<'a>,
+    /// The action to execute when the matcher succeeds
     pub action: BoxedActionT,
 }
 
 impl<'a, BoxedActionT> Trigger<'a, BoxedActionT> {
     #[must_use]
+    /// Creates a new trigger with the given matcher and action
     pub fn new(matcher: BoxedMatcher<'a>, action: BoxedActionT) -> Self {
         Self { matcher, action }
     }

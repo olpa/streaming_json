@@ -88,7 +88,7 @@ pub fn copy_atom(peeked: Peek, rjiter: &mut RJiter, writer: &mut dyn Write) -> S
     if let Ok(number) = maybe_number {
         writer.write_all(number)?;
         return Ok(());
-    };
+    }
     Err(ScanError::UnhandledPeek(peeked, rjiter.current_index()))
 }
 
@@ -170,7 +170,7 @@ struct IdtMatcher<'a> {
     idt: &'a RefCell<IdTransform<'a>>,
 }
 
-impl<'a> std::fmt::Debug for IdtMatcher<'a> {
+impl std::fmt::Debug for IdtMatcher<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("IdtMatcher")
             .field("name", &self.name)
@@ -184,7 +184,7 @@ impl<'a> IdtMatcher<'a> {
     }
 }
 
-impl<'a> Matcher for IdtMatcher<'a> {
+impl Matcher for IdtMatcher<'_> {
     fn matches(&self, name: &str, context: &[ContextFrame]) -> bool {
         if name != self.name {
             return false;
@@ -204,7 +204,7 @@ struct IdtMatcherForKey<'a> {
     idt: &'a RefCell<IdTransform<'a>>,
 }
 
-impl<'a> std::fmt::Debug for IdtMatcherForKey<'a> {
+impl std::fmt::Debug for IdtMatcherForKey<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("IdtMatcherForKey").finish()
     }
@@ -216,7 +216,7 @@ impl<'a> IdtMatcherForKey<'a> {
     }
 }
 
-impl<'a> Matcher for IdtMatcherForKey<'a> {
+impl Matcher for IdtMatcherForKey<'_> {
     fn matches(&self, name: &str, _context: &[ContextFrame]) -> bool {
         let mut idt = self.idt.borrow_mut();
         idt.seqpos = match &idt.seqpos {
