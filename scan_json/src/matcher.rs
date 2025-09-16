@@ -12,7 +12,7 @@ pub trait Matcher: std::fmt::Debug {
     ///
     /// * `name` - The name of the current node being matched
     /// * `context` - The stack of parent contexts. The oldest frame (the root) is the first element,
-    ///               the latest frame (the parent) is the last element.
+    ///   the latest frame (the parent) is the last element.
     ///
     /// Special names:
     /// - `#top` - The top level context
@@ -35,6 +35,7 @@ pub struct Name {
 
 impl Name {
     #[must_use]
+    /// Creates a new name matcher
     pub fn new(name: String) -> Self {
         Self { name }
     }
@@ -55,6 +56,7 @@ pub struct ParentAndName {
 
 impl ParentAndName {
     #[must_use]
+    /// Creates a new parent-and-name matcher
     pub fn new(parent: String, name: String) -> Self {
         Self { parent, name }
     }
@@ -62,9 +64,9 @@ impl ParentAndName {
 
 impl Matcher for ParentAndName {
     fn matches(&self, name: &str, context: &[ContextFrame]) -> bool {
-        context.last().map_or(false, |parent| {
-            self.name == name && parent.current_key == self.parent
-        })
+        context
+            .last()
+            .is_some_and(|parent| self.name == name && parent.current_key == self.parent)
     }
 }
 /// A matcher that checks for grandparent, parent and name matches.
@@ -77,6 +79,7 @@ pub struct ParentParentAndName {
 
 impl ParentParentAndName {
     #[must_use]
+    /// Creates a new grandparent-parent-and-name matcher
     pub fn new(grandparent: String, parent: String, name: String) -> Self {
         Self {
             grandparent,

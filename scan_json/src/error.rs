@@ -11,12 +11,19 @@
 /// - `IOError`: IO error when writing to the output stream. Reading errors are inside `RJiterError`
 #[derive(Debug)]
 pub enum Error {
+    /// Error from the underlying `RJiter` JSON parser
     RJiterError(rjiter::Error),
+    /// Unhandled peek token encountered at position
     UnhandledPeek(rjiter::jiter::Peek, usize),
+    /// JSON structure is unbalanced at position
     UnbalancedJson(usize),
+    /// Internal error with position and description
     InternalError(usize, String),
+    /// Maximum nesting depth exceeded (current, max)
     MaxNestingExceeded(usize, usize),
+    /// Error from user action at position
     ActionError(Box<dyn std::error::Error>, usize),
+    /// IO error during processing
     IOError(std::io::Error),
 }
 
@@ -51,4 +58,5 @@ impl From<std::io::Error> for Error {
     }
 }
 
+/// Type alias for Results with `scan_json` Error
 pub type Result<T> = std::result::Result<T, Error>;
