@@ -9,7 +9,6 @@ use std::cell::RefCell;
 use std::io;
 use u8pool::U8Pool;
 
-
 /// Options for configuring the scan behavior
 #[derive(Debug, Clone, Default)]
 pub struct Options {
@@ -142,7 +141,9 @@ fn handle_object<T: ?Sized>(
         //
         if !cur_level.is_elem_begin {
             let context_vec = build_context_vec(context);
-            if let Some(end_action) = find_action(triggers_end, &cur_level.current_key, &context_vec) {
+            if let Some(end_action) =
+                find_action(triggers_end, &cur_level.current_key, &context_vec)
+            {
                 if let Err(e) = end_action(baton_cell) {
                     return Err(ScanError::ActionError(
                         e,
@@ -176,10 +177,7 @@ fn handle_object<T: ?Sized>(
             let context_vec = build_context_vec(context);
             if let Some(end_action) = find_action(triggers_end, "#object", &context_vec) {
                 if let Err(e) = end_action(baton_cell) {
-                    return Err(ScanError::ActionError(
-                        e,
-                        rjiter.current_index(),
-                    ));
+                    return Err(ScanError::ActionError(e, rjiter.current_index()));
                 }
             }
             //
@@ -213,7 +211,7 @@ fn handle_object<T: ?Sized>(
                     is_elem_begin: cur_level.is_elem_begin,
                 };
                 Ok((action_result, result_frame, cur_level.current_key))
-            },
+            }
         };
     }
     let result_frame = StateFrame {
@@ -310,11 +308,7 @@ fn skip_basic_values(peeked: Peek, rjiter: &mut RJiter) -> ScanResult<()> {
 }
 
 /// Pushes a new context frame onto the context stack
-fn push_context(
-    context: &mut U8Pool,
-    cur_level: ContextFrame,
-    rjiter: &RJiter,
-) -> ScanResult<()> {
+fn push_context(context: &mut U8Pool, cur_level: ContextFrame, rjiter: &RJiter) -> ScanResult<()> {
     let metadata = StateFrame {
         is_in_object: cur_level.is_in_object,
         is_in_array: cur_level.is_in_array,
@@ -322,10 +316,7 @@ fn push_context(
     };
     context
         .push_assoc(metadata, cur_level.current_key.as_bytes())
-        .map_err(|_e| ScanError::MaxNestingExceeded(
-            rjiter.current_index(),
-            context.len(),
-        ))?;
+        .map_err(|_e| ScanError::MaxNestingExceeded(rjiter.current_index(), context.len()))?;
     Ok(())
 }
 

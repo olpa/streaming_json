@@ -7,7 +7,6 @@ use ::scan_json::{scan, Options};
 use rjiter::{jiter::Peek, RJiter};
 use u8pool::U8Pool;
 
-
 #[test]
 fn test_scan_json_empty_input() {
     let mut reader = std::io::empty();

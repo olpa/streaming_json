@@ -4,7 +4,6 @@ use std::cell::RefCell;
 use std::io::Write;
 use u8pool::U8Pool;
 
-
 #[test]
 fn idt_atomic_on_top() {
     let input = r#"
