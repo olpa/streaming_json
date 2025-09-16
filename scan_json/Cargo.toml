@@ -1,6 +1,6 @@
 [package]
 name = "scan_json"
-version = "1.1.0"
+version = "1.2.0"
 edition = "2021"
 authors = ["Oleg Parashchenko <olpa@uucode.com>"]
 description = "React to elements in a JSON stream"
@@ -16,3 +16,4 @@ crate-type = ["lib"]
 
 [dependencies]
 rjiter = "1.1.4"
+u8pool = { version = "1.0.0", path = "../u8pool" }

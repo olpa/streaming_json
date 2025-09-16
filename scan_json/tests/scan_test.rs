@@ -5,12 +5,15 @@ use ::scan_json::action::{BoxedAction, BoxedEndAction, StreamOp, Trigger};
 use ::scan_json::matcher::{Name, ParentAndName, ParentParentAndName};
 use ::scan_json::{scan, Options};
 use rjiter::{jiter::Peek, RJiter};
+use u8pool::U8Pool;
 
 #[test]
 fn test_scan_json_empty_input() {
     let mut reader = std::io::empty();
     let mut buffer = vec![0u8; 16];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
     let triggers: Vec<Trigger<BoxedAction<()>>> = vec![];
     scan(
@@ -18,6 +21,7 @@ fn test_scan_json_empty_input() {
         &vec![],
         &RefCell::new(rjiter),
         &RefCell::new(()),
+        &mut scan_stack,
         &Options::new(),
     )
     .unwrap();
@@ -29,6 +33,8 @@ fn test_scan_json_top_level_types() {
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
     let triggers: Vec<Trigger<BoxedAction<()>>> = vec![];
     scan(
@@ -36,6 +42,7 @@ fn test_scan_json_top_level_types() {
         &vec![],
         &RefCell::new(rjiter),
         &RefCell::new(()),
+        &mut scan_stack,
         &Options::new(),
     )
     .unwrap();
@@ -47,6 +54,8 @@ fn test_scan_json_simple_object() {
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
     let triggers: Vec<Trigger<BoxedAction<()>>> = vec![];
     scan(
@@ -54,6 +63,7 @@ fn test_scan_json_simple_object() {
         &vec![],
         &RefCell::new(rjiter),
         &RefCell::new(()),
+        &mut scan_stack,
         &Options::new(),
     )
     .unwrap();
@@ -65,6 +75,8 @@ fn test_scan_json_simple_array() {
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
     let triggers: Vec<Trigger<BoxedAction<()>>> = vec![];
     scan(
@@ -72,6 +84,7 @@ fn test_scan_json_simple_array() {
         &vec![],
         &RefCell::new(rjiter),
         &RefCell::new(()),
+        &mut scan_stack,
         &Options::new(),
     )
     .unwrap();
@@ -104,6 +117,8 @@ fn test_scan_json_nested_complex() {
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 64];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
     let triggers: Vec<Trigger<BoxedAction<()>>> = vec![];
     scan(
@@ -111,6 +126,7 @@ fn test_scan_json_nested_complex() {
         &vec![],
         &RefCell::new(rjiter),
         &RefCell::new(()),
+        &mut scan_stack,
         &Options::new(),
     )
     .unwrap();
@@ -122,12 +138,15 @@ fn skip_long_string() {
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 8];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
     scan(
         &vec![],
         &vec![],
         &RefCell::new(rjiter),
         &RefCell::new(()),
+        &mut scan_stack,
         &Options::new(),
     )
     .unwrap();
@@ -139,6 +158,8 @@ fn test_skip_sse_tokens() {
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
     let options = Options {
         sse_tokens: vec!["data:".to_string(), "DONE".to_string()],
@@ -149,6 +170,7 @@ fn test_skip_sse_tokens() {
         &vec![],
         &RefCell::new(rjiter),
         &RefCell::new(()),
+        &mut scan_stack,
         &options,
     )
     .unwrap();
@@ -160,6 +182,8 @@ fn test_call_begin_dont_touch_value() {
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
     let state = RefCell::new(false);
     let matcher = Box::new(Name::new("foo".to_string()));
@@ -174,6 +198,7 @@ fn test_call_begin_dont_touch_value() {
         &vec![],
         &RefCell::new(rjiter),
         &state,
+        &mut scan_stack,
         &Options::new(),
     )
     .unwrap();
@@ -186,6 +211,8 @@ fn test_call_begin_consume_value() {
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
     let state = RefCell::new(false);
     let matcher = Box::new(Name::new("foo".to_string()));
@@ -205,6 +232,7 @@ fn test_call_begin_consume_value() {
         &vec![],
         &RefCell::new(rjiter),
         &state,
+        &mut scan_stack,
         &Options::new(),
     )
     .unwrap();
@@ -224,6 +252,8 @@ fn test_call_end() {
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 32];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
     let state = RefCell::new(0);
     let matcher = Box::new(Name::new("foo".to_string()));
@@ -238,6 +268,7 @@ fn test_call_end() {
         &triggers_end,
         &RefCell::new(rjiter),
         &state,
+        &mut scan_stack,
         &Options::new(),
     )
     .unwrap();
@@ -254,6 +285,8 @@ fn notify_for_top_level_object() {
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let state = RefCell::new((false, false)); // (begin_called, end_called)
 
     let begin_action: BoxedAction<(bool, bool)> = Box::new(|_rjiter, state| {
@@ -285,6 +318,7 @@ fn notify_for_top_level_object() {
         &triggers_end,
         &RefCell::new(rjiter),
         &state,
+        &mut scan_stack,
         &Options::new(),
     )
     .unwrap();
@@ -300,6 +334,8 @@ fn notify_for_object_in_array() {
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let state = RefCell::new((0, 0)); // (begin_called, end_called)
 
     let begin_action: BoxedAction<(i32, i32)> = Box::new(|_rjiter, state| {
@@ -333,6 +369,7 @@ fn notify_for_object_in_array() {
         &triggers_end,
         &RefCell::new(rjiter),
         &state,
+        &mut scan_stack,
         &Options::new(),
     )
     .unwrap();
@@ -354,6 +391,8 @@ fn notify_for_array() {
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let state = RefCell::new((false, false)); // (begin_called, end_called)
 
     let begin_action: BoxedAction<(bool, bool)> = Box::new(|_rjiter, state| {
@@ -385,6 +424,7 @@ fn notify_for_array() {
         &triggers_end,
         &RefCell::new(rjiter),
         &state,
+        &mut scan_stack,
         &Options::new(),
     )
     .unwrap();
@@ -400,6 +440,8 @@ fn client_can_consume_array() {
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let writer_cell = RefCell::new(Vec::new());
 
     let begin_matcher = Box::new(ParentAndName::new(
@@ -439,6 +481,7 @@ fn client_can_consume_array() {
         &triggers_end,
         &RefCell::new(rjiter),
         &writer_cell,
+        &mut scan_stack,
         &Options::new(),
     )
     .unwrap();
@@ -455,6 +498,8 @@ fn several_arrays_top_level() {
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let writer_cell = RefCell::new(Vec::new());
 
     let begin_matcher = Box::new(ParentAndName::new("#top".to_string(), "#array".to_string()));
@@ -483,6 +528,7 @@ fn several_arrays_top_level() {
         &triggers_end,
         &RefCell::new(rjiter),
         &writer_cell,
+        &mut scan_stack,
         &Options::new(),
     )
     .unwrap();
@@ -495,10 +541,12 @@ fn several_arrays_top_level() {
 
 #[test]
 fn max_nesting_array() {
-    let json = "[".repeat(25);
+    let json = "[".repeat(10); // Smaller depth for the test
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut scan_buffer = [0u8; 64];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 3).unwrap();
 
     let triggers: Vec<Trigger<BoxedAction<()>>> = vec![];
     let result = scan(
@@ -506,21 +554,24 @@ fn max_nesting_array() {
         &vec![],
         &RefCell::new(rjiter),
         &RefCell::new(()),
+        &mut scan_stack,
         &Options::new(),
     );
     let e = result.unwrap_err();
     assert_eq!(
         format!("{e}"),
-        "Max nesting exceeded at position 20 with level 20"
+        "Max nesting exceeded at position 3 with level 3"
     );
 }
 
 #[test]
 fn max_nesting_object() {
-    let json = "{\"a\":".repeat(25);
+    let json = "{\"a\":".repeat(10);
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut scan_buffer = [0u8; 64];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 3).unwrap();
 
     let triggers: Vec<Trigger<BoxedAction<()>>> = vec![];
     let result = scan(
@@ -528,12 +579,13 @@ fn max_nesting_object() {
         &vec![],
         &RefCell::new(rjiter),
         &RefCell::new(()),
+        &mut scan_stack,
         &Options::new(),
     );
     let e = result.unwrap_err();
     assert_eq!(
         format!("{e}"),
-        "Max nesting exceeded at position 100 with level 20"
+        "Max nesting exceeded at position 15 with level 3"
     );
 }
 
@@ -543,6 +595,8 @@ fn error_in_begin_action() {
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut scan_buffer = [0u8; 64];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 3).unwrap();
 
     let matcher = Box::new(Name::new("foo".to_string()));
     let action: BoxedAction<()> = Box::new(|_: &RefCell<RJiter>, _: &RefCell<()>| {
@@ -555,6 +609,7 @@ fn error_in_begin_action() {
         &vec![],
         &RefCell::new(rjiter),
         &RefCell::new(()),
+        &mut scan_stack,
         &Options::new(),
     );
 
@@ -571,6 +626,8 @@ fn error_in_end_action() {
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
     let matcher = Box::new(Name::new("foo".to_string()));
     let end_action: BoxedEndAction<()> =
@@ -585,6 +642,7 @@ fn error_in_end_action() {
         &triggers_end,
         &RefCell::new(rjiter),
         &RefCell::new(()),
+        &mut scan_stack,
         &Options::new(),
     );
 
@@ -601,6 +659,8 @@ fn several_objects_top_level() {
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let writer_cell = RefCell::new(Vec::new());
 
     let begin_matcher = Box::new(Name::new("foo".to_string()));
@@ -629,6 +689,7 @@ fn several_objects_top_level() {
         &triggers_end,
         &RefCell::new(rjiter),
         &writer_cell,
+        &mut scan_stack,
         &Options::new(),
     )
     .unwrap();
@@ -642,6 +703,8 @@ fn match_in_array_context() {
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let writer_cell = RefCell::new(Vec::new());
 
     let matcher = Box::new(ParentParentAndName::new(
@@ -669,6 +732,7 @@ fn match_in_array_context() {
         &vec![],
         &RefCell::new(rjiter),
         &writer_cell,
+        &mut scan_stack,
         &Options::new(),
     )
     .unwrap();
@@ -682,6 +746,8 @@ fn atoms_on_top_level() {
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let writer_cell = RefCell::new(Vec::new());
 
     let begin_matcher = Box::new(ParentAndName::new("#top".to_string(), "#atom".to_string()));
@@ -705,6 +771,7 @@ fn atoms_on_top_level() {
         &vec![],
         &RefCell::new(rjiter),
         &writer_cell,
+        &mut scan_stack,
         &Options::new(),
     );
     assert!(result.is_ok());
@@ -722,6 +789,8 @@ fn atoms_in_array() {
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let writer_cell = RefCell::new(Vec::new());
 
     let begin_matcher = Box::new(ParentAndName::new(
@@ -748,6 +817,7 @@ fn atoms_in_array() {
         &vec![],
         &RefCell::new(rjiter),
         &writer_cell,
+        &mut scan_stack,
         &Options::new(),
     );
     assert!(result.is_ok());
@@ -765,6 +835,8 @@ fn atoms_in_object() {
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let writer_cell = RefCell::new(Vec::new());
 
     fn handle_atom(rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>) -> StreamOp {
@@ -789,6 +861,7 @@ fn atoms_in_object() {
         &vec![],
         &RefCell::new(rjiter),
         &writer_cell,
+        &mut scan_stack,
         &Options::new(),
     );
     assert!(result.is_ok());
@@ -807,6 +880,8 @@ fn atoms_stream_op_return_values() {
     let mut buffer = vec![0u8; 16];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
     let rjiter_cell = RefCell::new(rjiter);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let writer_cell = RefCell::new(Vec::new());
 
     let begin_matcher = Box::new(Name::new("#atom".to_string()));
@@ -844,6 +919,7 @@ fn atoms_stream_op_return_values() {
         &vec![],
         &rjiter_cell,
         &writer_cell,
+        &mut scan_stack,
         &Options::new(),
     );
 
@@ -861,6 +937,8 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 32];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let writer_cell = RefCell::new(Vec::new());
 
     let begin_message: Trigger<BoxedAction<dyn Write>> = Trigger::new(
@@ -902,6 +980,7 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
         &vec![end_message],
         &RefCell::new(rjiter),
         &writer_cell,
+        &mut scan_stack,
         &Options {
             sse_tokens: vec!["data:".to_string(), "DONE".to_string()],
             stop_early: false,
@@ -997,6 +1076,8 @@ fn stop_early() {
     // Part 1: Process all items when stop_early is false
     let rjiter = RJiter::new(&mut reader, &mut buffer);
     let rjiter_cell = RefCell::new(rjiter);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
     let triggers: Vec<Trigger<BoxedAction<()>>> = vec![];
     scan(
@@ -1004,6 +1085,7 @@ fn stop_early() {
         &vec![],
         &rjiter_cell,
         &RefCell::new(()),
+        &mut scan_stack,
         &Options {
             sse_tokens: vec![],
             stop_early: false, // `false`
@@ -1018,6 +1100,8 @@ fn stop_early() {
     let mut reader = input.as_bytes();
     let rjiter = RJiter::new(&mut reader, &mut buffer);
     let rjiter_cell = RefCell::new(rjiter);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
     let triggers: Vec<Trigger<BoxedAction<()>>> = vec![];
     for _ in 0..4 {
@@ -1026,6 +1110,7 @@ fn stop_early() {
             &vec![],
             &rjiter_cell,
             &RefCell::new(()),
+            &mut scan_stack,
             &Options {
                 sse_tokens: vec![],
                 stop_early: true, // `true`

@@ -2,6 +2,7 @@ use rjiter::RJiter;
 use scan_json::idtransform::idtransform;
 use std::cell::RefCell;
 use std::io::Write;
+use u8pool::U8Pool;
 
 #[test]
 fn idt_atomic_on_top() {
@@ -16,13 +17,15 @@ fn idt_atomic_on_top() {
     let mut buffer = vec![0u8; 16];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
     let rjiter_cell = RefCell::new(rjiter);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let mut writer = Vec::new();
 
     //
     // Apply and assert
     //
     for _ in 0..input.split_whitespace().count() {
-        idtransform(&rjiter_cell, &mut writer).unwrap();
+        idtransform(&rjiter_cell, &mut writer, &mut scan_stack).unwrap();
         writer.write_all(b" ").unwrap();
     }
     let output = String::from_utf8(writer).unwrap();
@@ -50,12 +53,14 @@ fn idt_atomic_in_object() {
     let mut buffer = vec![0u8; 16];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
     let rjiter_cell = RefCell::new(rjiter);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let mut writer = Vec::new();
 
     //
     // Apply and assert
     //
-    idtransform(&rjiter_cell, &mut writer).unwrap();
+    idtransform(&rjiter_cell, &mut writer, &mut scan_stack).unwrap();
     let output = String::from_utf8(writer).unwrap();
     let expected = input.split_whitespace().collect::<Vec<&str>>().join("");
     assert_eq!(
@@ -81,12 +86,14 @@ fn idt_atomic_in_array() {
     let mut buffer = vec![0u8; 16];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
     let rjiter_cell = RefCell::new(rjiter);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let mut writer = Vec::new();
 
     //
     // Apply and assert
     //
-    idtransform(&rjiter_cell, &mut writer).unwrap();
+    idtransform(&rjiter_cell, &mut writer, &mut scan_stack).unwrap();
     let output = String::from_utf8(writer).unwrap();
     let expected = input.split_whitespace().collect::<Vec<&str>>().join("");
     assert_eq!(
@@ -104,12 +111,14 @@ fn idt_object_in_object() {
     let mut buffer = vec![0u8; 16];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
     let rjiter_cell = RefCell::new(rjiter);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let mut writer = Vec::new();
 
     //
     // Apply and assert
     //
-    idtransform(&rjiter_cell, &mut writer).unwrap();
+    idtransform(&rjiter_cell, &mut writer, &mut scan_stack).unwrap();
     let output = String::from_utf8(writer).unwrap();
     let expected = input.split_whitespace().collect::<Vec<&str>>().join("");
     assert_eq!(
@@ -133,12 +142,14 @@ fn idt_array_in_array() {
     let mut buffer = vec![0u8; 16];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
     let rjiter_cell = RefCell::new(rjiter);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let mut writer = Vec::new();
 
     //
     // Apply and assert
     //
-    idtransform(&rjiter_cell, &mut writer).unwrap();
+    idtransform(&rjiter_cell, &mut writer, &mut scan_stack).unwrap();
     let output = String::from_utf8(writer).unwrap();
     let expected = input.split_whitespace().collect::<Vec<&str>>().join("");
     assert_eq!(
@@ -198,12 +209,14 @@ fn idt_deeply_nested() {
     let mut buffer = vec![0u8; 32];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
     let rjiter_cell = RefCell::new(rjiter);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let mut writer = Vec::new();
 
     //
     // Apply and assert
     //
-    idtransform(&rjiter_cell, &mut writer).unwrap();
+    idtransform(&rjiter_cell, &mut writer, &mut scan_stack).unwrap();
     let output = String::from_utf8(writer).unwrap();
     let expected = input
         .split_whitespace()
@@ -232,9 +245,11 @@ fn idt_long_strings() {
     let mut buffer = vec![0u8; 16];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
     let rjiter_cell = RefCell::new(rjiter);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let mut writer = Vec::new();
 
-    idtransform(&rjiter_cell, &mut writer).unwrap();
+    idtransform(&rjiter_cell, &mut writer, &mut scan_stack).unwrap();
 
     let output = String::from_utf8(writer).unwrap();
     let expected = input.split_whitespace().collect::<Vec<&str>>().join("");
@@ -261,9 +276,11 @@ fn idt_special_symbols() {
     let mut buffer = vec![0u8; 32];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
     let rjiter_cell = RefCell::new(rjiter);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let mut writer = Vec::new();
 
-    idtransform(&rjiter_cell, &mut writer).unwrap();
+    idtransform(&rjiter_cell, &mut writer, &mut scan_stack).unwrap();
 
     let output = String::from_utf8(writer).unwrap();
     let expected = input.split_whitespace().collect::<Vec<&str>>().join("");
@@ -282,7 +299,7 @@ fn idt_stop_after_object() {
             "key2": "value2"
         }
         {
-            "next_obj_key": "next_obj_value" 
+            "next_obj_key": "next_obj_value"
         }
     "#;
 
@@ -290,12 +307,14 @@ fn idt_stop_after_object() {
     let mut buffer = vec![0u8; 32];
     let rjiter = RJiter::new(&mut reader, &mut buffer);
     let rjiter_cell = RefCell::new(rjiter);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let mut writer = Vec::new();
 
     //
     // Act: Transform first object
     //
-    idtransform(&rjiter_cell, &mut writer).unwrap();
+    idtransform(&rjiter_cell, &mut writer, &mut scan_stack).unwrap();
 
     //
     // Assert: First object should be transformed correctly

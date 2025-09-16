@@ -83,6 +83,7 @@ use std::io::Write;
 use scan_json::scan;
 use scan_json::{Name, ParentAndName, BoxedAction, BoxedEndAction, StreamOp, Trigger, rjiter::RJiter};
 use scan_json::Options;
+use u8pool::U8Pool;
 
 
 fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
@@ -125,11 +126,17 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
         }),
     );
 
+    // Create working buffer for context stack (512 bytes, up to 20 nesting levels)
+    // Based on estimation: 16 bytes per JSON key, plus 8 bytes per frame for state tracking
+    let mut working_buffer = [0u8; 512];
+    let mut context = U8Pool::new(&mut working_buffer, 20).unwrap();
+
     scan(
         &vec![begin_message, content],
         &vec![end_message],
         &rjiter_cell,
         &writer_cell,
+        &mut context,
         &Options {
             sse_tokens: vec!["data:".to_string(), "DONE".to_string()],
             stop_early: false,

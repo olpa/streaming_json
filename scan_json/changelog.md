@@ -1,5 +1,6 @@
-## [1.1.x] - 2025-08-xx
+## [1.2.0] - 2025-09-xx
 
+- Rework for `no_std` support. Incompatible change of the API.
 - Fix a borrow in a error handler
 
 

@@ -34,6 +34,7 @@ use crate::{
 use crate::{BoxedAction, BoxedEndAction, Trigger};
 use std::cell::RefCell;
 use std::io::Write;
+use u8pool::U8Pool;
 
 fn write_escaped_json_string(
     writer: &mut dyn Write,
@@ -304,12 +305,22 @@ fn on_object_end(idt_cell: &RefCell<IdTransform>) -> Result<(), Box<dyn std::err
 /// The implementation of `idtransform` is an example of how to use the `scan` function.
 /// Consult the source code for more details.
 ///
+/// # Arguments
+///
+/// * `rjiter_cell` - Reference cell containing the JSON iterator
+/// * `writer` - Output writer for the transformed JSON
+/// * `working_buffer` - Working buffer for context stack (see [`crate::scan`] for details)
+///
 /// # Errors
 ///
-/// If `scan` fails (mailformed json, nesting too deep, etc), return `scan`'s error.
+/// If `scan` fails (malformed json, nesting too deep, etc), return `scan`'s error.
 /// Also, if an IO error occurs while writing to the output, return it.
 ///
-pub fn idtransform(rjiter_cell: &RefCell<RJiter>, writer: &mut dyn Write) -> ScanResult<()> {
+pub fn idtransform(
+    rjiter_cell: &RefCell<RJiter>,
+    writer: &mut dyn Write,
+    working_buffer: &mut U8Pool,
+) -> ScanResult<()> {
     let idt = IdTransform::new(writer);
     let idt_cell = RefCell::new(idt);
 
@@ -345,6 +356,7 @@ pub fn idtransform(rjiter_cell: &RefCell<RJiter>, writer: &mut dyn Write) -> Sca
         &[trigger_object_end, trigger_array_end],
         rjiter_cell,
         &idt_cell,
+        working_buffer,
         &Options {
             sse_tokens: vec![],
             stop_early: true,
