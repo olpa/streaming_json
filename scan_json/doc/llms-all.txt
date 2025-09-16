@@ -157,9 +157,15 @@ pub fn scan<T: ?Sized>(
     triggers_end: &[Trigger<BoxedEndAction<T>>],
     rjiter_cell: &RefCell<RJiter>,
     baton_cell: &RefCell<T>,
+    working_buffer: &mut U8Pool,
     options: &Options,
 ) -> Result<()>
 ```
+
+**Working Buffer Defaults:**
+- **Recommended size**: 512 bytes
+- **Recommended max items**: 20 nesting levels
+- **Usage**: `U8Pool::new(&mut buffer, 20)`
 
 Main function to scan JSON streams with triggers. Processes JSON incrementally, executing actions when matchers succeed.
 
@@ -204,7 +210,8 @@ Copy a JSON atom (string, number, boolean, or null) from input to output, advanc
 ```rust
 pub fn idtransform(
     rjiter_cell: &RefCell<RJiter>,
-    writer: &mut dyn Write
+    writer: &mut dyn Write,
+    working_buffer: &mut U8Pool,
 ) -> Result<()>
 ```
 
@@ -213,6 +220,7 @@ Copy JSON input to output, retaining original structure and collapsing whitespac
 **Parameters:**
 - `rjiter_cell` - JSON iterator in RefCell
 - `writer` - Output writer
+- `working_buffer` - Working buffer for context stack (see `scan` function for sizing details)
 
 **Returns:** `Result<()>` - Success or error
 

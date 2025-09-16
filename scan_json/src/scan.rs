@@ -9,8 +9,6 @@ use std::cell::RefCell;
 use std::io;
 use u8pool::U8Pool;
 
-/// Maximum allowed nesting level for JSON structures
-const MAX_NESTING: usize = 20;
 
 /// Options for configuring the scan behavior
 #[derive(Debug, Clone, Default)]
@@ -317,12 +315,6 @@ fn push_context(
     cur_level: ContextFrame,
     rjiter: &RJiter,
 ) -> ScanResult<()> {
-    if context.len() >= MAX_NESTING {
-        return Err(ScanError::MaxNestingExceeded(
-            rjiter.current_index(),
-            context.len(),
-        ));
-    }
     let metadata = StateFrame {
         is_in_object: cur_level.is_in_object,
         is_in_array: cur_level.is_in_array,
@@ -330,18 +322,30 @@ fn push_context(
     };
     context
         .push_assoc(metadata, cur_level.current_key.as_bytes())
-        .map_err(|e| ScanError::InternalError(
+        .map_err(|_e| ScanError::MaxNestingExceeded(
             rjiter.current_index(),
-            format!("Failed to push context: {:?}", e),
+            context.len(),
         ))?;
     Ok(())
 }
 
 /// Scan a JSON stream, executing actions based on matched triggers and
-/// handling nested structures up to a maximum depth.
+/// handling nested structures. The caller provides a working buffer for
+/// tracking the parsing context stack.
 /// It also ignores SSE tokens at the top level.
 ///
 /// See the documentation in `README.md` for an example of how to use this function.
+///
+/// # Working Buffer Size
+///
+/// The working buffer should be sized based on the expected nesting depth and
+/// average key length of your JSON. A reasonable estimate:
+/// - Average JSON key: 16 bytes
+/// - Context metadata: 8 bytes per frame
+/// - For 20 nesting levels: ~512 bytes working buffer
+///
+/// Use `U8Pool::with_default_max_slices(buffer)` for up to 32 nesting levels,
+/// or `U8Pool::new(buffer, max_slices)` for custom limits.
 ///
 /// # Arguments
 ///
@@ -349,23 +353,23 @@ fn push_context(
 /// * `triggers_end` - List of end action triggers to execute when a key is ended
 /// * `rjiter_cell` - Reference cell containing the JSON iterator
 /// * `baton_cell` - Reference cell containing the caller's state
+/// * `working_buffer` - Working buffer for context stack (U8Pool)
 /// * `options` - Configuration options for the scan behavior
 ///
 /// # Errors
 ///
 /// * `ScanError` - A wrapper over `Rjiter` errors, over an error from a trigger actions, or over wrong JSON structure
+/// * `MaxNestingExceeded` - When the JSON nesting depth exceeds the working buffer capacity
 #[allow(clippy::too_many_lines)]
 pub fn scan<T: ?Sized>(
     triggers: &[Trigger<BoxedAction<T>>],
     triggers_end: &[Trigger<BoxedEndAction<T>>],
     rjiter_cell: &RefCell<RJiter>,
     baton_cell: &RefCell<T>,
+    working_buffer: &mut U8Pool,
     options: &Options,
 ) -> ScanResult<()> {
-    // Create a buffer for the U8Pool - 2KB should be sufficient for most nesting levels
-    let mut buffer = [0u8; 2048];
-    let mut context = U8Pool::with_default_max_slices(&mut buffer)
-        .map_err(|e| ScanError::InternalError(0, format!("Failed to create U8Pool: {:?}", e)))?;
+    let context = working_buffer; // Alias for better readability in function body
     let mut cur_level = ContextFrame {
         current_key: "#top".to_string(),
         is_elem_begin: false,
@@ -392,7 +396,7 @@ pub fn scan<T: ?Sized>(
                 triggers_end,
                 state_frame,
                 key,
-                &mut context,
+                context,
             )?;
             cur_level = parts_to_context_frame(new_state_frame, new_key);
 
@@ -417,7 +421,7 @@ pub fn scan<T: ?Sized>(
                 triggers_end,
                 state_frame,
                 key,
-                &mut context,
+                context,
             )?;
             cur_level = parts_to_context_frame(new_state_frame, new_key);
 
@@ -460,7 +464,7 @@ pub fn scan<T: ?Sized>(
         ))?;
 
         if peeked == Peek::Array {
-            push_context(&mut context, cur_level, &rjiter)?;
+            push_context(context, cur_level, &rjiter)?;
             cur_level = ContextFrame {
                 current_key: "#array".to_string(),
                 is_in_array: true,
@@ -471,7 +475,7 @@ pub fn scan<T: ?Sized>(
         }
 
         if peeked == Peek::Object {
-            push_context(&mut context, cur_level, &rjiter)?;
+            push_context(context, cur_level, &rjiter)?;
             cur_level = ContextFrame {
                 current_key: "#object".to_string(),
                 is_in_array: false,
@@ -482,8 +486,8 @@ pub fn scan<T: ?Sized>(
         }
 
         // Handle basic (aka atomic) values
-        push_context(&mut context, cur_level, &rjiter)?;
-        let context_vec = build_context_vec(&context);
+        push_context(context, cur_level, &rjiter)?;
+        let context_vec = build_context_vec(context);
         let action = find_action(triggers, "#atom", &context_vec);
         cur_level = match context.pop_assoc::<StateFrame>() {
             Some((frame, key_slice)) => {
