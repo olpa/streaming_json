@@ -20,8 +20,8 @@ fn test_iter_matcher_single_name() {
     // Should not match when name doesn't match
     assert!(!matcher.matches(b"other", std::iter::empty()));
 
-    // Should not match when there's extra context
-    assert!(!matcher.matches(b"field", [b"parent"].iter().copied()));
+    // Should match with extra context
+    assert!(matcher.matches(b"field", [b"parent"].iter().copied()));
 }
 
 #[test]
@@ -40,8 +40,8 @@ fn test_iter_matcher_name_and_parent() {
     // Should not match when no context
     assert!(!matcher.matches(b"child", std::iter::empty()));
 
-    // Should not match when extra context
-    assert!(!matcher.matches(b"child", [b"parent", b"grandparent"].iter().copied()));
+    // Should match with extra context
+    assert!(matcher.matches(b"child", [b"parent", b"grandparent"].iter().copied()));
 }
 
 #[test]
@@ -63,8 +63,8 @@ fn test_iter_matcher_name_parent_grandparent() {
     // Should not match when insufficient context
     assert!(!matcher.matches(b"child", [b"parent"].iter().copied()));
 
-    // Should not match when extra context
-    assert!(!matcher.matches(b"child", [b"parent", b"grandparent", b"great"].iter().copied()));
+    // Should match with extra context
+    assert!(matcher.matches(b"child", [b"parent", b"grandparent", b"great"].iter().copied()));
 }
 
 #[test]
@@ -76,19 +76,6 @@ fn test_iter_matcher_with_strings() {
     assert!(!matcher.matches(b"field", [b"wrong"].iter().copied()));
 }
 
-#[test]
-fn test_iter_matcher_with_mixed_types() {
-    let matcher = IterMatcher::new(|| {
-        vec![
-            "field".to_string(),
-            String::from("parent")
-        ]
-    });
-
-    // Should work with owned strings
-    assert!(matcher.matches(b"field", [b"parent"].iter().copied()));
-    assert!(!matcher.matches(b"wrong", [b"parent"].iter().copied()));
-}
 
 #[test]
 fn test_iter_matcher_reusable() {

@@ -87,8 +87,8 @@ where
             }
         }
 
-        // Ensure no extra context elements
-        context.next().is_none()
+        // Extra context elements are allowed - no need to check for them
+        true
     }
 }
 
