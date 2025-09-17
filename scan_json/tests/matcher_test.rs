@@ -1,129 +1,130 @@
-use scan_json::matcher::{Matcher, Name, ParentAndName};
-use scan_json::scan::mk_context_frame_for_test;
+use scan_json::matcher::{IterMatcher, Matcher, DebugPrinter};
 
 #[test]
-fn test_match_by_name() {
-    let matcher = Name::new("foo".to_string());
-    let context = [];
+fn test_iter_matcher_empty_iterator() {
+    let matcher = IterMatcher::new(|| std::iter::empty::<&[u8]>());
 
-    assert!(matcher.matches("foo", &context), "Should match exact name");
-    assert!(
-        !matcher.matches("bar", &context),
-        "Should not match different name"
-    );
+    // Empty iterator always returns true
+    assert!(matcher.matches(b"any", std::iter::empty()));
+    assert!(matcher.matches(b"name", [b"parent"].iter().copied()));
+    assert!(matcher.matches(b"field", [b"parent", b"grandparent"].iter().copied()));
 }
 
 #[test]
-fn test_match_by_parent_and_name() {
-    let matcher = ParentAndName::new("parent".to_string(), "child".to_string());
+fn test_iter_matcher_single_name() {
+    let matcher = IterMatcher::new(|| [b"field"]);
 
-    let empty_context = [];
-    assert!(
-        !matcher.matches("child", &empty_context),
-        "Should not match without context"
-    );
+    // Should match when name matches and no context
+    assert!(matcher.matches(b"field", std::iter::empty()));
 
-    let wrong_parent_context = [mk_context_frame_for_test("wrong".to_string())];
-    assert!(
-        !matcher.matches("child", &wrong_parent_context),
-        "Should not match with wrong parent"
-    );
+    // Should not match when name doesn't match
+    assert!(!matcher.matches(b"other", std::iter::empty()));
 
-    let wrong_name_context = [mk_context_frame_for_test("parent".to_string())];
-    assert!(
-        !matcher.matches("wrong", &wrong_name_context),
-        "Should not match with wrong name"
-    );
-
-    let matching_context = [mk_context_frame_for_test("parent".to_string())];
-    assert!(
-        matcher.matches("child", &matching_context),
-        "Should match with correct parent and name"
-    );
+    // Should not match when there's extra context
+    assert!(!matcher.matches(b"field", [b"parent"].iter().copied()));
 }
 
 #[test]
-fn test_match_by_parent_and_name_long_context() {
-    use scan_json::matcher::ParentAndName;
+fn test_iter_matcher_name_and_parent() {
+    let matcher = IterMatcher::new(|| [b"child", b"parent"]);
 
-    let matcher = ParentAndName::new("parent".to_string(), "child".to_string());
+    // Should match when name and parent match
+    assert!(matcher.matches(b"child", [b"parent"].iter().copied()));
 
-    let long_context = [
-        mk_context_frame_for_test("grandparent".to_string()),
-        mk_context_frame_for_test("parent".to_string()),
-        mk_context_frame_for_test("child".to_string()),
-    ];
+    // Should not match when name is wrong
+    assert!(!matcher.matches(b"wrong", [b"parent"].iter().copied()));
 
-    assert!(
-        !matcher.matches("child", &long_context),
-        "Should not match when parent is deeper in context"
-    );
+    // Should not match when parent is wrong
+    assert!(!matcher.matches(b"child", [b"wrong"].iter().copied()));
 
-    let long_context_with_parent_first = [
-        mk_context_frame_for_test("other".to_string()),
-        mk_context_frame_for_test("another".to_string()),
-        mk_context_frame_for_test("parent".to_string()),
-    ];
+    // Should not match when no context
+    assert!(!matcher.matches(b"child", std::iter::empty()));
 
-    assert!(
-        matcher.matches("child", &long_context_with_parent_first),
-        "Should match when parent is direct parent"
-    );
+    // Should not match when extra context
+    assert!(!matcher.matches(b"child", [b"parent", b"grandparent"].iter().copied()));
 }
+
 #[test]
-fn match_by_parent_parent_and_name() {
-    use scan_json::matcher::ParentParentAndName;
+fn test_iter_matcher_name_parent_grandparent() {
+    let matcher = IterMatcher::new(|| [b"child", b"parent", b"grandparent"]);
 
-    let matcher = ParentParentAndName::new(
-        "grandparent".to_string(),
-        "parent".to_string(),
-        "child".to_string(),
-    );
+    // Should match when all levels match
+    assert!(matcher.matches(b"child", [b"parent", b"grandparent"].iter().copied()));
 
-    assert!(
-        !matcher.matches("child", &[]),
-        "Should not match without context"
-    );
+    // Should not match when name is wrong
+    assert!(!matcher.matches(b"wrong", [b"parent", b"grandparent"].iter().copied()));
 
-    let single_context = [mk_context_frame_for_test("parent".to_string())];
-    assert!(
-        !matcher.matches("child", &single_context),
-        "Should not match with only parent context"
-    );
+    // Should not match when parent is wrong
+    assert!(!matcher.matches(b"child", [b"wrong", b"grandparent"].iter().copied()));
 
-    let wrong_grandparent_context = [
-        mk_context_frame_for_test("wrong".to_string()),
-        mk_context_frame_for_test("parent".to_string()),
-    ];
-    assert!(
-        !matcher.matches("child", &wrong_grandparent_context),
-        "Should not match with wrong grandparent"
-    );
+    // Should not match when grandparent is wrong
+    assert!(!matcher.matches(b"child", [b"parent", b"wrong"].iter().copied()));
 
-    let wrong_parent_context = [
-        mk_context_frame_for_test("grandparent".to_string()),
-        mk_context_frame_for_test("wrong".to_string()),
-    ];
-    assert!(
-        !matcher.matches("child", &wrong_parent_context),
-        "Should not match with wrong parent"
-    );
+    // Should not match when insufficient context
+    assert!(!matcher.matches(b"child", [b"parent"].iter().copied()));
 
-    let wrong_name_context = [
-        mk_context_frame_for_test("grandparent".to_string()),
-        mk_context_frame_for_test("parent".to_string()),
-    ];
-    assert!(
-        !matcher.matches("wrong", &wrong_name_context),
-        "Should not match with wrong name"
-    );
+    // Should not match when extra context
+    assert!(!matcher.matches(b"child", [b"parent", b"grandparent", b"great"].iter().copied()));
+}
 
-    let matching_context = [
-        mk_context_frame_for_test("grandparent".to_string()),
-        mk_context_frame_for_test("parent".to_string()),
-    ];
-    assert!(
-        matcher.matches("child", &matching_context),
-        "Should match with correct grandparent, parent and name"
-    );
+#[test]
+fn test_iter_matcher_with_strings() {
+    let matcher = IterMatcher::new(|| ["field", "parent"]);
+
+    // Should work with string literals (converted to bytes)
+    assert!(matcher.matches(b"field", [b"parent"].iter().copied()));
+    assert!(!matcher.matches(b"field", [b"wrong"].iter().copied()));
+}
+
+#[test]
+fn test_iter_matcher_with_mixed_types() {
+    let matcher = IterMatcher::new(|| {
+        vec![
+            "field".to_string(),
+            String::from("parent")
+        ]
+    });
+
+    // Should work with owned strings
+    assert!(matcher.matches(b"field", [b"parent"].iter().copied()));
+    assert!(!matcher.matches(b"wrong", [b"parent"].iter().copied()));
+}
+
+#[test]
+fn test_iter_matcher_reusable() {
+    let matcher = IterMatcher::new(|| [b"field", b"parent"]);
+
+    // Should be able to call matches multiple times
+    assert!(matcher.matches(b"field", [b"parent"].iter().copied()));
+    assert!(matcher.matches(b"field", [b"parent"].iter().copied()));
+    assert!(!matcher.matches(b"wrong", [b"parent"].iter().copied()));
+    assert!(!matcher.matches(b"wrong", [b"parent"].iter().copied()));
+}
+
+#[test]
+fn test_iter_matcher_deep_nesting() {
+    let matcher = IterMatcher::new(|| [
+        b"field",
+        b"level1",
+        b"level2",
+        b"level3",
+        b"level4"
+    ]);
+
+    let context = [b"level1", b"level2", b"level3", b"level4"];
+    assert!(matcher.matches(b"field", context.iter().copied()));
+
+    // Wrong at any level should fail
+    let wrong_context = [b"level1", b"wrong", b"level3", b"level4"];
+    assert!(!matcher.matches(b"field", wrong_context.iter().copied()));
+}
+
+#[test]
+fn test_debug_printer_always_false() {
+    let matcher = DebugPrinter;
+
+    // DebugPrinter should always return false
+    assert!(!matcher.matches(b"any", std::iter::empty()));
+    assert!(!matcher.matches(b"name", [b"parent"].iter().copied()));
+    assert!(!matcher.matches(b"field", [b"parent", b"grandparent"].iter().copied()));
 }
