@@ -433,3 +433,258 @@ fn test_alignment_padding() {
         );
     }
 }
+
+#[test]
+fn test_push_assoc_returns_references_to_stored_values() {
+    let mut buffer = [0u8; 600];
+    let mut pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+    // Test that push_assoc returns references to the stored values
+    let original_point = Point { x: 42, y: 100 };
+    let original_data = b"hello world";
+    let (stored_point_ref, stored_data_ref) = pool.push_assoc(original_point, original_data).unwrap();
+
+    // The content behind the references should match the original values
+    assert_eq!(*stored_point_ref, original_point);
+    assert_eq!(stored_data_ref, original_data);
+    assert_eq!(stored_data_ref.len(), original_data.len());
+
+    // Verify push_assoc() and get_assoc() return references pointing to the same memory locations
+    // (Different reference objects, but pointing to the same underlying stored data)
+    let stored_point_ptr = stored_point_ref as *const Point;
+    let stored_data_ptr = stored_data_ref.as_ptr();
+    let stored_data_len = stored_data_ref.len();
+    let _ = (stored_point_ref, stored_data_ref);
+
+    let (get_point_ref, get_data_ref) = pool.get_assoc::<Point>(0).unwrap();
+    let get_point_ptr = get_point_ref as *const Point;
+    let get_data_ptr = get_data_ref.as_ptr();
+    let get_data_len = get_data_ref.len();
+
+    assert_eq!(stored_point_ptr, get_point_ptr, "push_assoc() and get_assoc() should return Point references pointing to same memory");
+    assert_eq!(stored_data_ptr, get_data_ptr, "push_assoc() and get_assoc() should return data references pointing to same memory");
+    assert_eq!(stored_data_len, get_data_len, "push_assoc() and get_assoc() should return references with same data length");
+}
+
+#[test]
+fn test_push_assoc_returns_independent_references() {
+    let mut buffer = [0u8; 600];
+    let mut pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+    // Test that each push_assoc() returns references pointing to the correct memory locations
+    // Each push_assoc() reference should point to the same memory as the corresponding get_assoc() reference
+    let (first_point, first_data) = pool.push_assoc(Point { x: 10, y: 20 }, b"first").unwrap();
+    assert_eq!(*first_point, Point { x: 10, y: 20 });  // Content should match
+    assert_eq!(first_data, b"first");  // Content should match
+    let first_point_ptr = first_point as *const Point;
+    let first_data_ptr = first_data.as_ptr();
+
+    let (get_p1, get_d1) = pool.get_assoc::<Point>(0).unwrap();
+    assert_eq!(first_point_ptr, get_p1 as *const Point, "First push_assoc and get_assoc(0) should point to same Point memory");
+    assert_eq!(first_data_ptr, get_d1.as_ptr(), "First push_assoc and get_assoc(0) should point to same data memory");
+
+    let (second_point, second_data) = pool.push_assoc(Point { x: 30, y: 40 }, b"second").unwrap();
+    assert_eq!(*second_point, Point { x: 30, y: 40 });  // Content should match
+    assert_eq!(second_data, b"second");  // Content should match
+    let second_point_ptr = second_point as *const Point;
+    let second_data_ptr = second_data.as_ptr();
+
+    let (get_p2, get_d2) = pool.get_assoc::<Point>(1).unwrap();
+    assert_eq!(second_point_ptr, get_p2 as *const Point, "Second push_assoc and get_assoc(1) should point to same Point memory");
+    assert_eq!(second_data_ptr, get_d2.as_ptr(), "Second push_assoc and get_assoc(1) should point to same data memory");
+
+    let (third_point, third_data) = pool.push_assoc(Point { x: 50, y: 60 }, b"third").unwrap();
+    assert_eq!(*third_point, Point { x: 50, y: 60 });  // Content should match
+    assert_eq!(third_data, b"third");  // Content should match
+    let third_point_ptr = third_point as *const Point;
+    let third_data_ptr = third_data.as_ptr();
+
+    let (get_p3, get_d3) = pool.get_assoc::<Point>(2).unwrap();
+    assert_eq!(third_point_ptr, get_p3 as *const Point, "Third push_assoc and get_assoc(2) should point to same Point memory");
+    assert_eq!(third_data_ptr, get_d3.as_ptr(), "Third push_assoc and get_assoc(2) should point to same data memory");
+
+    // Verify each push_assoc uses different memory locations (independence)
+    assert_ne!(first_point_ptr, second_point_ptr);
+    assert_ne!(second_point_ptr, third_point_ptr);
+    assert_ne!(first_point_ptr, third_point_ptr);
+    assert_ne!(first_data_ptr, second_data_ptr);
+    assert_ne!(second_data_ptr, third_data_ptr);
+    assert_ne!(first_data_ptr, third_data_ptr);
+}
+
+#[test]
+fn test_push_assoc_return_value_with_empty_data() {
+    let mut buffer = [0u8; 600];
+    let mut pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+    // Test pushing with empty data slice
+    let point = Point { x: 123, y: 456 };
+    let (stored_point, stored_data) = pool.push_assoc(point, b"").unwrap();
+
+    assert_eq!(*stored_point, point);  // Content should match
+    assert_eq!(stored_data, b"");  // Content should match
+    assert_eq!(stored_data.len(), 0);
+
+    // Verify push_assoc() and get_assoc() point to the same memory locations even for empty data
+    let stored_point_ptr = stored_point as *const Point;
+    let stored_data_ptr = stored_data.as_ptr();
+    let stored_data_len = stored_data.len();
+    let _ = (stored_point, stored_data);
+
+    let (get_point, get_data) = pool.get_assoc::<Point>(0).unwrap();
+    let get_point_ptr = get_point as *const Point;
+    let get_data_ptr = get_data.as_ptr();
+    let get_data_len = get_data.len();
+
+    assert_eq!(stored_point_ptr, get_point_ptr, "push_assoc() and get_assoc() should point to same Point memory for empty data");
+    assert_eq!(stored_data_ptr, get_data_ptr, "push_assoc() and get_assoc() should point to same data memory for empty data");
+    assert_eq!(stored_data_len, get_data_len);
+}
+
+#[test]
+fn test_push_assoc_pointer_equality_across_different_associated_types() {
+    let mut buffer = [0u8; 600];
+    let mut pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+    // Test with different associated value types
+    #[derive(Debug, PartialEq, Clone, Copy)]
+    struct SimpleInt { value: i32 }
+
+    #[derive(Debug, PartialEq, Clone, Copy)]
+    struct BigStruct { a: u64, b: u64, c: u32 }
+
+    let simple = SimpleInt { value: 42 };
+    let big = BigStruct { a: 0x1111111111111111, b: 0x2222222222222222, c: 0x33333333 };
+
+    let (simple_ref, simple_data) = pool.push_assoc(simple, b"simple data").unwrap();
+    assert_eq!(*simple_ref, simple);  // Content should match
+    assert_eq!(simple_data, b"simple data");  // Content should match
+    let simple_ptr = simple_ref as *const SimpleInt;
+    let simple_data_ptr = simple_data.as_ptr();
+
+    let (big_ref, big_data) = pool.push_assoc(big, b"big data").unwrap();
+    assert_eq!(*big_ref, big);  // Content should match
+    assert_eq!(big_data, b"big data");  // Content should match
+    let big_ptr = big_ref as *const BigStruct;
+    let big_data_ptr = big_data.as_ptr();
+
+    // Verify pointer equality with get_assoc results for different types
+    let (get_simple, get_simple_data) = pool.get_assoc::<SimpleInt>(0).unwrap();
+    let (get_big, get_big_data) = pool.get_assoc::<BigStruct>(1).unwrap();
+
+    assert_eq!(simple_ptr, get_simple as *const SimpleInt, "SimpleInt: push_assoc and get_assoc should point to same memory");
+    assert_eq!(simple_data_ptr, get_simple_data.as_ptr(), "SimpleInt data: push_assoc and get_assoc should point to same memory");
+    assert_eq!(big_ptr, get_big as *const BigStruct, "BigStruct: push_assoc and get_assoc should point to same memory");
+    assert_eq!(big_data_ptr, get_big_data.as_ptr(), "BigStruct data: push_assoc and get_assoc should point to same memory");
+
+    assert_eq!(*get_simple, simple);
+    assert_eq!(get_simple_data, b"simple data");
+    assert_eq!(*get_big, big);
+    assert_eq!(get_big_data, b"big data");
+}
+
+#[test]
+fn test_push_assoc_pointer_equality_across_different_data_sizes() {
+    let mut buffer = [0u8; 600];
+    let mut pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+    // Test with various data sizes
+    let point1 = Point { x: 10, y: 20 };
+    let point2 = Point { x: 30, y: 40 };
+    let point3 = Point { x: 50, y: 60 };
+
+    let small_data = b"x";
+    let medium_data = b"hello world test data";
+    let large_data = vec![b'A'; 100];
+
+    let (small_point, small_data_ref) = pool.push_assoc(point1, small_data).unwrap();
+    assert_eq!(*small_point, point1);  // Content should match
+    assert_eq!(small_data_ref, small_data);  // Content should match
+    let small_point_ptr = small_point as *const Point;
+    let small_data_ptr = small_data_ref.as_ptr();
+
+    let (medium_point, medium_data_ref) = pool.push_assoc(point2, medium_data).unwrap();
+    assert_eq!(*medium_point, point2);  // Content should match
+    assert_eq!(medium_data_ref, medium_data);  // Content should match
+    let medium_point_ptr = medium_point as *const Point;
+    let medium_data_ptr = medium_data_ref.as_ptr();
+
+    let (large_point, large_data_ref) = pool.push_assoc(point3, &large_data).unwrap();
+    assert_eq!(*large_point, point3);  // Content should match
+    assert_eq!(large_data_ref, &large_data[..]);  // Content should match
+    let large_point_ptr = large_point as *const Point;
+    let large_data_ptr = large_data_ref.as_ptr();
+
+    // Verify pointer equality with get_assoc() for various data sizes
+    let (get_p1, get_d1) = pool.get_assoc::<Point>(0).unwrap();
+    let (get_p2, get_d2) = pool.get_assoc::<Point>(1).unwrap();
+    let (get_p3, get_d3) = pool.get_assoc::<Point>(2).unwrap();
+
+    assert_eq!(small_point_ptr, get_p1 as *const Point, "Small Point: push_assoc and get_assoc(0) should point to same memory");
+    assert_eq!(small_data_ptr, get_d1.as_ptr(), "Small data: push_assoc and get_assoc(0) should point to same memory");
+    assert_eq!(medium_point_ptr, get_p2 as *const Point, "Medium Point: push_assoc and get_assoc(1) should point to same memory");
+    assert_eq!(medium_data_ptr, get_d2.as_ptr(), "Medium data: push_assoc and get_assoc(1) should point to same memory");
+    assert_eq!(large_point_ptr, get_p3 as *const Point, "Large Point: push_assoc and get_assoc(2) should point to same memory");
+    assert_eq!(large_data_ptr, get_d3.as_ptr(), "Large data: push_assoc and get_assoc(2) should point to same memory");
+
+    // Verify all entries use different memory locations (independence)
+    assert_ne!(small_point_ptr, medium_point_ptr);
+    assert_ne!(medium_point_ptr, large_point_ptr);
+    assert_ne!(small_point_ptr, large_point_ptr);
+    assert_ne!(small_data_ptr, medium_data_ptr);
+    assert_ne!(medium_data_ptr, large_data_ptr);
+    assert_ne!(small_data_ptr, large_data_ptr);
+}
+
+#[test]
+fn test_push_assoc_return_value_with_alignment_requirements() {
+    let mut buffer = [0u8; 600];
+    let mut pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+    // Create misalignment by pushing an odd-sized regular slice first
+    pool.push(b"odd").unwrap(); // 3 bytes
+
+    // Define types with different alignment requirements
+    #[derive(Debug, PartialEq, Clone, Copy)]
+    struct Aligned8 { value: u64 }
+
+    #[derive(Debug, PartialEq, Clone, Copy)]
+    struct Aligned4 { value: u32 }
+
+    let aligned8_val = Aligned8 { value: 0x123456789ABCDEF0 };
+    let aligned4_val = Aligned4 { value: 0x12345678 };
+
+    // Push aligned types and verify return values
+    let (stored_8, data_8) = pool.push_assoc(aligned8_val, b"eight").unwrap();
+    assert_eq!(*stored_8, aligned8_val);  // Content should match
+    assert_eq!(data_8, b"eight");  // Content should match
+
+    // Verify alignment by checking pointer addresses
+    let ptr_8 = stored_8 as *const Aligned8 as usize;
+    assert_eq!(ptr_8 % 8, 0, "Aligned8 should be 8-byte aligned");
+    let stored_8_ptr = stored_8 as *const Aligned8;
+    let stored_8_data_ptr = data_8.as_ptr();
+
+    let (stored_4, data_4) = pool.push_assoc(aligned4_val, b"four").unwrap();
+    assert_eq!(*stored_4, aligned4_val);  // Content should match
+    assert_eq!(data_4, b"four");  // Content should match
+
+    let ptr_4 = stored_4 as *const Aligned4 as usize;
+    assert_eq!(ptr_4 % 4, 0, "Aligned4 should be 4-byte aligned");
+    let stored_4_ptr = stored_4 as *const Aligned4;
+    let stored_4_data_ptr = data_4.as_ptr();
+
+    // Verify pointer equality with get_assoc() even with alignment requirements
+    let (get_8, get_data_8) = pool.get_assoc::<Aligned8>(1).unwrap();
+    let (get_4, get_data_4) = pool.get_assoc::<Aligned4>(2).unwrap();
+
+    assert_eq!(stored_8_ptr, get_8 as *const Aligned8, "Aligned8: push_assoc and get_assoc(1) should point to same memory");
+    assert_eq!(stored_8_data_ptr, get_data_8.as_ptr(), "Aligned8 data: push_assoc and get_assoc(1) should point to same memory");
+    assert_eq!(stored_4_ptr, get_4 as *const Aligned4, "Aligned4: push_assoc and get_assoc(2) should point to same memory");
+    assert_eq!(stored_4_data_ptr, get_data_4.as_ptr(), "Aligned4 data: push_assoc and get_assoc(2) should point to same memory");
+
+    assert_eq!(*get_8, aligned8_val);
+    assert_eq!(get_data_8, b"eight");
+    assert_eq!(*get_4, aligned4_val);
+    assert_eq!(get_data_4, b"four");
+}

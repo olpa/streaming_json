@@ -181,3 +181,88 @@ fn test_stack_utility_methods() {
     assert!(u8pool.is_empty());
     assert_eq!(u8pool.len(), 0);
 }
+
+#[test]
+fn test_push_returns_reference_to_stored_value() {
+    let mut buffer = [0u8; 600];
+    let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+    // Test that push returns a reference to the stored data
+    let original_data = b"hello world";
+    let stored_ref = u8pool.push(original_data).unwrap();
+
+    // The content behind the reference should match the original data
+    assert_eq!(stored_ref, original_data);
+    assert_eq!(stored_ref.len(), original_data.len());
+
+    // Verify push() and get() return references that point to the same memory location
+    // (Different reference objects, but pointing to the same underlying data)
+    let stored_ptr = stored_ref.as_ptr();
+    let stored_len = stored_ref.len();
+    // End the mutable borrow by letting the reference go out of scope
+    let _ = stored_ref;
+
+    // Now we can get an immutable reference - this should point to the same memory
+    let get_ref = u8pool.get(0).unwrap();
+    let get_ptr = get_ref.as_ptr();
+    let get_len = get_ref.len();
+
+    assert_eq!(stored_ptr, get_ptr, "push() and get() should return references pointing to the same memory location");
+    assert_eq!(stored_len, get_len, "push() and get() should return references with the same length");
+}
+
+#[test]
+fn test_push_returns_independent_references() {
+    let mut buffer = [0u8; 600];
+    let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+    // Test that each push() returns a reference pointing to the correct memory location
+    // Each push() reference should point to the same memory as the corresponding get() reference
+    let first_ref = u8pool.push(b"first").unwrap();
+    assert_eq!(first_ref, b"first");  // Content should match
+    let first_ptr = first_ref.as_ptr();
+    assert_eq!(first_ptr, u8pool.get(0).unwrap().as_ptr(), "First push and get(0) should point to same memory");
+
+    let second_ref = u8pool.push(b"second").unwrap();
+    assert_eq!(second_ref, b"second");  // Content should match
+    let second_ptr = second_ref.as_ptr();
+    assert_eq!(second_ptr, u8pool.get(1).unwrap().as_ptr(), "Second push and get(1) should point to same memory");
+
+    let third_ref = u8pool.push(b"third").unwrap();
+    assert_eq!(third_ref, b"third");  // Content should match
+    let third_ptr = third_ref.as_ptr();
+    assert_eq!(third_ptr, u8pool.get(2).unwrap().as_ptr(), "Third push and get(2) should point to same memory");
+
+    // Verify each push uses different memory locations (independence)
+    assert_ne!(first_ptr, second_ptr);
+    assert_ne!(second_ptr, third_ptr);
+    assert_ne!(first_ptr, third_ptr);
+
+    // Verify all stored content is accessible and correct
+    assert_eq!(u8pool.get(0).unwrap(), b"first");
+    assert_eq!(u8pool.get(1).unwrap(), b"second");
+    assert_eq!(u8pool.get(2).unwrap(), b"third");
+}
+
+#[test]
+fn test_push_return_value_with_empty_data() {
+    let mut buffer = [0u8; 600];
+    let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+    // Test pushing empty slice
+    let empty_ref = u8pool.push(b"").unwrap();
+    assert_eq!(empty_ref, b"");  // Content should match
+    assert_eq!(empty_ref.len(), 0);
+
+    // Verify push() and get() point to the same memory location even for empty data
+    let empty_ptr = empty_ref.as_ptr();
+    let empty_len = empty_ref.len();
+    let _ = empty_ref;
+
+    let get_empty_ref = u8pool.get(0).unwrap();
+    let get_empty_ptr = get_empty_ref.as_ptr();
+    let get_empty_len = get_empty_ref.len();
+
+    assert_eq!(empty_ptr, get_empty_ptr, "push() and get() should point to same memory location for empty data");
+    assert_eq!(empty_len, get_empty_len);
+}
