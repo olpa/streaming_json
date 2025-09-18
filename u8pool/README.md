@@ -76,11 +76,15 @@ struct Point {
 let mut buffer = [0u8; 256];
 let mut pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
-// Store a Point with associated data
+// Store a Point with associated data (returns references to stored values)
 let point = Point { x: 42, y: 100 };
-pool.push_assoc(point, b"center point").unwrap();
+let (stored_point, stored_data) = pool.push_assoc(point, b"center point").unwrap();
 
-// Retrieve both the Point and its data
+// The returned references point to the same memory as get_assoc would return
+assert_eq!(*stored_point, Point { x: 42, y: 100 });
+assert_eq!(stored_data, b"center point");
+
+// Retrieve both the Point and its data using get_assoc
 let (retrieved_point, data) = pool.get_assoc::<Point>(0).unwrap();
 assert_eq!(*retrieved_point, Point { x: 42, y: 100 });
 assert_eq!(data, b"center point");
@@ -97,7 +101,7 @@ Associated values must implement the `Sized` trait and are stored using their me
 
 **Stack Operations:**
 
-- `push(&mut self, data: &[u8])` - Adds a slice to the pool
+- `push(&mut self, data: &[u8]) -> Result<&[u8], U8PoolError>` - Adds a slice to the pool and returns a reference to the stored slice
 - `pop(&mut self) -> Option<&[u8]>` - Removes and returns the last slice
 - `get(&self, index: usize) -> Option<&[u8]>` - Accesses a slice by index
 - `top(&self) -> Option<&[u8]>` - Returns the last slice without removing it. Can be implemented as `self.iter_rev().next()`
@@ -105,7 +109,7 @@ Associated values must implement the `Sized` trait and are stored using their me
 
 **Associative Operations:**
 
-- `push_assoc<T: Sized>(&mut self, assoc: T, data: &[u8])` - Adds an associated value followed by a data slice. Automatically handles memory alignment with padding as needed.
+- `push_assoc<T: Sized>(&mut self, assoc: T, data: &[u8]) -> Result<(&T, &[u8]), U8PoolError>` - Adds an associated value followed by a data slice and returns references to the stored values. Automatically handles memory alignment with padding as needed.
 - `pop_assoc<T: Sized>(&mut self) -> Option<(&T, &[u8])>` - Removes and returns the last associated value and data slice
 - `get_assoc<T: Sized>(&self, index: usize) -> Option<(&T, &[u8])>` - Accesses an associated value and data slice by index
 
