@@ -169,7 +169,7 @@ impl<'a> U8Pool<'a> {
     // Basic push/pop/get methods
     //
 
-    /// Pushes a slice onto the stack.
+    /// Pushes a slice onto the stack and returns a reference to the stored slice.
     ///
     /// # Errors
     ///
@@ -177,7 +177,7 @@ impl<'a> U8Pool<'a> {
     /// - The maximum number of slices has been reached
     /// - There is insufficient space in the buffer for the data
     ///
-    pub fn push(&mut self, data: &[u8]) -> Result<(), U8PoolError> {
+    pub fn push(&mut self, data: &[u8]) -> Result<&[u8], U8PoolError> {
         let (aligned_start, end) = self.reserve_aligned_buffer_space::<()>(data.len())?;
 
         // Safe: reserve_aligned_buffer_space() guarantees the range is within bounds
@@ -185,7 +185,11 @@ impl<'a> U8Pool<'a> {
         let data_slice = &mut self.data[aligned_start..end];
         data_slice.copy_from_slice(data);
 
-        self.finalize_push(aligned_start, end - aligned_start)
+        self.finalize_push(aligned_start, end - aligned_start)?;
+
+        // Safe: The range is guaranteed to be within bounds and finalized
+        #[allow(clippy::indexing_slicing)]
+        Ok(&self.data[aligned_start..end])
     }
 
     /// Removes and returns the last slice from the vector.
@@ -223,7 +227,7 @@ impl<'a> U8Pool<'a> {
     // Associated push/pop/get methods
     //
 
-    /// Pushes an associated value followed by a data slice onto the stack.
+    /// Pushes an associated value followed by a data slice onto the stack and returns references to the stored values.
     ///
     /// The associated value is stored with proper memory alignment for type `T`.
     /// Padding bytes may be inserted before the value to ensure correct alignment,
@@ -247,7 +251,7 @@ impl<'a> U8Pool<'a> {
     /// - The maximum number of slices has been reached
     /// - There is insufficient space in the buffer for the aligned associated value and data
     ///
-    pub fn push_assoc<T: Sized>(&mut self, assoc: T, data: &[u8]) -> Result<(), U8PoolError> {
+    pub fn push_assoc<T: Sized>(&mut self, assoc: T, data: &[u8]) -> Result<(&T, &[u8]), U8PoolError> {
         let (aligned_start, end) = self.reserve_aligned_buffer_space::<T>(data.len())?;
 
         let assoc_size = core::mem::size_of::<T>();
@@ -267,7 +271,20 @@ impl<'a> U8Pool<'a> {
         let data_slice = &mut self.data[assoc_end..end];
         data_slice.copy_from_slice(data);
 
-        self.finalize_push(aligned_start, end - aligned_start)
+        self.finalize_push(aligned_start, end - aligned_start)?;
+
+        // Safe: All ranges are guaranteed to be within bounds and finalized
+        #[allow(clippy::indexing_slicing)]
+        let stored_assoc_slice = &self.data[aligned_start..assoc_end];
+        #[allow(clippy::indexing_slicing)]
+        let stored_data_slice = &self.data[assoc_end..end];
+
+        #[allow(unsafe_code)]
+        unsafe {
+            let assoc_ptr = stored_assoc_slice.as_ptr().cast::<T>();
+            let assoc_ref = &*assoc_ptr;
+            Ok((assoc_ref, stored_data_slice))
+        }
     }
 
     /// Helper function to validate and compute buffer positions for associated data access.
