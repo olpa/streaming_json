@@ -207,8 +207,14 @@ fn test_push_returns_reference_to_stored_value() {
     let get_ptr = get_ref.as_ptr();
     let get_len = get_ref.len();
 
-    assert_eq!(stored_ptr, get_ptr, "push() and get() should return references pointing to the same memory location");
-    assert_eq!(stored_len, get_len, "push() and get() should return references with the same length");
+    assert_eq!(
+        stored_ptr, get_ptr,
+        "push() and get() should return references pointing to the same memory location"
+    );
+    assert_eq!(
+        stored_len, get_len,
+        "push() and get() should return references with the same length"
+    );
 }
 
 #[test]
@@ -219,19 +225,31 @@ fn test_push_returns_independent_references() {
     // Test that each push() returns a reference pointing to the correct memory location
     // Each push() reference should point to the same memory as the corresponding get() reference
     let first_ref = u8pool.push(b"first").unwrap();
-    assert_eq!(first_ref, b"first");  // Content should match
+    assert_eq!(first_ref, b"first"); // Content should match
     let first_ptr = first_ref.as_ptr();
-    assert_eq!(first_ptr, u8pool.get(0).unwrap().as_ptr(), "First push and get(0) should point to same memory");
+    assert_eq!(
+        first_ptr,
+        u8pool.get(0).unwrap().as_ptr(),
+        "First push and get(0) should point to same memory"
+    );
 
     let second_ref = u8pool.push(b"second").unwrap();
-    assert_eq!(second_ref, b"second");  // Content should match
+    assert_eq!(second_ref, b"second"); // Content should match
     let second_ptr = second_ref.as_ptr();
-    assert_eq!(second_ptr, u8pool.get(1).unwrap().as_ptr(), "Second push and get(1) should point to same memory");
+    assert_eq!(
+        second_ptr,
+        u8pool.get(1).unwrap().as_ptr(),
+        "Second push and get(1) should point to same memory"
+    );
 
     let third_ref = u8pool.push(b"third").unwrap();
-    assert_eq!(third_ref, b"third");  // Content should match
+    assert_eq!(third_ref, b"third"); // Content should match
     let third_ptr = third_ref.as_ptr();
-    assert_eq!(third_ptr, u8pool.get(2).unwrap().as_ptr(), "Third push and get(2) should point to same memory");
+    assert_eq!(
+        third_ptr,
+        u8pool.get(2).unwrap().as_ptr(),
+        "Third push and get(2) should point to same memory"
+    );
 
     // Verify each push uses different memory locations (independence)
     assert_ne!(first_ptr, second_ptr);
@@ -251,7 +269,7 @@ fn test_push_return_value_with_empty_data() {
 
     // Test pushing empty slice
     let empty_ref = u8pool.push(b"").unwrap();
-    assert_eq!(empty_ref, b"");  // Content should match
+    assert_eq!(empty_ref, b""); // Content should match
     assert_eq!(empty_ref.len(), 0);
 
     // Verify push() and get() point to the same memory location even for empty data
@@ -263,6 +281,9 @@ fn test_push_return_value_with_empty_data() {
     let get_empty_ptr = get_empty_ref.as_ptr();
     let get_empty_len = get_empty_ref.len();
 
-    assert_eq!(empty_ptr, get_empty_ptr, "push() and get() should point to same memory location for empty data");
+    assert_eq!(
+        empty_ptr, get_empty_ptr,
+        "push() and get() should point to same memory location for empty data"
+    );
     assert_eq!(empty_len, get_empty_len);
 }

@@ -251,7 +251,11 @@ impl<'a> U8Pool<'a> {
     /// - The maximum number of slices has been reached
     /// - There is insufficient space in the buffer for the aligned associated value and data
     ///
-    pub fn push_assoc<T: Sized>(&mut self, assoc: T, data: &[u8]) -> Result<(&T, &[u8]), U8PoolError> {
+    pub fn push_assoc<T: Sized>(
+        &mut self,
+        assoc: T,
+        data: &[u8],
+    ) -> Result<(&T, &[u8]), U8PoolError> {
         let (aligned_start, end) = self.reserve_aligned_buffer_space::<T>(data.len())?;
 
         let assoc_size = core::mem::size_of::<T>();
