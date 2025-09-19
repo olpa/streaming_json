@@ -6,12 +6,12 @@ pub mod idtransform;
 pub mod matcher;
 pub mod scan;
 
-pub use action::{BoxedAction, BoxedEndAction, BoxedMatcher, StreamOp, Trigger};
+pub use action::{BoxedAction, BoxedEndAction, StreamOp, Trigger};
 pub use error::{Error, Result};
 pub use matcher::{
-    DebugPrinter as MatcherDebugPrinter, Matcher, Name, ParentAndName, ParentParentAndName,
+    DebugPrinter as MatcherDebugPrinter, IterMatcher, Matcher,
 };
-pub use scan::{scan, ContextFrame, Options};
+pub use scan::{scan, Options};
 
 pub use rjiter;
 pub use rjiter::jiter;

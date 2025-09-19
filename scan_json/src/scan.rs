@@ -35,7 +35,7 @@ struct StateFrame {
 }
 
 /// Helper function to build context iterator from U8Pool for matchers
-fn build_context_iter(pool: &U8Pool) -> impl Iterator<Item = &[u8]> + Clone {
+fn build_context_iter<'a>(pool: &'a U8Pool) -> impl Iterator<Item = &'a [u8]> + 'a {
     pool.iter_assoc::<StateFrame>().map(|(_, key_slice)| key_slice)
 }
 
@@ -45,29 +45,27 @@ fn build_context_iter(pool: &U8Pool) -> impl Iterator<Item = &[u8]> + Clone {
 // - Call the action for the current key
 // - Pop the context stack if the object is ended
 // - Push the current key onto the context stack
-fn handle_object<M, A, E, T: ?Sized>(
+fn handle_object<'a, M, A, E, T: ?Sized>(
     rjiter_cell: &RefCell<RJiter>,
     baton_cell: &RefCell<T>,
     triggers: &[Trigger<M, A>],
     triggers_end: &[Trigger<M, E>],
-    cur_level_frame: StateFrame,
-    cur_level_key: &[u8],
-    context: &mut U8Pool,
-) -> ScanResult<(StreamOp, StateFrame, &[u8])>
+    mut cur_level_frame: StateFrame,
+    mut cur_level_key: Vec<u8>,
+    context: &'a mut U8Pool,
+) -> ScanResult<(StreamOp, StateFrame, Vec<u8>)>
 where
     M: crate::matcher::Matcher,
     A: Fn(&RefCell<RJiter>, &RefCell<T>) -> StreamOp,
     E: Fn(&RefCell<T>) -> Result<(), Box<dyn std::error::Error>>,
 {
-    let mut cur_level_frame = cur_level_frame;
-    let mut cur_level_key = cur_level_key;
     {
         //
         // Call the begin-trigger for the object
         //
         if cur_level_frame.is_elem_begin {
-            let context_iter = build_context_iter(context);
-            if let Some(begin_action) = find_action(triggers, b"#object", context_iter) {
+            let context_vec: Vec<&[u8]> = build_context_iter(context).collect();
+            if let Some(begin_action) = find_action(triggers, b"#object", || Box::new(context_vec.iter().copied())) {
                 match begin_action(rjiter_cell, baton_cell) {
                     StreamOp::None => (),
                     StreamOp::Error(e) => {
@@ -90,10 +88,8 @@ where
         // Call the end-trigger for the previous key
         //
         if !cur_level_frame.is_elem_begin {
-            let context_iter = build_context_iter(context);
-            if let Some(end_action) =
-                find_action(triggers_end, cur_level_key, context_iter)
-            {
+            let context_vec: Vec<&[u8]> = build_context_iter(context).collect();
+            if let Some(end_action) = find_action(triggers_end, &cur_level_key, || Box::new(context_vec.iter().copied())) {
                 if let Err(e) = end_action(baton_cell) {
                     return Err(ScanError::ActionError(
                         e,
@@ -118,24 +114,25 @@ where
         // If there is a next key, update the current key and continue
         //
         if let Some(key) = keyr? {
-            cur_level_key = key;
+            cur_level_key = key.as_bytes().to_vec();
         } else {
             //
             // Call the end-trigger for the object
             //
-            let context_iter = build_context_iter(context);
-            if let Some(end_action) = find_action(triggers_end, b"#object", context_iter) {
+            let context_vec: Vec<&[u8]> = build_context_iter(context).collect();
+            if let Some(end_action) = find_action(triggers_end, b"#object", || Box::new(context_vec.iter().copied())) {
                 if let Err(e) = end_action(baton_cell) {
-                    return Err(ScanError::ActionError(e, rjiter.current_index()));
+                    return Err(ScanError::ActionError(
+                        e,
+                        rjiter_cell.borrow().current_index(),
+                    ));
                 }
             }
             //
             // End of the object: mutate the context and end the function
             //
             return match context.pop_assoc::<StateFrame>() {
-                Some((frame, key_slice)) => {
-                    Ok((StreamOp::ValueIsConsumed, *frame, key_slice))
-                }
+                Some((frame, key_slice)) => Ok((StreamOp::ValueIsConsumed, *frame, key_slice.to_vec())),
                 None => Err(ScanError::UnbalancedJson(rjiter.current_index())),
             };
         }
@@ -144,17 +141,15 @@ where
     //
     // Execute the action for the current key
     //
-    let context_iter = build_context_iter(context);
-    if let Some(action) = find_action(triggers, cur_level_key, context_iter) {
+    let context_vec: Vec<&[u8]> = build_context_iter(context).collect();
+    if let Some(action) = find_action(triggers, &cur_level_key, || Box::new(context_vec.iter().copied())) {
         let action_result = action(rjiter_cell, baton_cell);
         return match action_result {
             StreamOp::Error(e) => Err(ScanError::ActionError(
                 e,
                 rjiter_cell.borrow().current_index(),
             )),
-            StreamOp::None | StreamOp::ValueIsConsumed => {
-                Ok((action_result, cur_level_frame, cur_level_key))
-            }
+            StreamOp::None | StreamOp::ValueIsConsumed => Ok((action_result, cur_level_frame, cur_level_key)),
         };
     }
     Ok((StreamOp::None, cur_level_frame, cur_level_key))
@@ -167,10 +162,10 @@ fn handle_array<M, A, E, T: ?Sized>(
     baton_cell: &RefCell<T>,
     triggers: &[Trigger<M, A>],
     triggers_end: &[Trigger<M, E>],
-    cur_level_frame: StateFrame,
-    cur_level_key: &[u8],
+    mut cur_level_frame: StateFrame,
+    cur_level_key: Vec<u8>,
     context: &mut U8Pool,
-) -> ScanResult<(Option<Peek>, StateFrame, &[u8])>
+) -> ScanResult<(Option<Peek>, StateFrame, Vec<u8>)>
 where
     M: crate::matcher::Matcher,
     A: Fn(&RefCell<RJiter>, &RefCell<T>) -> StreamOp,
@@ -179,8 +174,8 @@ where
     // Call the begin-trigger at the beginning of the array
     let mut is_array_consumed = false;
     if cur_level_frame.is_elem_begin {
-        let context_iter = build_context_iter(context);
-        if let Some(begin_action) = find_action(triggers, b"#array", context_iter) {
+        let context_vec: Vec<&[u8]> = build_context_iter(context).collect();
+        if let Some(begin_action) = find_action(triggers, b"#array", || Box::new(context_vec.iter().copied())) {
             match begin_action(rjiter_cell, baton_cell) {
                 StreamOp::None => (),
                 StreamOp::ValueIsConsumed => is_array_consumed = true,
@@ -202,26 +197,25 @@ where
         let mut rjiter = rjiter_cell.borrow_mut();
         rjiter.array_step()
     };
-    let mut new_frame = cur_level_frame;
-    new_frame.is_elem_begin = false;
+    cur_level_frame.is_elem_begin = false;
 
     // Call the end-trigger at the end of the array
     let peeked = apickedr?;
     if peeked.is_none() {
-        let context_iter = build_context_iter(context);
-        if let Some(end_action) = find_action(triggers_end, b"#array", context_iter) {
+        let context_vec: Vec<&[u8]> = build_context_iter(context).collect();
+        if let Some(end_action) = find_action(triggers_end, b"#array", || Box::new(context_vec.iter().copied())) {
             if let Err(e) = end_action(baton_cell) {
                 let rjiter = rjiter_cell.borrow();
                 return Err(ScanError::ActionError(e, rjiter.current_index()));
             }
         }
         if let Some((frame, key_slice)) = context.pop_assoc::<StateFrame>() {
-            return Ok((None, *frame, key_slice));
+            return Ok((None, *frame, key_slice.to_vec()));
         }
         let rjiter = rjiter_cell.borrow();
         return Err(ScanError::UnbalancedJson(rjiter.current_index()));
     }
-    Ok((peeked, new_frame, cur_level_key))
+    Ok((peeked, cur_level_frame, cur_level_key))
 }
 
 /// Skips over basic JSON values (null, true, false, numbers, strings)
@@ -251,9 +245,10 @@ fn skip_basic_values(peeked: Peek, rjiter: &mut RJiter) -> ScanResult<()> {
 
 /// Pushes a new context frame onto the context stack
 fn push_context(context: &mut U8Pool, cur_level_frame: StateFrame, cur_level_key: &[u8], rjiter: &RJiter) -> ScanResult<()> {
+    let context_len = context.len();
     context
         .push_assoc(cur_level_frame, cur_level_key)
-        .map_err(|_e| ScanError::MaxNestingExceeded(rjiter.current_index(), context.len()))?;
+        .map_err(|_e| ScanError::MaxNestingExceeded(rjiter.current_index(), context_len))?;
     Ok(())
 }
 
@@ -303,7 +298,7 @@ where
     E: Fn(&RefCell<T>) -> Result<(), Box<dyn std::error::Error>>,
 {
     let context = working_buffer; // Alias for better readability in function body
-    let mut cur_level_key = b"#top";
+    let mut cur_level_key_storage = Vec::from(b"#top" as &[u8]);
     let mut cur_level_frame = StateFrame {
         is_elem_begin: false,
         is_in_object: false,
@@ -327,11 +322,11 @@ where
                 triggers,
                 triggers_end,
                 cur_level_frame,
-                cur_level_key,
+                cur_level_key_storage.clone(),
                 context,
             )?;
             cur_level_frame = new_state_frame;
-            cur_level_key = new_key;
+            cur_level_key_storage = new_key;
 
             match action_result {
                 StreamOp::ValueIsConsumed => continue,
@@ -352,11 +347,11 @@ where
                 triggers,
                 triggers_end,
                 cur_level_frame,
-                cur_level_key,
+                cur_level_key_storage.clone(),
                 context,
             )?;
             cur_level_frame = new_state_frame;
-            cur_level_key = new_key;
+            cur_level_key_storage = new_key;
 
             if arr_peeked.is_none() {
                 continue;
@@ -397,8 +392,8 @@ where
         ))?;
 
         if peeked == Peek::Array {
-            push_context(context, cur_level_frame, cur_level_key, &rjiter)?;
-            cur_level_key = b"#array";
+            push_context(context, cur_level_frame, &cur_level_key_storage, &rjiter)?;
+            cur_level_key_storage = Vec::from(b"#array" as &[u8]);
             cur_level_frame = StateFrame {
                 is_in_array: true,
                 is_in_object: false,
@@ -408,8 +403,8 @@ where
         }
 
         if peeked == Peek::Object {
-            push_context(context, cur_level_frame, cur_level_key, &rjiter)?;
-            cur_level_key = b"#object";
+            push_context(context, cur_level_frame, &cur_level_key_storage, &rjiter)?;
+            cur_level_key_storage = Vec::from(b"#object" as &[u8]);
             cur_level_frame = StateFrame {
                 is_in_array: false,
                 is_in_object: true,
@@ -419,18 +414,26 @@ where
         }
 
         // Handle basic (aka atomic) values
-        push_context(context, cur_level_frame, cur_level_key, &rjiter)?;
-        let context_iter = build_context_iter(context);
-        let action = find_action(triggers, b"#atom", context_iter);
-        (cur_level_frame, cur_level_key) = match context.pop_assoc::<StateFrame>() {
-            Some((frame, key_slice)) => (*frame, key_slice),
-            None => {
-                return Err(ScanError::InternalError(
-                    rjiter.current_index(),
-                    "Context stack is empty when it should not be".to_string(),
-                ))
-            }
-        };
+        push_context(context, cur_level_frame, &cur_level_key_storage, &rjiter)?;
+
+        // Find action with current context
+        let context_vec: Vec<&[u8]> = build_context_iter(context).collect();
+        let action = triggers
+            .iter()
+            .find(|trigger| {
+                trigger.matcher.matches(b"#atom", context_vec.iter().copied())
+            })
+            .map(|trigger| &trigger.action);
+
+        // Pop the context we just pushed
+        let (frame, key_slice) = context.pop_assoc::<StateFrame>().ok_or_else(|| {
+            ScanError::InternalError(
+                rjiter.current_index(),
+                "Context stack is empty when it should not be".to_string(),
+            )
+        })?;
+        cur_level_frame = *frame;
+        cur_level_key_storage = key_slice.to_vec();
 
         // Call the action for the atom, then return (error) or continue (value is consumed)
         // or pass through to the default handler

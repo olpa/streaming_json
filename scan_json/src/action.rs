@@ -3,6 +3,13 @@ use crate::matcher::Matcher;
 use rjiter::RJiter;
 use std::cell::RefCell;
 
+/// Type alias for boxed action functions that can be called during JSON scanning
+pub type BoxedAction<T> = Box<dyn Fn(&RefCell<RJiter>, &RefCell<T>) -> StreamOp>;
+
+/// Type alias for boxed end action functions that are called when a matched key ends
+pub type BoxedEndAction<T> = Box<dyn Fn(&RefCell<T>) -> Result<(), Box<dyn std::error::Error>>>;
+
+
 /// Interact from a callback to the `scan` function.
 #[derive(Debug)]
 pub enum StreamOp {
@@ -53,20 +60,20 @@ impl<M, A> Trigger<M, A> {
 /// # Returns
 /// * `Option<&A>` - Reference to the matching action if found, None otherwise
 #[must_use]
-pub(crate) fn find_action<'a, M, A, I>(
+pub(crate) fn find_action<'a, M, A, F>(
     triggers: &'a [Trigger<M, A>],
     for_key: &[u8],
-    context: I,
+    context_fn: F,
 ) -> Option<&'a A>
 where
     M: Matcher,
-    I: Iterator<Item = &'a [u8]> + Clone,
+    F: Fn() -> Box<dyn Iterator<Item = &'a [u8]> + 'a>,
 {
     triggers
         .iter()
         .find(|trigger| {
-            let context_clone = context.clone();
-            trigger.matcher.matches(for_key, context_clone)
+            let context_iter = context_fn();
+            trigger.matcher.matches(for_key, context_iter)
         })
         .map(|trigger| &trigger.action)
 }
