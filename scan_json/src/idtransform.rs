@@ -29,9 +29,8 @@ use crate::matcher::Matcher;
 use crate::StreamOp;
 use crate::{
     rjiter::jiter::Peek, scan, Error as ScanError,
-    Options, RJiter, Result as ScanResult, BoxedAction, BoxedEndAction,
+    Options, RJiter, Result as ScanResult,
 };
-use crate::Trigger;
 use std::cell::RefCell;
 use std::io::Write;
 use u8pool::U8Pool;
@@ -162,79 +161,76 @@ impl<'a> IdTransform<'a> {
 // ---------------- Matchers
 
 //
-// Unified matcher for idtransform that handles all cases
+// For objects, arrays and values, but not for keys.
+// Pass information to the handler: `is_top_level`.
 //
-#[derive(Debug)]
-enum IdtMatcherType {
-    StructBegin(String), // For #atom, #array, #object
-    StructEnd(String),   // For end actions - simple name matching
-    Key,                 // For any key
-}
-
-struct IdtUnifiedMatcher<'a> {
-    matcher_type: IdtMatcherType,
+struct IdtMatcher<'a> {
+    name: String,
     idt: &'a RefCell<IdTransform<'a>>,
 }
 
-impl std::fmt::Debug for IdtUnifiedMatcher<'_> {
+impl std::fmt::Debug for IdtMatcher<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("IdtUnifiedMatcher")
-            .field("matcher_type", &self.matcher_type)
+        f.debug_struct("IdtMatcher")
+            .field("name", &self.name)
             .finish()
     }
 }
 
-impl<'a> IdtUnifiedMatcher<'a> {
-    fn new_struct_begin(name: String, idt: &'a RefCell<IdTransform<'a>>) -> Self {
-        Self {
-            matcher_type: IdtMatcherType::StructBegin(name),
-            idt,
-        }
-    }
-
-    fn new_struct_end(name: String, idt: &'a RefCell<IdTransform<'a>>) -> Self {
-        Self {
-            matcher_type: IdtMatcherType::StructEnd(name),
-            idt,
-        }
-    }
-
-    fn new_key(idt: &'a RefCell<IdTransform<'a>>) -> Self {
-        Self {
-            matcher_type: IdtMatcherType::Key,
-            idt,
-        }
+impl<'a> IdtMatcher<'a> {
+    fn new(name: String, idt: &'a RefCell<IdTransform<'a>>) -> Self {
+        Self { name, idt }
     }
 }
 
-impl Matcher for IdtUnifiedMatcher<'_> {
+impl Matcher for IdtMatcher<'_> {
     fn matches<'a, I>(&self, name: &[u8], context: I) -> bool
     where
         I: Iterator<Item = &'a [u8]>,
     {
-        match &self.matcher_type {
-            IdtMatcherType::StructBegin(expected_name) => {
-                if name != expected_name.as_bytes() {
-                    return false;
-                }
-                let mut idt = self.idt.borrow_mut();
-                // There is always "#top" in the context.
-                idt.is_top_level = context.count() < 1;
-                true
-            }
-            IdtMatcherType::StructEnd(expected_name) => {
-                name == expected_name.as_bytes()
-            }
-            IdtMatcherType::Key => {
-                let name_str = std::str::from_utf8(name).unwrap_or("");
-                let mut idt = self.idt.borrow_mut();
-                idt.seqpos = match &idt.seqpos {
-                    IdtSequencePos::AtBeginning => IdtSequencePos::AtBeginningKey(name_str.to_string()),
-                    _ => IdtSequencePos::InMiddleKey(name_str.to_string()),
-                };
-                true
-            }
+        if name != self.name.as_bytes() {
+            return false;
         }
+        let mut idt = self.idt.borrow_mut();
+        // There is always "#top" in the context.
+        let context_count = context.count();
+        idt.is_top_level = context_count < 2;
+        true
+    }
+}
+
+//
+// Matcher for JSON keys.
+// Pass the key name to the handler.
+//
+struct IdtMatcherForKey<'a> {
+    idt: &'a RefCell<IdTransform<'a>>,
+}
+
+impl std::fmt::Debug for IdtMatcherForKey<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IdtMatcherForKey").finish()
+    }
+}
+
+impl<'a> IdtMatcherForKey<'a> {
+    fn new(idt: &'a RefCell<IdTransform<'a>>) -> Self {
+        Self { idt }
+    }
+}
+
+impl Matcher for IdtMatcherForKey<'_> {
+    fn matches<'a, I>(&self, name: &[u8], _context: I) -> bool
+    where
+        I: Iterator<Item = &'a [u8]>,
+    {
+        let mut idt = self.idt.borrow_mut();
+        let name_str = String::from_utf8_lossy(name).to_string();
+        idt.seqpos = match &idt.seqpos {
+            IdtSequencePos::AtBeginning => IdtSequencePos::AtBeginningKey(name_str),
+            _ => IdtSequencePos::InMiddleKey(name_str),
+        };
+        true
     }
 }
 
@@ -335,36 +331,51 @@ pub fn idtransform(
     let idt = IdTransform::new(writer);
     let idt_cell = RefCell::new(idt);
 
-    let trigger_atom = Trigger::new(
-        IdtUnifiedMatcher::new_struct_begin("#atom".to_string(), &idt_cell),
-        Box::new(on_atom) as BoxedAction<IdTransform>,
-    );
-    let trigger_array = Trigger::new(
-        IdtUnifiedMatcher::new_struct_begin("#array".to_string(), &idt_cell),
-        Box::new(on_array) as BoxedAction<IdTransform>,
-    );
-    let trigger_object = Trigger::new(
-        IdtUnifiedMatcher::new_struct_begin("#object".to_string(), &idt_cell),
-        Box::new(on_object) as BoxedAction<IdTransform>,
-    );
-    let trigger_key = Trigger::new(
-        IdtUnifiedMatcher::new_key(&idt_cell),
-        Box::new(on_key) as BoxedAction<IdTransform>,
-    );
+    // Client finder function for regular actions
+    let find_action = |name: &[u8], context: std::slice::Iter<&[u8]>| -> Option<Box<dyn Fn(&RefCell<RJiter>, &RefCell<IdTransform>) -> StreamOp>> {
+        if name == b"#atom" {
+            // Handle context for is_top_level
+            let mut idt = idt_cell.borrow_mut();
+            let context_count = context.count();
+            idt.is_top_level = context_count < 2;
+            Some(Box::new(on_atom))
+        } else if name == b"#object" {
+            let mut idt = idt_cell.borrow_mut();
+            let context_count = context.count();
+            idt.is_top_level = context_count < 2;
+            Some(Box::new(on_object))
+        } else if name == b"#array" {
+            let mut idt = idt_cell.borrow_mut();
+            let context_count = context.count();
+            idt.is_top_level = context_count < 2;
+            Some(Box::new(on_array))
+        } else {
+            // Handle key matching - match any key that isn't a special token
+            let mut idt = idt_cell.borrow_mut();
+            let name_str = String::from_utf8_lossy(name).to_string();
+            idt.seqpos = match &idt.seqpos {
+                IdtSequencePos::AtBeginning => IdtSequencePos::AtBeginningKey(name_str),
+                _ => IdtSequencePos::InMiddleKey(name_str),
+            };
+            Some(Box::new(on_key))
+        }
+    };
 
-    let trigger_array_end = Trigger::new(
-        IdtUnifiedMatcher::new_struct_end("#array".to_string(), &idt_cell),
-        Box::new(on_array_end) as BoxedEndAction<IdTransform>,
-    );
-    let trigger_object_end = Trigger::new(
-        IdtUnifiedMatcher::new_struct_end("#object".to_string(), &idt_cell),
-        Box::new(on_object_end) as BoxedEndAction<IdTransform>,
-    );
+    // Client finder function for end actions
+    let find_end_action = |name: &[u8], _context: std::slice::Iter<&[u8]>| -> Option<Box<dyn Fn(&RefCell<IdTransform>) -> Result<(), Box<dyn std::error::Error>>>> {
+        if name == b"#object" {
+            Some(Box::new(on_object_end))
+        } else if name == b"#array" {
+            Some(Box::new(on_array_end))
+        } else {
+            None
+        }
+    };
 
     // Use an intermediate result to avoid: borrowed value does not live long enough
     let result = scan(
-        &[trigger_atom, trigger_object, trigger_array, trigger_key],
-        &[trigger_object_end, trigger_array_end],
+        find_action,
+        find_end_action,
         rjiter_cell,
         &idt_cell,
         working_buffer,
