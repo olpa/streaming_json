@@ -55,25 +55,24 @@ impl<M, A> Trigger<M, A> {
 /// # Arguments
 /// * `triggers` - Slice of triggers to search through
 /// * `for_key` - The key name as bytes to match against
-/// * `context` - Iterator over parent context names as byte slices
+/// * `context` - Iterator over parent context names as byte slices (see [`Matcher::matches`] for details)
 ///
 /// # Returns
 /// * `Option<&A>` - Reference to the matching action if found, None otherwise
 #[must_use]
-pub(crate) fn find_action<'a, M, A, F>(
-    triggers: &'a [Trigger<M, A>],
+pub(crate) fn find_action<'triggers, 'context, M, A, I>(
+    triggers: &'triggers [Trigger<M, A>],
     for_key: &[u8],
-    context_fn: F,
-) -> Option<&'a A>
+    context: I,
+) -> Option<&'triggers A>
 where
     M: Matcher,
-    F: Fn() -> Box<dyn Iterator<Item = &'a [u8]> + 'a>,
+    I: Iterator<Item = &'context [u8]> + Clone,
 {
     triggers
         .iter()
         .find(|trigger| {
-            let context_iter = context_fn();
-            trigger.matcher.matches(for_key, context_iter)
+            trigger.matcher.matches(for_key, context.clone())
         })
         .map(|trigger| &trigger.action)
 }
