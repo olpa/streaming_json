@@ -64,8 +64,7 @@ where
         // Call the begin-trigger for the object
         //
         if cur_level_frame.is_elem_begin {
-            let context_vec: Vec<&[u8]> = build_context_iter(context).collect();
-            if let Some(begin_action) = find_action(triggers, b"#object", || Box::new(context_vec.iter().copied())) {
+            if let Some(begin_action) = find_action(triggers, b"#object", build_context_iter(context)) {
                 match begin_action(rjiter_cell, baton_cell) {
                     StreamOp::None => (),
                     StreamOp::Error(e) => {
@@ -88,8 +87,7 @@ where
         // Call the end-trigger for the previous key
         //
         if !cur_level_frame.is_elem_begin {
-            let context_vec: Vec<&[u8]> = build_context_iter(context).collect();
-            if let Some(end_action) = find_action(triggers_end, &cur_level_key, || Box::new(context_vec.iter().copied())) {
+            if let Some(end_action) = find_action(triggers_end, &cur_level_key, build_context_iter(context)) {
                 if let Err(e) = end_action(baton_cell) {
                     return Err(ScanError::ActionError(
                         e,
@@ -119,8 +117,7 @@ where
             //
             // Call the end-trigger for the object
             //
-            let context_vec: Vec<&[u8]> = build_context_iter(context).collect();
-            if let Some(end_action) = find_action(triggers_end, b"#object", || Box::new(context_vec.iter().copied())) {
+            if let Some(end_action) = find_action(triggers_end, b"#object", build_context_iter(context)) {
                 if let Err(e) = end_action(baton_cell) {
                     return Err(ScanError::ActionError(
                         e,
@@ -141,8 +138,7 @@ where
     //
     // Execute the action for the current key
     //
-    let context_vec: Vec<&[u8]> = build_context_iter(context).collect();
-    if let Some(action) = find_action(triggers, &cur_level_key, || Box::new(context_vec.iter().copied())) {
+    if let Some(action) = find_action(triggers, &cur_level_key, build_context_iter(context)) {
         let action_result = action(rjiter_cell, baton_cell);
         return match action_result {
             StreamOp::Error(e) => Err(ScanError::ActionError(
@@ -174,8 +170,7 @@ where
     // Call the begin-trigger at the beginning of the array
     let mut is_array_consumed = false;
     if cur_level_frame.is_elem_begin {
-        let context_vec: Vec<&[u8]> = build_context_iter(context).collect();
-        if let Some(begin_action) = find_action(triggers, b"#array", || Box::new(context_vec.iter().copied())) {
+        if let Some(begin_action) = find_action(triggers, b"#array", build_context_iter(context)) {
             match begin_action(rjiter_cell, baton_cell) {
                 StreamOp::None => (),
                 StreamOp::ValueIsConsumed => is_array_consumed = true,
@@ -202,8 +197,7 @@ where
     // Call the end-trigger at the end of the array
     let peeked = apickedr?;
     if peeked.is_none() {
-        let context_vec: Vec<&[u8]> = build_context_iter(context).collect();
-        if let Some(end_action) = find_action(triggers_end, b"#array", || Box::new(context_vec.iter().copied())) {
+        if let Some(end_action) = find_action(triggers_end, b"#array", build_context_iter(context)) {
             if let Err(e) = end_action(baton_cell) {
                 let rjiter = rjiter_cell.borrow();
                 return Err(ScanError::ActionError(e, rjiter.current_index()));
@@ -417,13 +411,7 @@ where
         push_context(context, cur_level_frame, &cur_level_key_storage, &rjiter)?;
 
         // Find action with current context
-        let context_vec: Vec<&[u8]> = build_context_iter(context).collect();
-        let action = triggers
-            .iter()
-            .find(|trigger| {
-                trigger.matcher.matches(b"#atom", context_vec.iter().copied())
-            })
-            .map(|trigger| &trigger.action);
+        let action = find_action(triggers, b"#atom", build_context_iter(context));
 
         // Pop the context we just pushed
         let (frame, key_slice) = context.pop_assoc::<StateFrame>().ok_or_else(|| {
