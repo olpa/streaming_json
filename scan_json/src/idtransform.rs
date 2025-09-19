@@ -30,6 +30,7 @@ use crate::StreamOp;
 use crate::{
     rjiter::jiter::Peek, scan, Error as ScanError,
     Options, RJiter, Result as ScanResult,
+    BoxedAction, BoxedEndAction,
 };
 use std::cell::RefCell;
 use std::io::Write;
@@ -332,21 +333,21 @@ pub fn idtransform(
     let idt_cell = RefCell::new(idt);
 
     // Client finder function for regular actions
-    let find_action = |name: &[u8], context: std::slice::Iter<&[u8]>| -> Option<Box<dyn Fn(&RefCell<RJiter>, &RefCell<IdTransform>) -> StreamOp>> {
+    let find_action = |name: &[u8], context: Vec<&[u8]>| -> Option<BoxedAction<IdTransform>> {
         if name == b"#atom" {
             // Handle context for is_top_level
             let mut idt = idt_cell.borrow_mut();
-            let context_count = context.count();
+            let context_count = context.len();
             idt.is_top_level = context_count < 2;
             Some(Box::new(on_atom))
         } else if name == b"#object" {
             let mut idt = idt_cell.borrow_mut();
-            let context_count = context.count();
+            let context_count = context.len();
             idt.is_top_level = context_count < 2;
             Some(Box::new(on_object))
         } else if name == b"#array" {
             let mut idt = idt_cell.borrow_mut();
-            let context_count = context.count();
+            let context_count = context.len();
             idt.is_top_level = context_count < 2;
             Some(Box::new(on_array))
         } else {
@@ -362,7 +363,7 @@ pub fn idtransform(
     };
 
     // Client finder function for end actions
-    let find_end_action = |name: &[u8], _context: std::slice::Iter<&[u8]>| -> Option<Box<dyn Fn(&RefCell<IdTransform>) -> Result<(), Box<dyn std::error::Error>>>> {
+    let find_end_action = |name: &[u8], _context: Vec<&[u8]>| -> Option<BoxedEndAction<IdTransform>> {
         if name == b"#object" {
             Some(Box::new(on_object_end))
         } else if name == b"#array" {

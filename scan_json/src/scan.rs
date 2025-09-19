@@ -1,6 +1,6 @@
 //! Implementation of the `scan` function to scan a JSON stream.
 
-use crate::action::{StreamOp};
+use crate::action::{BoxedAction, BoxedEndAction, StreamOp};
 use crate::error::Error as ScanError;
 use crate::error::Result as ScanResult;
 use rjiter::jiter::Peek;
@@ -9,11 +9,8 @@ use std::cell::RefCell;
 use std::io;
 use u8pool::U8Pool;
 
-/// Type alias for action functions
-type ActionFn<T> = dyn Fn(&RefCell<RJiter>, &RefCell<T>) -> StreamOp;
-
-/// Type alias for end action functions
-type EndActionFn<T> = dyn Fn(&RefCell<T>) -> Result<(), Box<dyn std::error::Error>>;
+/// Type alias for context iterator (simple concrete type)
+type ContextIterator<'context> = Vec<&'context [u8]>;
 
 /// Options for configuring the scan behavior
 #[derive(Debug, Clone, Default)]
@@ -41,7 +38,7 @@ struct StateFrame {
 }
 
 /// Helper function to build context iterator from U8Pool for matchers
-fn build_context_iter<'a>(pool: &'a U8Pool) -> Vec<&'a [u8]> {
+fn build_context_iter<'a>(pool: &'a U8Pool) -> ContextIterator<'a> {
     pool.iter_assoc::<StateFrame>().map(|(_assoc, key_slice)| key_slice).collect()
 }
 
@@ -61,15 +58,15 @@ fn handle_object<'a, FindAction, FindEndAction, T: ?Sized>(
     context: &'a mut U8Pool,
 ) -> ScanResult<(StreamOp, StateFrame, Vec<u8>)>
 where
-    FindAction: Fn(&[u8], std::slice::Iter<&[u8]>) -> Option<Box<ActionFn<T>>>,
-    FindEndAction: Fn(&[u8], std::slice::Iter<&[u8]>) -> Option<Box<EndActionFn<T>>>,
+    FindAction: for<'context> Fn(&[u8], ContextIterator<'context>) -> Option<BoxedAction<T>>,
+    FindEndAction: for<'context> Fn(&[u8], ContextIterator<'context>) -> Option<BoxedEndAction<T>>,
 {
     {
         //
         // Call the begin-trigger for the object
         //
         if cur_level_frame.is_elem_begin {
-            if let Some(begin_action) = find_action(b"#object", build_context_iter(context).iter()) {
+            if let Some(begin_action) = find_action(b"#object", build_context_iter(context)) {
                 match begin_action(rjiter_cell, baton_cell) {
                     StreamOp::None => (),
                     StreamOp::Error(e) => {
@@ -92,7 +89,7 @@ where
         // Call the end-trigger for the previous key
         //
         if !cur_level_frame.is_elem_begin {
-            if let Some(end_action) = find_end_action(&cur_level_key, build_context_iter(context).iter()) {
+            if let Some(end_action) = find_end_action(&cur_level_key, build_context_iter(context)) {
                 if let Err(e) = end_action(baton_cell) {
                     return Err(ScanError::ActionError(
                         e,
@@ -122,7 +119,7 @@ where
             //
             // Call the end-trigger for the object
             //
-            if let Some(end_action) = find_end_action(b"#object", build_context_iter(context).iter()) {
+            if let Some(end_action) = find_end_action(b"#object", build_context_iter(context)) {
                 if let Err(e) = end_action(baton_cell) {
                     return Err(ScanError::ActionError(
                         e,
@@ -143,7 +140,7 @@ where
     //
     // Execute the action for the current key
     //
-    if let Some(action) = find_action(&cur_level_key, build_context_iter(context).iter()) {
+    if let Some(action) = find_action(&cur_level_key, build_context_iter(context)) {
         let action_result = action(rjiter_cell, baton_cell);
         return match action_result {
             StreamOp::Error(e) => Err(ScanError::ActionError(
@@ -168,13 +165,13 @@ fn handle_array<FindAction, FindEndAction, T: ?Sized>(
     context: &mut U8Pool,
 ) -> ScanResult<(Option<Peek>, StateFrame, Vec<u8>)>
 where
-    FindAction: Fn(&[u8], std::slice::Iter<&[u8]>) -> Option<Box<ActionFn<T>>>,
-    FindEndAction: Fn(&[u8], std::slice::Iter<&[u8]>) -> Option<Box<EndActionFn<T>>>,
+    FindAction: for<'context> Fn(&[u8], ContextIterator<'context>) -> Option<BoxedAction<T>>,
+    FindEndAction: for<'context> Fn(&[u8], ContextIterator<'context>) -> Option<BoxedEndAction<T>>,
 {
     // Call the begin-trigger at the beginning of the array
     let mut is_array_consumed = false;
     if cur_level_frame.is_elem_begin {
-        if let Some(begin_action) = find_action(b"#array", build_context_iter(context).iter()) {
+        if let Some(begin_action) = find_action(b"#array", build_context_iter(context)) {
             match begin_action(rjiter_cell, baton_cell) {
                 StreamOp::None => (),
                 StreamOp::ValueIsConsumed => is_array_consumed = true,
@@ -201,7 +198,7 @@ where
     // Call the end-trigger at the end of the array
     let peeked = apickedr?;
     if peeked.is_none() {
-        if let Some(end_action) = find_end_action(b"#array", build_context_iter(context).iter()) {
+        if let Some(end_action) = find_end_action(b"#array", build_context_iter(context)) {
             if let Err(e) = end_action(baton_cell) {
                 let rjiter = rjiter_cell.borrow();
                 return Err(ScanError::ActionError(e, rjiter.current_index()));
@@ -291,8 +288,8 @@ pub fn scan<FindAction, FindEndAction, T: ?Sized>(
     options: &Options,
 ) -> ScanResult<()>
 where
-    FindAction: Fn(&[u8], std::slice::Iter<&[u8]>) -> Option<Box<ActionFn<T>>>,
-    FindEndAction: Fn(&[u8], std::slice::Iter<&[u8]>) -> Option<Box<EndActionFn<T>>>,
+    FindAction: for<'context> Fn(&[u8], ContextIterator<'context>) -> Option<BoxedAction<T>>,
+    FindEndAction: for<'context> Fn(&[u8], ContextIterator<'context>) -> Option<BoxedEndAction<T>>,
 {
     let context = working_buffer; // Alias for better readability in function body
     let mut cur_level_key_storage = Vec::from(b"#top" as &[u8]);
@@ -414,7 +411,7 @@ where
         push_context(context, cur_level_frame, &cur_level_key_storage, &rjiter)?;
 
         // Find action with current context
-        let action = find_action(b"#atom", build_context_iter(context).iter());
+        let action = find_action(b"#atom", build_context_iter(context));
 
         // Pop the context we just pushed
         let (frame, key_slice) = context.pop_assoc::<StateFrame>().ok_or_else(|| {
