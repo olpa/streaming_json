@@ -1,5 +1,4 @@
 //! Action module provides types and functionality for defining callbacks
-use crate::matcher::Matcher;
 use rjiter::RJiter;
 use std::cell::RefCell;
 
@@ -33,10 +32,10 @@ impl<E: std::error::Error + 'static> From<E> for StreamOp {
 // - Structs with call operators
 // - Any callable type
 
-/// Pair a matcher with an action.
+/// Pair a matcher function with an action.
 #[derive(Debug)]
 pub struct Trigger<M, A> {
-    /// The matcher that determines when this trigger should activate
+    /// The matcher function that determines when this trigger should activate
     pub matcher: M,
     /// The action to execute when the matcher succeeds
     pub action: A,
@@ -44,7 +43,7 @@ pub struct Trigger<M, A> {
 
 impl<M, A> Trigger<M, A> {
     #[must_use]
-    /// Creates a new trigger with the given matcher and action
+    /// Creates a new trigger with the given matcher function and action
     pub fn new(matcher: M, action: A) -> Self {
         Self { matcher, action }
     }
@@ -55,7 +54,7 @@ impl<M, A> Trigger<M, A> {
 /// # Arguments
 /// * `triggers` - Slice of triggers to search through
 /// * `for_key` - The key name as bytes to match against
-/// * `context` - Iterator over parent context names as byte slices (see [`Matcher::matches`] for details)
+/// * `context` - Iterator over parent context names as byte slices
 ///
 /// # Returns
 /// * `Option<&A>` - Reference to the matching action if found, None otherwise
@@ -66,13 +65,13 @@ pub(crate) fn find_action<'triggers, 'context, M, A, I>(
     context: I,
 ) -> Option<&'triggers A>
 where
-    M: Matcher,
+    M: Fn(&[u8], I) -> bool,
     I: Iterator<Item = &'context [u8]> + Clone,
 {
     triggers
         .iter()
         .find(|trigger| {
-            trigger.matcher.matches(for_key, context.clone())
+            (trigger.matcher)(for_key, context.clone())
         })
         .map(|trigger| &trigger.action)
 }

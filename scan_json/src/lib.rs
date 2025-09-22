@@ -9,7 +9,7 @@ pub mod scan;
 pub use action::{BoxedAction, BoxedEndAction, StreamOp, Trigger};
 pub use error::{Error, Result};
 pub use matcher::{
-    DebugPrinter as MatcherDebugPrinter, IterMatcher, Matcher,
+    debug_print_no_match, iter_match,
 };
 pub use scan::{scan, Options};
 

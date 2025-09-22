@@ -25,7 +25,6 @@
 //!   In this case: 1) the matcher produces a side effect, 2) the printing is postponed
 //!   to some unknown point in the future.
 //!
-use crate::matcher::Matcher;
 use crate::StreamOp;
 use crate::{
     rjiter::jiter::Peek, scan, Error as ScanError,
@@ -160,80 +159,7 @@ impl<'a> IdTransform<'a> {
 }
 
 // ---------------- Matchers
-
-//
-// For objects, arrays and values, but not for keys.
-// Pass information to the handler: `is_top_level`.
-//
-struct IdtMatcher<'a> {
-    name: String,
-    idt: &'a RefCell<IdTransform<'a>>,
-}
-
-impl std::fmt::Debug for IdtMatcher<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("IdtMatcher")
-            .field("name", &self.name)
-            .finish()
-    }
-}
-
-impl<'a> IdtMatcher<'a> {
-    fn new(name: String, idt: &'a RefCell<IdTransform<'a>>) -> Self {
-        Self { name, idt }
-    }
-}
-
-impl Matcher for IdtMatcher<'_> {
-    fn matches<'a, I>(&self, name: &[u8], context: I) -> bool
-    where
-        I: Iterator<Item = &'a [u8]>,
-    {
-        if name != self.name.as_bytes() {
-            return false;
-        }
-        let mut idt = self.idt.borrow_mut();
-        // There is always "#top" in the context.
-        let context_count = context.count();
-        idt.is_top_level = context_count < 2;
-        true
-    }
-}
-
-//
-// Matcher for JSON keys.
-// Pass the key name to the handler.
-//
-struct IdtMatcherForKey<'a> {
-    idt: &'a RefCell<IdTransform<'a>>,
-}
-
-impl std::fmt::Debug for IdtMatcherForKey<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("IdtMatcherForKey").finish()
-    }
-}
-
-impl<'a> IdtMatcherForKey<'a> {
-    fn new(idt: &'a RefCell<IdTransform<'a>>) -> Self {
-        Self { idt }
-    }
-}
-
-impl Matcher for IdtMatcherForKey<'_> {
-    fn matches<'a, I>(&self, name: &[u8], _context: I) -> bool
-    where
-        I: Iterator<Item = &'a [u8]>,
-    {
-        let mut idt = self.idt.borrow_mut();
-        let name_str = String::from_utf8_lossy(name).to_string();
-        idt.seqpos = match &idt.seqpos {
-            IdtSequencePos::AtBeginning => IdtSequencePos::AtBeginningKey(name_str),
-            _ => IdtSequencePos::InMiddleKey(name_str),
-        };
-        true
-    }
-}
+// Note: Custom matchers have been replaced by the find_action closure below
 
 // ---------------- Handlers
 
