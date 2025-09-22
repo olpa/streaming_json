@@ -49,29 +49,3 @@ impl<M, A> Trigger<M, A> {
     }
 }
 
-/// Finds the first matching action for a given key and context
-///
-/// # Arguments
-/// * `triggers` - Slice of triggers to search through
-/// * `for_key` - The key name as bytes to match against
-/// * `context` - Iterator over parent context names as byte slices
-///
-/// # Returns
-/// * `Option<&A>` - Reference to the matching action if found, None otherwise
-#[must_use]
-pub(crate) fn find_action<'triggers, 'context, M, A, I>(
-    triggers: &'triggers [Trigger<M, A>],
-    for_key: &[u8],
-    context: I,
-) -> Option<&'triggers A>
-where
-    M: Fn(&[u8], I) -> bool,
-    I: Iterator<Item = &'context [u8]> + Clone,
-{
-    triggers
-        .iter()
-        .find(|trigger| {
-            (trigger.matcher)(for_key, context.clone())
-        })
-        .map(|trigger| &trigger.action)
-}
