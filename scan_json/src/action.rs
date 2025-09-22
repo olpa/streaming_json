@@ -32,20 +32,4 @@ impl<E: std::error::Error + 'static> From<E> for StreamOp {
 // - Structs with call operators
 // - Any callable type
 
-/// Pair a matcher function with an action.
-#[derive(Debug)]
-pub struct Trigger<M, A> {
-    /// The matcher function that determines when this trigger should activate
-    pub matcher: M,
-    /// The action to execute when the matcher succeeds
-    pub action: A,
-}
-
-impl<M, A> Trigger<M, A> {
-    #[must_use]
-    /// Creates a new trigger with the given matcher function and action
-    pub fn new(matcher: M, action: A) -> Self {
-        Self { matcher, action }
-    }
-}
 

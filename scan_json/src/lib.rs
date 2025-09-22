@@ -6,7 +6,7 @@ pub mod idtransform;
 pub mod matcher;
 pub mod scan;
 
-pub use action::{BoxedAction, BoxedEndAction, StreamOp, Trigger};
+pub use action::{BoxedAction, BoxedEndAction, StreamOp};
 pub use error::{Error, Result};
 pub use matcher::{
     debug_print_no_match, iter_match,
