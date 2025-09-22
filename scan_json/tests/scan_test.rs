@@ -214,19 +214,14 @@ fn test_call_begin_dont_touch_value() {
 
     let state = RefCell::new(false);
 
+    // Action function for when "foo" is matched
+    fn set_state_true(_: &RefCell<RJiter>, state: &RefCell<bool>) -> StreamOp {
+        *state.borrow_mut() = true;
+        StreamOp::None
+    }
     // find_action that matches "foo"
-    let find_action = |name: &[u8], context: Vec<&[u8]>| -> Option<BoxedAction<bool>> {
-        // Filter out "#top" from context before matching
-        let filtered_context: Vec<&[u8]> = context.iter().cloned().filter(|&c| c != b"#top").collect();
-        if iter_match(|| [b"foo"], name, filtered_context.iter().cloned()) {
-            let action: BoxedAction<bool> = Box::new(|_: &RefCell<RJiter>, state: &RefCell<bool>| {
-                *state.borrow_mut() = true;
-                StreamOp::None
-            });
-            Some(action)
-        } else {
-            None
-        }
+    let find_action = |name: &[u8], _context: Vec<&[u8]>| -> Option<BoxedAction<bool>> {
+        (name == b"foo").then(|| Box::new(set_state_true) as BoxedAction<bool>)
     };
     // find_end_action that never matches anything
     let find_end_action = |_name: &[u8], _context: Vec<&[u8]>| -> Option<BoxedEndAction<bool>> { None };
@@ -253,23 +248,19 @@ fn test_call_begin_consume_value() {
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
     let state = RefCell::new(false);
-    // find_action that matches "foo" and consumes value
-    let find_action = |name: &[u8], context: Vec<&[u8]>| -> Option<BoxedAction<bool>> {
-        // Filter out "#top" from context before matching
-        let filtered_context: Vec<&[u8]> = context.iter().cloned().filter(|&c| c != b"#top").collect();
-        if iter_match(|| ["foo".as_bytes()], name, filtered_context.iter().cloned()) {
-            let action: BoxedAction<bool> = Box::new(|rjiter_cell: &RefCell<RJiter>, state: &RefCell<bool>| {
-                let mut rjiter = rjiter_cell.borrow_mut();
-                let next = rjiter.next_value();
-                next.unwrap();
 
-                *state.borrow_mut() = true;
-                StreamOp::ValueIsConsumed
-            });
-            Some(action)
-        } else {
-            None
-        }
+    // Action function for when "foo" is matched and value is consumed
+    fn consume_foo_value(rjiter_cell: &RefCell<RJiter>, state: &RefCell<bool>) -> StreamOp {
+        let mut rjiter = rjiter_cell.borrow_mut();
+        let next = rjiter.next_value();
+        next.unwrap();
+
+        *state.borrow_mut() = true;
+        StreamOp::ValueIsConsumed
+    }
+    // find_action that matches "foo" and consumes value
+    let find_action = |name: &[u8], _context: Vec<&[u8]>| -> Option<BoxedAction<bool>> {
+        (name == b"foo").then(|| Box::new(consume_foo_value) as BoxedAction<bool>)
     };
     // find_end_action that never matches anything
     let find_end_action = |_name: &[u8], _context: Vec<&[u8]>| -> Option<BoxedEndAction<bool>> { None };
@@ -303,21 +294,17 @@ fn test_call_end() {
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
     let state = RefCell::new(0);
+
+    // End action function for when "foo" ends
+    fn increment_counter(state: &RefCell<i32>) -> Result<(), Box<dyn std::error::Error>> {
+        *state.borrow_mut() += 1;
+        Ok(())
+    }
     // find_action that never matches anything
     let find_action = |_name: &[u8], _context: Vec<&[u8]>| -> Option<BoxedAction<i32>> { None };
     // find_end_action that matches "foo"
-    let find_end_action = |name: &[u8], context: Vec<&[u8]>| -> Option<BoxedEndAction<i32>> {
-        // Filter out "#top" from context before matching
-        let filtered_context: Vec<&[u8]> = context.iter().cloned().filter(|&c| c != b"#top").collect();
-        if iter_match(|| ["foo".as_bytes()], name, filtered_context.iter().cloned()) {
-            let action: BoxedEndAction<i32> = Box::new(|state: &RefCell<i32>| {
-                *state.borrow_mut() += 1;
-                Ok(())
-            });
-            Some(action)
-        } else {
-            None
-        }
+    let find_end_action = |name: &[u8], _context: Vec<&[u8]>| -> Option<BoxedEndAction<i32>> {
+        (name == b"foo").then(|| Box::new(increment_counter) as BoxedEndAction<i32>)
     };
 
     scan(
@@ -346,33 +333,23 @@ fn notify_for_top_level_object() {
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let state = RefCell::new((false, false)); // (begin_called, end_called)
 
+    // Action functions for #object matching
+    fn set_begin_called(_rjiter: &RefCell<RJiter>, state: &RefCell<(bool, bool)>) -> StreamOp {
+        state.borrow_mut().0 = true;
+        StreamOp::None
+    }
+    fn set_end_called(state: &RefCell<(bool, bool)>) -> Result<(), Box<dyn std::error::Error>> {
+        state.borrow_mut().1 = true;
+        Ok(())
+    }
+
     // find_action that matches #object with parent #top
-    let find_action = |name: &[u8], context: Vec<&[u8]>| -> Option<BoxedAction<(bool, bool)>> {
-        // Filter out "#top" from context before matching
-        let filtered_context: Vec<&[u8]> = context.iter().cloned().filter(|&c| c != b"#top").collect();
-        if iter_match(|| ["#object".as_bytes()], name, filtered_context.iter().cloned()) {
-            let action: BoxedAction<(bool, bool)> = Box::new(|_rjiter, state| {
-                state.borrow_mut().0 = true;
-                StreamOp::None
-            });
-            Some(action)
-        } else {
-            None
-        }
+    let find_action = |name: &[u8], _context: Vec<&[u8]>| -> Option<BoxedAction<(bool, bool)>> {
+        (name == b"#object").then(|| Box::new(set_begin_called) as BoxedAction<(bool, bool)>)
     };
     // find_end_action that matches #object with parent #top
-    let find_end_action = |name: &[u8], context: Vec<&[u8]>| -> Option<BoxedEndAction<(bool, bool)>> {
-        // Filter out "#top" from context before matching
-        let filtered_context: Vec<&[u8]> = context.iter().cloned().filter(|&c| c != b"#top").collect();
-        if iter_match(|| ["#object".as_bytes()], name, filtered_context.iter().cloned()) {
-            let action: BoxedEndAction<(bool, bool)> = Box::new(|state| {
-                state.borrow_mut().1 = true;
-                Ok(())
-            });
-            Some(action)
-        } else {
-            None
-        }
+    let find_end_action = |name: &[u8], _context: Vec<&[u8]>| -> Option<BoxedEndAction<(bool, bool)>> {
+        (name == b"#object").then(|| Box::new(set_end_called) as BoxedEndAction<(bool, bool)>)
     };
 
     scan(
@@ -400,33 +377,29 @@ fn notify_for_object_in_array() {
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let state = RefCell::new((0, 0)); // (begin_called, end_called)
 
+    // Action functions for #object in #array matching
+    fn increment_begin_count(_rjiter: &RefCell<RJiter>, state: &RefCell<(i32, i32)>) -> StreamOp {
+        state.borrow_mut().0 += 1;
+        StreamOp::None
+    }
+    fn increment_end_count(state: &RefCell<(i32, i32)>) -> Result<(), Box<dyn std::error::Error>> {
+        state.borrow_mut().1 += 1;
+        Ok(())
+    }
+
     // find_action that matches #object with parent #array and grandparent #top
     let find_action = |name: &[u8], context: Vec<&[u8]>| -> Option<BoxedAction<(i32, i32)>> {
         // Filter out "#top" from context before matching
         let filtered_context: Vec<&[u8]> = context.iter().cloned().filter(|&c| c != b"#top").collect();
-        if iter_match(|| ["#object".as_bytes(), "#array".as_bytes()], name, filtered_context.iter().cloned()) {
-            let action: BoxedAction<(i32, i32)> = Box::new(|_rjiter, state| {
-                state.borrow_mut().0 += 1;
-                StreamOp::None
-            });
-            Some(action)
-        } else {
-            None
-        }
+        iter_match(|| ["#object".as_bytes(), "#array".as_bytes()], name, filtered_context.iter().cloned())
+            .then(|| Box::new(increment_begin_count) as BoxedAction<(i32, i32)>)
     };
     // find_end_action that matches #object with parent #array and grandparent #top
     let find_end_action = |name: &[u8], context: Vec<&[u8]>| -> Option<BoxedEndAction<(i32, i32)>> {
         // Filter out "#top" from context before matching
         let filtered_context: Vec<&[u8]> = context.iter().cloned().filter(|&c| c != b"#top").collect();
-        if iter_match(|| ["#object".as_bytes(), "#array".as_bytes()], name, filtered_context.iter().cloned()) {
-            let action: BoxedEndAction<(i32, i32)> = Box::new(|state| {
-                state.borrow_mut().1 += 1;
-                Ok(())
-            });
-            Some(action)
-        } else {
-            None
-        }
+        iter_match(|| ["#object".as_bytes(), "#array".as_bytes()], name, filtered_context.iter().cloned())
+            .then(|| Box::new(increment_end_count) as BoxedEndAction<(i32, i32)>)
     };
 
     scan(
@@ -460,33 +433,29 @@ fn notify_for_array() {
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let state = RefCell::new((false, false)); // (begin_called, end_called)
 
+    // Action functions for #array with parent items matching
+    fn set_array_begin_called(_rjiter: &RefCell<RJiter>, state: &RefCell<(bool, bool)>) -> StreamOp {
+        state.borrow_mut().0 = true;
+        StreamOp::None
+    }
+    fn set_array_end_called(state: &RefCell<(bool, bool)>) -> Result<(), Box<dyn std::error::Error>> {
+        state.borrow_mut().1 = true;
+        Ok(())
+    }
+
     // find_action that matches #array with parent items
     let find_action = |name: &[u8], context: Vec<&[u8]>| -> Option<BoxedAction<(bool, bool)>> {
         // Filter out "#top" from context before matching
         let filtered_context: Vec<&[u8]> = context.iter().cloned().filter(|&c| c != b"#top").collect();
-        if iter_match(|| ["#array".as_bytes(), "items".as_bytes()], name, filtered_context.iter().cloned()) {
-            let action: BoxedAction<(bool, bool)> = Box::new(|_rjiter, state| {
-                state.borrow_mut().0 = true;
-                StreamOp::None
-            });
-            Some(action)
-        } else {
-            None
-        }
+        iter_match(|| ["#array".as_bytes(), "items".as_bytes()], name, filtered_context.iter().cloned())
+            .then(|| Box::new(set_array_begin_called) as BoxedAction<(bool, bool)>)
     };
     // find_end_action that matches #array with parent items
     let find_end_action = |name: &[u8], context: Vec<&[u8]>| -> Option<BoxedEndAction<(bool, bool)>> {
         // Filter out "#top" from context before matching
         let filtered_context: Vec<&[u8]> = context.iter().cloned().filter(|&c| c != b"#top").collect();
-        if iter_match(|| ["#array".as_bytes(), "items".as_bytes()], name, filtered_context.iter().cloned()) {
-            let action: BoxedEndAction<(bool, bool)> = Box::new(|state| {
-                state.borrow_mut().1 = true;
-                Ok(())
-            });
-            Some(action)
-        } else {
-            None
-        }
+        iter_match(|| ["#array".as_bytes(), "items".as_bytes()], name, filtered_context.iter().cloned())
+            .then(|| Box::new(set_array_end_called) as BoxedEndAction<(bool, bool)>)
     };
 
     scan(
@@ -514,39 +483,33 @@ fn client_can_consume_array() {
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let writer_cell = RefCell::new(Vec::new());
 
+    // Action functions for #array with parent items consuming
+    fn consume_array_and_write(rjiter_cell: &RefCell<RJiter>, writer: &RefCell<dyn Write>) -> StreamOp {
+        let mut rjiter = rjiter_cell.borrow_mut();
+        let mut writer = writer.borrow_mut();
+        writer.write_all(b"<array>").unwrap();
+        let value = rjiter.next_value().unwrap();
+        writer.write_all(format!("{value:?}").as_bytes()).unwrap();
+        StreamOp::ValueIsConsumed
+    }
+    fn write_array_end(writer: &RefCell<dyn Write>) -> Result<(), Box<dyn std::error::Error>> {
+        writer.borrow_mut().write_all(b"</array>").unwrap();
+        Ok(())
+    }
+
     // find_action that matches #array with parent items
     let find_action = |name: &[u8], context: Vec<&[u8]>| -> Option<BoxedAction<dyn Write>> {
         // Filter out "#top" from context before matching
         let filtered_context: Vec<&[u8]> = context.iter().cloned().filter(|&c| c != b"#top").collect();
-        if iter_match(|| ["#array".as_bytes(), "items".as_bytes()], name, filtered_context.iter().cloned()) {
-            let action: BoxedAction<dyn Write> = Box::new(
-                |rjiter_cell: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
-                    let mut rjiter = rjiter_cell.borrow_mut();
-                    let mut writer = writer.borrow_mut();
-                    writer.write_all(b"<array>").unwrap();
-                    let value = rjiter.next_value().unwrap();
-                    writer.write_all(format!("{value:?}").as_bytes()).unwrap();
-                    StreamOp::ValueIsConsumed
-                },
-            );
-            Some(action)
-        } else {
-            None
-        }
+        iter_match(|| ["#array".as_bytes(), "items".as_bytes()], name, filtered_context.iter().cloned())
+            .then(|| Box::new(consume_array_and_write) as BoxedAction<dyn Write>)
     };
     // find_end_action that matches #array with parent items
     let find_end_action = |name: &[u8], context: Vec<&[u8]>| -> Option<BoxedEndAction<dyn Write>> {
         // Filter out "#top" from context before matching
         let filtered_context: Vec<&[u8]> = context.iter().cloned().filter(|&c| c != b"#top").collect();
-        if iter_match(|| ["#array".as_bytes(), "items".as_bytes()], name, filtered_context.iter().cloned()) {
-            let action: BoxedEndAction<dyn Write> = Box::new(|writer: &RefCell<dyn Write>| {
-                writer.borrow_mut().write_all(b"</array>").unwrap();
-                Ok(())
-            });
-            Some(action)
-        } else {
-            None
-        }
+        iter_match(|| ["#array".as_bytes(), "items".as_bytes()], name, filtered_context.iter().cloned())
+            .then(|| Box::new(write_array_end) as BoxedEndAction<dyn Write>)
     };
 
     scan(
