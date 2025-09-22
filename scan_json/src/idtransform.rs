@@ -159,7 +159,63 @@ impl<'a> IdTransform<'a> {
 }
 
 // ---------------- Matchers
-// Note: Custom matchers have been replaced by the find_action closure below
+
+/// Creates a `find_action` closure for `idtransform` that handles all JSON elements
+///
+/// # Arguments
+/// * `idt_cell` - Reference cell containing the IdTransform state
+///
+/// # Returns
+/// `find_action` parameter for the `scan` function
+fn create_idtransform_find_action<'a>(
+    idt_cell: &'a RefCell<IdTransform<'a>>
+) -> impl Fn(&[u8], Vec<&[u8]>) -> Option<BoxedAction<IdTransform<'a>>> + 'a {
+    move |name: &[u8], context: Vec<&[u8]>| -> Option<BoxedAction<IdTransform<'a>>> {
+        if name == b"#atom" {
+            // Handle context for is_top_level
+            let mut idt = idt_cell.borrow_mut();
+            let context_count = context.len();
+            idt.is_top_level = context_count < 2;
+            Some(Box::new(on_atom))
+        } else if name == b"#object" {
+            let mut idt = idt_cell.borrow_mut();
+            let context_count = context.len();
+            idt.is_top_level = context_count < 2;
+            Some(Box::new(on_object))
+        } else if name == b"#array" {
+            let mut idt = idt_cell.borrow_mut();
+            let context_count = context.len();
+            idt.is_top_level = context_count < 2;
+            Some(Box::new(on_array))
+        } else {
+            // Handle key matching - match any key that isn't a special token
+            let mut idt = idt_cell.borrow_mut();
+            let name_str = String::from_utf8_lossy(name).to_string();
+            idt.seqpos = match &idt.seqpos {
+                IdtSequencePos::AtBeginning => IdtSequencePos::AtBeginningKey(name_str),
+                _ => IdtSequencePos::InMiddleKey(name_str),
+            };
+            Some(Box::new(on_key))
+        }
+    }
+}
+
+/// Creates a `find_end_action` closure for `idtransform` that handles end-of-structure events
+///
+/// # Returns
+/// `find_end_action` parameter for the `scan` function
+fn create_idtransform_find_end_action<'a>() -> impl Fn(&[u8], Vec<&[u8]>) -> Option<BoxedEndAction<IdTransform<'a>>> {
+    |name: &[u8], _context: Vec<&[u8]>| -> Option<BoxedEndAction<IdTransform<'a>>> {
+        if name == b"#object" {
+            Some(Box::new(on_object_end))
+        } else if name == b"#array" {
+            Some(Box::new(on_array_end))
+        } else {
+            None
+        }
+    }
+}
+
 
 // ---------------- Handlers
 
@@ -258,46 +314,9 @@ pub fn idtransform(
     let idt = IdTransform::new(writer);
     let idt_cell = RefCell::new(idt);
 
-    // Client finder function for regular actions
-    let find_action = |name: &[u8], context: Vec<&[u8]>| -> Option<BoxedAction<IdTransform>> {
-        if name == b"#atom" {
-            // Handle context for is_top_level
-            let mut idt = idt_cell.borrow_mut();
-            let context_count = context.len();
-            idt.is_top_level = context_count < 2;
-            Some(Box::new(on_atom))
-        } else if name == b"#object" {
-            let mut idt = idt_cell.borrow_mut();
-            let context_count = context.len();
-            idt.is_top_level = context_count < 2;
-            Some(Box::new(on_object))
-        } else if name == b"#array" {
-            let mut idt = idt_cell.borrow_mut();
-            let context_count = context.len();
-            idt.is_top_level = context_count < 2;
-            Some(Box::new(on_array))
-        } else {
-            // Handle key matching - match any key that isn't a special token
-            let mut idt = idt_cell.borrow_mut();
-            let name_str = String::from_utf8_lossy(name).to_string();
-            idt.seqpos = match &idt.seqpos {
-                IdtSequencePos::AtBeginning => IdtSequencePos::AtBeginningKey(name_str),
-                _ => IdtSequencePos::InMiddleKey(name_str),
-            };
-            Some(Box::new(on_key))
-        }
-    };
-
-    // Client finder function for end actions
-    let find_end_action = |name: &[u8], _context: Vec<&[u8]>| -> Option<BoxedEndAction<IdTransform>> {
-        if name == b"#object" {
-            Some(Box::new(on_object_end))
-        } else if name == b"#array" {
-            Some(Box::new(on_array_end))
-        } else {
-            None
-        }
-    };
+    // Use helper functions to create the finder closures
+    let find_action = create_idtransform_find_action(&idt_cell);
+    let find_end_action = create_idtransform_find_end_action();
 
     // Use an intermediate result to avoid: borrowed value does not live long enough
     let result = scan(
