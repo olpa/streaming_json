@@ -126,6 +126,8 @@ Associated values must implement the `Sized` trait and are stored using their me
 - `iter_assoc<T: Sized>(&self)` - Returns a forward iterator over associated values and data slices
 - `iter_assoc_rev<T: Sized>(&self)` - Returns a reverse iterator over associated values and data slices
 
+All iterators implement the `Clone` trait, allowing you to create independent copies that can be advanced separately.
+
 **Error Handling:**
 
 All operations that can fail return `Result<T, U8PoolError>` with these error types:
