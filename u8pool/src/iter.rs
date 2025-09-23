@@ -2,6 +2,9 @@ use crate::core::U8Pool;
 use crate::slice_descriptor::{SliceDescriptorIter, SliceDescriptorRevIter};
 
 /// Iterator over slices in a `U8Pool`
+///
+/// This iterator implements `Clone`.
+#[derive(Clone)]
 pub struct U8PoolIter<'a> {
     data: &'a [u8],
     descriptor_iter: SliceDescriptorIter<'a>,
@@ -35,6 +38,9 @@ impl<'a> IntoIterator for &'a U8Pool<'a> {
 }
 
 /// Reverse iterator over slices in a `U8Pool`
+///
+/// This iterator implements `Clone`.
+#[derive(Clone)]
 pub struct U8PoolRevIter<'a> {
     data: &'a [u8],
     descriptor_iter: SliceDescriptorRevIter<'a>,
@@ -66,6 +72,9 @@ impl ExactSizeIterator for U8PoolRevIter<'_> {}
 
 /// Iterator over key-value pairs in a `U8Pool`
 /// If there is an odd number of slices, the last slice is ignored.
+///
+/// This iterator implements `Clone`.
+#[derive(Clone)]
 pub struct U8PoolPairIter<'a> {
     iter: U8PoolIter<'a>,
 }
@@ -99,6 +108,9 @@ impl<'a> Iterator for U8PoolPairIter<'a> {
 impl ExactSizeIterator for U8PoolPairIter<'_> {}
 
 /// Iterator over associated values and data slices in a `U8Pool`
+///
+/// This iterator implements `Clone`.
+#[derive(Clone)]
 pub struct U8PoolAssocIter<'a, T> {
     pool: &'a U8Pool<'a>,
     current_index: usize,
@@ -133,6 +145,9 @@ impl<'a, T: Sized + 'a> Iterator for U8PoolAssocIter<'a, T> {
 impl<'a, T: Sized + 'a> ExactSizeIterator for U8PoolAssocIter<'a, T> {}
 
 /// Reverse iterator over associated values and data slices in a `U8Pool`
+///
+/// This iterator implements `Clone`.
+#[derive(Clone)]
 pub struct U8PoolAssocRevIter<'a, T> {
     pool: &'a U8Pool<'a>,
     current_index: usize,

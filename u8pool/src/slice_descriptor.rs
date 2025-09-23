@@ -95,6 +95,7 @@ impl<'a> SliceDescriptor<'a> {
 }
 
 /// Forward iterator over slice descriptors
+#[derive(Clone)]
 pub struct SliceDescriptorIter<'a> {
     descriptor: &'a SliceDescriptor<'a>,
     current: usize,
@@ -123,6 +124,7 @@ impl Iterator for SliceDescriptorIter<'_> {
 impl ExactSizeIterator for SliceDescriptorIter<'_> {}
 
 /// Reverse iterator over slice descriptors
+#[derive(Clone)]
 pub struct SliceDescriptorRevIter<'a> {
     descriptor: &'a SliceDescriptor<'a>,
     current: usize,
