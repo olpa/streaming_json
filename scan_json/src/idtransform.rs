@@ -31,6 +31,7 @@ use crate::{
     Options, RJiter, Result as ScanResult,
     BoxedAction, BoxedEndAction,
 };
+use crate::stack::ContextIter;
 use std::cell::RefCell;
 use std::io::Write;
 use u8pool::U8Pool;
@@ -169,8 +170,9 @@ impl<'a> IdTransform<'a> {
 /// `find_action` parameter for the `scan` function
 fn create_idtransform_find_action<'a>(
     idt_cell: &'a RefCell<IdTransform<'a>>
-) -> impl Fn(&[u8], Vec<&[u8]>) -> Option<BoxedAction<IdTransform<'a>>> + 'a {
-    move |name: &[u8], context: Vec<&[u8]>| -> Option<BoxedAction<IdTransform<'a>>> {
+) -> impl Fn(&[u8], ContextIter) -> Option<BoxedAction<IdTransform<'a>>> + 'a {
+    move |name: &[u8], context: ContextIter| -> Option<BoxedAction<IdTransform<'a>>> {
+        let context: Vec<&[u8]> = context.collect();
         if name == b"#atom" {
             // Handle context for is_top_level
             let mut idt = idt_cell.borrow_mut();
@@ -204,8 +206,8 @@ fn create_idtransform_find_action<'a>(
 ///
 /// # Returns
 /// `find_end_action` parameter for the `scan` function
-fn create_idtransform_find_end_action<'a>() -> impl Fn(&[u8], Vec<&[u8]>) -> Option<BoxedEndAction<IdTransform<'a>>> {
-    |name: &[u8], _context: Vec<&[u8]>| -> Option<BoxedEndAction<IdTransform<'a>>> {
+fn create_idtransform_find_end_action<'a>() -> impl Fn(&[u8], ContextIter) -> Option<BoxedEndAction<IdTransform<'a>>> {
+    |name: &[u8], _context: ContextIter| -> Option<BoxedEndAction<IdTransform<'a>>> {
         if name == b"#object" {
             Some(Box::new(on_object_end))
         } else if name == b"#array" {

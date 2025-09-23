@@ -1,5 +1,7 @@
 //! This module contains functions for matching JSON nodes based on their name and context.
 
+use crate::stack::ContextIter;
+
 /// Determines if a node matches against a sequence of names using an iterator-based approach.
 ///
 /// To return true (to match), the whole iterator should be consumed, and the names
@@ -26,12 +28,11 @@
 ///
 /// * `true` if the node matches the criteria
 /// * `false` otherwise
-pub fn iter_match<'a, F, T, Item, I>(iter_creator: F, name: &[u8], mut context: I) -> bool
+pub fn iter_match<F, T, Item>(iter_creator: F, name: &[u8], mut context: ContextIter) -> bool
 where
     F: Fn() -> T,
     T: IntoIterator<Item = Item>,
     Item: AsRef<[u8]>,
-    I: Iterator<Item = &'a [u8]>,
 {
     let mut expected = iter_creator().into_iter();
 
@@ -73,9 +74,7 @@ where
 /// # Returns
 ///
 /// * Always returns `false`
-pub fn debug_print_no_match<'a, I>(name: &[u8], context: I) -> bool
-where
-    I: Iterator<Item = &'a [u8]>,
+pub fn debug_print_no_match(name: &[u8], context: ContextIter) -> bool
 {
     println!("debug_print_no_match: name: {:?}", name);
     for (i, ctx) in context.enumerate() {

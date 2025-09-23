@@ -27,17 +27,11 @@ impl Options {
     }
 }
 
-/// Metadata associated with each context frame in the `U8Pool` stack
-#[derive(Debug, Clone, Copy)]
-struct StateFrame {
-    is_in_object: bool,
-    is_in_array: bool,
-    is_elem_begin: bool,
-}
+use crate::stack::{StateFrame, ContextIter};
 
 /// Helper function to build context iterator from U8Pool for matchers
-fn build_context_iter<'a>(pool: &'a U8Pool) -> impl Iterator<Item = &'a [u8]> + Clone + 'a {
-    pool.iter_assoc::<StateFrame>().map(|(_assoc, key_slice)| key_slice).collect::<Vec<_>>().into_iter()
+fn build_context_iter<'a>(pool: &'a U8Pool) -> ContextIter<'a> {
+    ContextIter::new(pool.iter_assoc::<StateFrame>())
 }
 
 // Handle a JSON object key
@@ -46,18 +40,15 @@ fn build_context_iter<'a>(pool: &'a U8Pool) -> impl Iterator<Item = &'a [u8]> + 
 // - Call the action for the current key
 // - Pop the context stack if the object is ended
 // - Push the current key onto the context stack
-fn handle_object<'a, FindAction, FindEndAction, T: ?Sized>(
+fn handle_object<'a, T: ?Sized>(
     rjiter_cell: &RefCell<RJiter>,
     baton_cell: &RefCell<T>,
-    find_action: &FindAction,
-    find_end_action: &FindEndAction,
+    find_action: &impl Fn(&[u8], ContextIter) -> Option<BoxedAction<T>>,
+    find_end_action: &impl Fn(&[u8], ContextIter) -> Option<BoxedEndAction<T>>,
     mut cur_level_frame: StateFrame,
     mut cur_level_key: Vec<u8>,
     context: &'a mut U8Pool,
 ) -> ScanResult<(StreamOp, StateFrame, Vec<u8>)>
-where
-    FindAction: for<'context> Fn(&[u8], impl Iterator<Item = &'context [u8]> + Clone) -> Option<BoxedAction<T>>,
-    FindEndAction: for<'context> Fn(&[u8], impl Iterator<Item = &'context [u8]> + Clone) -> Option<BoxedEndAction<T>>,
 {
     {
         //
@@ -153,18 +144,15 @@ where
 
 // Handle a JSON array item.
 // Pop the context stack if the array is ended.
-fn handle_array<FindAction, FindEndAction, T: ?Sized>(
+fn handle_array<T: ?Sized>(
     rjiter_cell: &RefCell<RJiter>,
     baton_cell: &RefCell<T>,
-    find_action: &FindAction,
-    find_end_action: &FindEndAction,
+    find_action: &impl Fn(&[u8], ContextIter) -> Option<BoxedAction<T>>,
+    find_end_action: &impl Fn(&[u8], ContextIter) -> Option<BoxedEndAction<T>>,
     mut cur_level_frame: StateFrame,
     cur_level_key: Vec<u8>,
     context: &mut U8Pool,
 ) -> ScanResult<(Option<Peek>, StateFrame, Vec<u8>)>
-where
-    FindAction: for<'context> Fn(&[u8], impl Iterator<Item = &'context [u8]> + Clone) -> Option<BoxedAction<T>>,
-    FindEndAction: for<'context> Fn(&[u8], impl Iterator<Item = &'context [u8]> + Clone) -> Option<BoxedEndAction<T>>,
 {
     // Call the begin-trigger at the beginning of the array
     let mut is_array_consumed = false;
@@ -277,17 +265,14 @@ fn push_context(context: &mut U8Pool, cur_level_frame: StateFrame, cur_level_key
 /// * `ScanError` - A wrapper over `Rjiter` errors, over an error from a trigger actions, or over wrong JSON structure
 /// * `MaxNestingExceeded` - When the JSON nesting depth exceeds the working buffer capacity
 #[allow(clippy::too_many_lines)]
-pub fn scan<FindAction, FindEndAction, T: ?Sized>(
-    find_action: FindAction,
-    find_end_action: FindEndAction,
+pub fn scan<T: ?Sized>(
+    find_action: impl Fn(&[u8], ContextIter) -> Option<BoxedAction<T>>,
+    find_end_action: impl Fn(&[u8], ContextIter) -> Option<BoxedEndAction<T>>,
     rjiter_cell: &RefCell<RJiter>,
     baton_cell: &RefCell<T>,
     working_buffer: &mut U8Pool,
     options: &Options,
 ) -> ScanResult<()>
-where
-    FindAction: for<'context> Fn(&[u8], impl Iterator<Item = &'context [u8]> + Clone) -> Option<BoxedAction<T>>,
-    FindEndAction: for<'context> Fn(&[u8], impl Iterator<Item = &'context [u8]> + Clone) -> Option<BoxedEndAction<T>>,
 {
     let context = working_buffer; // Alias for better readability in function body
     let mut cur_level_key_storage = Vec::from(b"#top" as &[u8]);

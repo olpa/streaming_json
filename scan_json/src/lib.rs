@@ -5,6 +5,7 @@ pub mod error;
 pub mod idtransform;
 pub mod matcher;
 pub mod scan;
+pub mod stack;
 
 pub use action::{BoxedAction, BoxedEndAction, StreamOp};
 pub use error::{Error, Result};
