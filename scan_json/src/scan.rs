@@ -9,8 +9,6 @@ use std::cell::RefCell;
 use std::io;
 use u8pool::U8Pool;
 
-/// Type alias for context iterator (simple concrete type)
-type ContextIterator<'context> = Vec<&'context [u8]>;
 
 /// Options for configuring the scan behavior
 #[derive(Debug, Clone, Default)]
@@ -38,8 +36,8 @@ struct StateFrame {
 }
 
 /// Helper function to build context iterator from U8Pool for matchers
-fn build_context_iter<'a>(pool: &'a U8Pool) -> ContextIterator<'a> {
-    pool.iter_assoc::<StateFrame>().map(|(_assoc, key_slice)| key_slice).collect()
+fn build_context_iter<'a>(pool: &'a U8Pool) -> impl Iterator<Item = &'a [u8]> + Clone + 'a {
+    pool.iter_assoc::<StateFrame>().map(|(_assoc, key_slice)| key_slice).collect::<Vec<_>>().into_iter()
 }
 
 // Handle a JSON object key
@@ -58,8 +56,8 @@ fn handle_object<'a, FindAction, FindEndAction, T: ?Sized>(
     context: &'a mut U8Pool,
 ) -> ScanResult<(StreamOp, StateFrame, Vec<u8>)>
 where
-    FindAction: for<'context> Fn(&[u8], ContextIterator<'context>) -> Option<BoxedAction<T>>,
-    FindEndAction: for<'context> Fn(&[u8], ContextIterator<'context>) -> Option<BoxedEndAction<T>>,
+    FindAction: for<'context> Fn(&[u8], impl Iterator<Item = &'context [u8]> + Clone) -> Option<BoxedAction<T>>,
+    FindEndAction: for<'context> Fn(&[u8], impl Iterator<Item = &'context [u8]> + Clone) -> Option<BoxedEndAction<T>>,
 {
     {
         //
@@ -165,8 +163,8 @@ fn handle_array<FindAction, FindEndAction, T: ?Sized>(
     context: &mut U8Pool,
 ) -> ScanResult<(Option<Peek>, StateFrame, Vec<u8>)>
 where
-    FindAction: for<'context> Fn(&[u8], ContextIterator<'context>) -> Option<BoxedAction<T>>,
-    FindEndAction: for<'context> Fn(&[u8], ContextIterator<'context>) -> Option<BoxedEndAction<T>>,
+    FindAction: for<'context> Fn(&[u8], impl Iterator<Item = &'context [u8]> + Clone) -> Option<BoxedAction<T>>,
+    FindEndAction: for<'context> Fn(&[u8], impl Iterator<Item = &'context [u8]> + Clone) -> Option<BoxedEndAction<T>>,
 {
     // Call the begin-trigger at the beginning of the array
     let mut is_array_consumed = false;
@@ -288,8 +286,8 @@ pub fn scan<FindAction, FindEndAction, T: ?Sized>(
     options: &Options,
 ) -> ScanResult<()>
 where
-    FindAction: for<'context> Fn(&[u8], ContextIterator<'context>) -> Option<BoxedAction<T>>,
-    FindEndAction: for<'context> Fn(&[u8], ContextIterator<'context>) -> Option<BoxedEndAction<T>>,
+    FindAction: for<'context> Fn(&[u8], impl Iterator<Item = &'context [u8]> + Clone) -> Option<BoxedAction<T>>,
+    FindEndAction: for<'context> Fn(&[u8], impl Iterator<Item = &'context [u8]> + Clone) -> Option<BoxedEndAction<T>>,
 {
     let context = working_buffer; // Alias for better readability in function body
     let mut cur_level_key_storage = Vec::from(b"#top" as &[u8]);
