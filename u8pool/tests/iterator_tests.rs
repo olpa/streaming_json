@@ -1,5 +1,11 @@
 use u8pool::U8Pool;
 
+#[derive(Debug, PartialEq, Clone, Copy)]
+struct Point {
+    x: i32,
+    y: i32,
+}
+
 #[test]
 fn test_iterator_empty_vector() {
     let mut buffer = [0u8; 600];
@@ -218,7 +224,7 @@ fn test_pair_iterator_clone() {
     u8pool.push(b"key2").unwrap();
     u8pool.push(b"value2").unwrap();
 
-    let mut iter1 = u8pool.pair_iter();
+    let mut iter1 = u8pool.pairs();
     let iter2 = iter1.clone();
 
     // Both iterators should start at the same position
@@ -244,10 +250,10 @@ fn test_assoc_iterator_clone() {
     let mut buffer = [0u8; 600];
     let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
-    u8pool.push_assoc(&42u32, b"first").unwrap();
-    u8pool.push_assoc(&84u32, b"second").unwrap();
+    u8pool.push_assoc(Point { x: 10, y: 20 }, b"first").unwrap();
+    u8pool.push_assoc(Point { x: 30, y: 40 }, b"second").unwrap();
 
-    let mut iter1 = u8pool.assoc_iter::<u32>();
+    let mut iter1 = u8pool.iter_assoc::<Point>();
     let iter2 = iter1.clone();
 
     // Both iterators should start at the same position
@@ -256,7 +262,7 @@ fn test_assoc_iterator_clone() {
 
     // Advance the first iterator
     let (val, data) = iter1.next().unwrap();
-    assert_eq!(*val, 42u32);
+    assert_eq!(*val, Point { x: 10, y: 20 });
     assert_eq!(data, b"first");
     assert_eq!(iter1.size_hint(), (1, Some(1)));
 
@@ -264,12 +270,12 @@ fn test_assoc_iterator_clone() {
     let mut iter2_clone = iter2.clone();
     assert_eq!(iter2_clone.size_hint(), (2, Some(2)));
     let (val, data) = iter2_clone.next().unwrap();
-    assert_eq!(*val, 42u32);
+    assert_eq!(*val, Point { x: 10, y: 20 });
     assert_eq!(data, b"first");
 
     // Continue with first iterator
     let (val, data) = iter1.next().unwrap();
-    assert_eq!(*val, 84u32);
+    assert_eq!(*val, Point { x: 30, y: 40 });
     assert_eq!(data, b"second");
     assert_eq!(iter1.next(), None);
 }
@@ -279,10 +285,10 @@ fn test_assoc_reverse_iterator_clone() {
     let mut buffer = [0u8; 600];
     let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
-    u8pool.push_assoc(&42u32, b"first").unwrap();
-    u8pool.push_assoc(&84u32, b"second").unwrap();
+    u8pool.push_assoc(Point { x: 10, y: 20 }, b"first").unwrap();
+    u8pool.push_assoc(Point { x: 30, y: 40 }, b"second").unwrap();
 
-    let mut iter1 = u8pool.assoc_iter_rev::<u32>();
+    let mut iter1 = u8pool.iter_assoc_rev::<Point>();
     let iter2 = iter1.clone();
 
     // Both iterators should start at the same position
@@ -291,7 +297,7 @@ fn test_assoc_reverse_iterator_clone() {
 
     // Advance the first iterator
     let (val, data) = iter1.next().unwrap();
-    assert_eq!(*val, 84u32);
+    assert_eq!(*val, Point { x: 30, y: 40 });
     assert_eq!(data, b"second");
     assert_eq!(iter1.size_hint(), (1, Some(1)));
 
@@ -299,12 +305,12 @@ fn test_assoc_reverse_iterator_clone() {
     let mut iter2_clone = iter2.clone();
     assert_eq!(iter2_clone.size_hint(), (2, Some(2)));
     let (val, data) = iter2_clone.next().unwrap();
-    assert_eq!(*val, 84u32);
+    assert_eq!(*val, Point { x: 30, y: 40 });
     assert_eq!(data, b"second");
 
     // Continue with first iterator
     let (val, data) = iter1.next().unwrap();
-    assert_eq!(*val, 42u32);
+    assert_eq!(*val, Point { x: 10, y: 20 });
     assert_eq!(data, b"first");
     assert_eq!(iter1.next(), None);
 }
