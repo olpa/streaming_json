@@ -251,7 +251,9 @@ fn test_assoc_iterator_clone() {
     let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
     u8pool.push_assoc(Point { x: 10, y: 20 }, b"first").unwrap();
-    u8pool.push_assoc(Point { x: 30, y: 40 }, b"second").unwrap();
+    u8pool
+        .push_assoc(Point { x: 30, y: 40 }, b"second")
+        .unwrap();
 
     let mut iter1 = u8pool.iter_assoc::<Point>();
     let iter2 = iter1.clone();
@@ -286,7 +288,9 @@ fn test_assoc_reverse_iterator_clone() {
     let mut u8pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
     u8pool.push_assoc(Point { x: 10, y: 20 }, b"first").unwrap();
-    u8pool.push_assoc(Point { x: 30, y: 40 }, b"second").unwrap();
+    u8pool
+        .push_assoc(Point { x: 30, y: 40 }, b"second")
+        .unwrap();
 
     let mut iter1 = u8pool.iter_assoc_rev::<Point>();
     let iter2 = iter1.clone();
