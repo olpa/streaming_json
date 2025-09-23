@@ -3,7 +3,7 @@
 //! Contains the StateFrame definition and ContextIter wrapper for navigating
 //! the parsing context stack.
 
-use u8pool::U8PoolAssocIter;
+use u8pool::{U8Pool, U8PoolAssocIter};
 
 /// Metadata associated with each context frame in the `U8Pool` stack
 #[derive(Debug, Clone, Copy)]
@@ -20,8 +20,8 @@ pub struct ContextIter<'a> {
 }
 
 impl<'a> ContextIter<'a> {
-    pub fn new(iter: U8PoolAssocIter<'a, StateFrame>) -> Self {
-        Self { inner: iter }
+    pub fn new(pool: &'a U8Pool) -> Self {
+        Self { inner: pool.iter_assoc::<StateFrame>() }
     }
 }
 

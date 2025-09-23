@@ -29,10 +29,6 @@ impl Options {
 
 use crate::stack::{StateFrame, ContextIter};
 
-/// Helper function to build context iterator from U8Pool for matchers
-fn build_context_iter<'a>(pool: &'a U8Pool) -> ContextIter<'a> {
-    ContextIter::new(pool.iter_assoc::<StateFrame>())
-}
 
 // Handle a JSON object key
 //
@@ -55,7 +51,7 @@ fn handle_object<'a, T: ?Sized>(
         // Call the begin-trigger for the object
         //
         if cur_level_frame.is_elem_begin {
-            if let Some(begin_action) = find_action(b"#object", build_context_iter(context)) {
+            if let Some(begin_action) = find_action(b"#object", ContextIter::new(context)) {
                 match begin_action(rjiter_cell, baton_cell) {
                     StreamOp::None => (),
                     StreamOp::Error(e) => {
@@ -78,7 +74,7 @@ fn handle_object<'a, T: ?Sized>(
         // Call the end-trigger for the previous key
         //
         if !cur_level_frame.is_elem_begin {
-            if let Some(end_action) = find_end_action(&cur_level_key, build_context_iter(context)) {
+            if let Some(end_action) = find_end_action(&cur_level_key, ContextIter::new(context)) {
                 if let Err(e) = end_action(baton_cell) {
                     return Err(ScanError::ActionError(
                         e,
@@ -108,7 +104,7 @@ fn handle_object<'a, T: ?Sized>(
             //
             // Call the end-trigger for the object
             //
-            if let Some(end_action) = find_end_action(b"#object", build_context_iter(context)) {
+            if let Some(end_action) = find_end_action(b"#object", ContextIter::new(context)) {
                 if let Err(e) = end_action(baton_cell) {
                     return Err(ScanError::ActionError(
                         e,
@@ -129,7 +125,7 @@ fn handle_object<'a, T: ?Sized>(
     //
     // Execute the action for the current key
     //
-    if let Some(action) = find_action(&cur_level_key, build_context_iter(context)) {
+    if let Some(action) = find_action(&cur_level_key, ContextIter::new(context)) {
         let action_result = action(rjiter_cell, baton_cell);
         return match action_result {
             StreamOp::Error(e) => Err(ScanError::ActionError(
@@ -157,7 +153,7 @@ fn handle_array<T: ?Sized>(
     // Call the begin-trigger at the beginning of the array
     let mut is_array_consumed = false;
     if cur_level_frame.is_elem_begin {
-        if let Some(begin_action) = find_action(b"#array", build_context_iter(context)) {
+        if let Some(begin_action) = find_action(b"#array", ContextIter::new(context)) {
             match begin_action(rjiter_cell, baton_cell) {
                 StreamOp::None => (),
                 StreamOp::ValueIsConsumed => is_array_consumed = true,
@@ -184,7 +180,7 @@ fn handle_array<T: ?Sized>(
     // Call the end-trigger at the end of the array
     let peeked = apickedr?;
     if peeked.is_none() {
-        if let Some(end_action) = find_end_action(b"#array", build_context_iter(context)) {
+        if let Some(end_action) = find_end_action(b"#array", ContextIter::new(context)) {
             if let Err(e) = end_action(baton_cell) {
                 let rjiter = rjiter_cell.borrow();
                 return Err(ScanError::ActionError(e, rjiter.current_index()));
@@ -394,7 +390,7 @@ pub fn scan<T: ?Sized>(
         push_context(context, cur_level_frame, &cur_level_key_storage, &rjiter)?;
 
         // Find action with current context
-        let action = find_action(b"#atom", build_context_iter(context));
+        let action = find_action(b"#atom", ContextIter::new(context));
 
         // Pop the context we just pushed
         let (frame, key_slice) = context.pop_assoc::<StateFrame>().ok_or_else(|| {
