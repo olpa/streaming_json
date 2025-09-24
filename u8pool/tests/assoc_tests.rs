@@ -848,4 +848,3 @@ fn test_replace_top_assoc_bytes_buffer_overflow() {
     assert_eq!(*key, Point { x: 1, y: 2 });
     assert_eq!(data, b"orig");
 }
-

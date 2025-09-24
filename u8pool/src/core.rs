@@ -431,16 +431,20 @@ impl<'a> U8Pool<'a> {
     /// - The last pushed item was indeed pushed with `push_assoc`
     /// - The type `T` matches the original associated type
     ///
-    pub fn replace_top_assoc_bytes<T: Sized>(&mut self, new_data: &[u8]) -> Result<&[u8], U8PoolError> {
+    pub fn replace_top_assoc_bytes<T: Sized>(
+        &mut self,
+        new_data: &[u8],
+    ) -> Result<&[u8], U8PoolError> {
         if self.count == 0 {
             return Err(U8PoolError::IndexOutOfBounds {
                 index: 0,
-                length: 0
+                length: 0,
             });
         }
 
         let last_index = self.count - 1;
-        let (start, assoc_end, _data_end) = self.get_validated_assoc_positions::<T>(last_index)
+        let (start, assoc_end, _data_end) = self
+            .get_validated_assoc_positions::<T>(last_index)
             .ok_or(U8PoolError::InvalidInitialization {
                 reason: "failed to get validated positions for top item",
             })?;
