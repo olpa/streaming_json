@@ -824,7 +824,7 @@ fn test_replace_top_assoc_bytes_empty_pool() {
 
     // Try to replace on empty pool
     let result = pool.replace_top_assoc_bytes::<Point>(b"test");
-    assert!(result.is_none());
+    assert!(matches!(result, Err(U8PoolError::IndexOutOfBounds { .. })));
 }
 
 #[test]
@@ -839,8 +839,8 @@ fn test_replace_top_assoc_bytes_buffer_overflow() {
     let large_data = [0u8; 100];
     let result = pool.replace_top_assoc_bytes::<Point>(&large_data);
 
-    // Should return None for buffer overflow
-    assert!(result.is_none());
+    // Should return BufferOverflow error
+    assert!(matches!(result, Err(U8PoolError::BufferOverflow { .. })));
 
     // Original data should remain unchanged
     assert_eq!(pool.len(), 1);

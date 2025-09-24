@@ -412,6 +412,64 @@ impl<'a> U8Pool<'a> {
         }
     }
 
+    /// Replaces the data bytes of the top associated item with new data, keeping the associated object unchanged.
+    ///
+    /// This function is optimized compared to `pop_assoc` followed by `push_assoc` by reusing the same
+    /// memory location for the data portion. The associated object remains in its original location
+    /// and is not modified.
+    ///
+    /// Returns a reference to the new data slice if successful.
+    ///
+    /// # Errors
+    ///
+    /// Returns `U8PoolError::IndexOutOfBounds` if the pool is empty.
+    /// Returns `U8PoolError::BufferOverflow` if there is insufficient space in the buffer for the new data.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that:
+    /// - The last pushed item was indeed pushed with `push_assoc`
+    /// - The type `T` matches the original associated type
+    ///
+    pub fn replace_top_assoc_bytes<T: Sized>(&mut self, new_data: &[u8]) -> Result<&[u8], U8PoolError> {
+        if self.count == 0 {
+            return Err(U8PoolError::IndexOutOfBounds {
+                index: 0,
+                length: 0
+            });
+        }
+
+        let last_index = self.count - 1;
+        let (start, assoc_end, _data_end) = self.get_validated_assoc_positions::<T>(last_index)
+            .ok_or(U8PoolError::InvalidInitialization {
+                reason: "failed to get validated positions for top item",
+            })?;
+
+        // Calculate space needed for new data
+        let new_data_size = new_data.len();
+        let new_end = assoc_end + new_data_size;
+
+        // Check if new data fits in the available buffer space
+        if new_end > self.data.len() {
+            return Err(U8PoolError::BufferOverflow {
+                requested: new_data_size,
+                available: self.data.len().saturating_sub(assoc_end),
+            });
+        }
+
+        // Overwrite the data portion in place
+        // Safe: We've verified that new_end <= self.data.len()
+        #[allow(clippy::indexing_slicing)]
+        let data_slice = &mut self.data[assoc_end..new_end];
+        data_slice.copy_from_slice(new_data);
+
+        // Update the descriptor with the new total length
+        let new_total_length = (assoc_end - start) + new_data_size;
+        self.descriptor.set(last_index, start, new_total_length)?;
+
+        Ok(data_slice)
+    }
+
     // -------------------------------------------------------------------------
     // Iterators
     //
