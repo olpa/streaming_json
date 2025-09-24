@@ -112,6 +112,7 @@ Associated values must implement the `Sized` trait and are stored using their me
 - `push_assoc<T: Sized>(&mut self, assoc: T, data: &[u8]) -> Result<(&T, &[u8]), U8PoolError>` - Adds an associated value followed by a data slice and returns references to the stored values. Automatically handles memory alignment with padding as needed.
 - `pop_assoc<T: Sized>(&mut self) -> Option<(&T, &[u8])>` - Removes and returns the last associated value and data slice
 - `get_assoc<T: Sized>(&self, index: usize) -> Option<(&T, &[u8])>` - Accesses an associated value and data slice by index
+- `replace_top_assoc_bytes<T: Sized>(&mut self, new_data: &[u8]) -> Result<&[u8], U8PoolError>` - Optimized replacement of the top item's data bytes while keeping the associated object unchanged
 
 **Information:**
 
@@ -135,6 +136,7 @@ All operations that can fail return `Result<T, U8PoolError>` with these error ty
 - `InvalidInitialization` - Invalid buffer or `max_slices` parameter
 - `SliceLimitExceeded` - Too many slices have been added
 - `BufferOverflow` - Insufficient space for data
+- `IndexOutOfBounds` - Attempted to access an index beyond the current length
 - `ValueTooLarge` - Slice position or length exceeds `u16::MAX`
 
 
