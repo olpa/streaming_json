@@ -790,3 +790,78 @@ fn test_push_assoc_return_value_with_alignment_requirements() {
     assert_eq!(*get_4, aligned4_val);
     assert_eq!(get_data_4, b"four");
 }
+
+#[test]
+fn test_replace_top_assoc_bytes_basic() {
+    let mut buffer = [0u8; 256];
+    let mut pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+    let key = Point { x: 42, y: 100 };
+
+    // Push initial data and keep references returned by push_assoc
+    let (_, orig_data_ref) = pool.push_assoc(key, b"orig").unwrap();
+    assert_eq!(pool.len(), 1);
+    assert_eq!(orig_data_ref, b"orig");
+    let orig_data_ptr = orig_data_ref.as_ptr();
+
+    // Replace only the data bytes, keeping the same associated object
+    let new_data_ref = pool.replace_top_assoc_bytes(b"replaced").unwrap();
+
+    // Verify the new data is correct
+    assert_eq!(new_data_ref, b"replaced");
+
+    // Pool should still have 1 item
+    assert_eq!(pool.len(), 1);
+
+    // Verify the top item has the original key but new data
+    let (top_key, top_data) = pool.get_assoc::<Point>(0).unwrap();
+    assert_eq!(*top_key, Point { x: 42, y: 100 }); // Key unchanged
+    assert_eq!(top_data, b"replaced");
+
+    // IMPORTANT: Verify that the original data reference is now corrupted
+    // because the memory was reused (this is the optimization)
+    assert_eq!(orig_data_ref, b"repl"); // "orig" becomes "repl" after overwrite
+    assert_eq!(orig_data_ptr, new_data_ref.as_ptr()); // Same memory location
+}
+
+#[test]
+fn test_replace_top_assoc_bytes_empty_pool() {
+    let mut buffer = [0u8; 256];
+    let mut pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+    // Try to replace on empty pool
+    let result = pool.replace_top_assoc_bytes::<Point>(b"test");
+    assert!(result.is_none());
+}
+
+#[test]
+fn test_replace_top_assoc_bytes_different_sizes() {
+    let mut buffer = [0u8; 512];
+    let mut pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+    let key = Point { x: 1, y: 2 };
+
+    // Push small initial data and keep references
+    let (_, orig_data_ref) = pool.push_assoc(key, b"orig").unwrap();
+    let orig_data_ptr = orig_data_ref.as_ptr();
+
+    // Replace with larger data
+    let large_data = b"this is much larger data than before";
+    let new_data_ref = pool.replace_top_assoc_bytes(large_data).unwrap();
+
+    assert_eq!(new_data_ref, large_data);
+
+    // Verify pool state
+    assert_eq!(pool.len(), 1);
+
+    // Verify the associated object is unchanged
+    let (top_key, top_data) = pool.get_assoc::<Point>(0).unwrap();
+    assert_eq!(*top_key, Point { x: 1, y: 2 }); // Key should be unchanged
+    assert_eq!(top_data, large_data);
+
+    // The original reference should now point to the beginning of the new data
+    assert_eq!(orig_data_ptr, new_data_ref.as_ptr());
+    // Original "orig" is now corrupted to "this" (first 4 bytes of new data)
+    assert_eq!(orig_data_ref, b"this");
+}
+
