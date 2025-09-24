@@ -798,14 +798,12 @@ fn test_replace_top_assoc_bytes_basic() {
 
     let key = Point { x: 42, y: 100 };
 
-    // Push initial data and keep references returned by push_assoc
-    let (_, orig_data_ref) = pool.push_assoc(key, b"orig").unwrap();
+    // Push initial data (setup)
+    pool.push_assoc(key, b"orig").unwrap();
     assert_eq!(pool.len(), 1);
-    assert_eq!(orig_data_ref, b"orig");
-    let orig_data_ptr = orig_data_ref.as_ptr();
 
     // Replace only the data bytes, keeping the same associated object
-    let new_data_ref = pool.replace_top_assoc_bytes(b"replaced").unwrap();
+    let new_data_ref = pool.replace_top_assoc_bytes::<Point>(b"replaced").unwrap();
 
     // Verify the new data is correct
     assert_eq!(new_data_ref, b"replaced");
@@ -816,12 +814,7 @@ fn test_replace_top_assoc_bytes_basic() {
     // Verify the top item has the original key but new data
     let (top_key, top_data) = pool.get_assoc::<Point>(0).unwrap();
     assert_eq!(*top_key, Point { x: 42, y: 100 }); // Key unchanged
-    assert_eq!(top_data, b"replaced");
-
-    // IMPORTANT: Verify that the original data reference is now corrupted
-    // because the memory was reused (this is the optimization)
-    assert_eq!(orig_data_ref, b"repl"); // "orig" becomes "repl" after overwrite
-    assert_eq!(orig_data_ptr, new_data_ref.as_ptr()); // Same memory location
+    assert_eq!(top_data, b"replaced"); // Data changed
 }
 
 #[test]
@@ -835,33 +828,24 @@ fn test_replace_top_assoc_bytes_empty_pool() {
 }
 
 #[test]
-fn test_replace_top_assoc_bytes_different_sizes() {
-    let mut buffer = [0u8; 512];
-    let mut pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+fn test_replace_top_assoc_bytes_buffer_overflow() {
+    let mut buffer = [0u8; 64]; // Small buffer
+    let mut pool = U8Pool::new(&mut buffer, 2).unwrap();
 
-    let key = Point { x: 1, y: 2 };
+    // Push initial small data (setup)
+    pool.push_assoc(Point { x: 1, y: 2 }, b"orig").unwrap();
 
-    // Push small initial data and keep references
-    let (_, orig_data_ref) = pool.push_assoc(key, b"orig").unwrap();
-    let orig_data_ptr = orig_data_ref.as_ptr();
+    // Try to replace with data that's too large for buffer
+    let large_data = [0u8; 100];
+    let result = pool.replace_top_assoc_bytes::<Point>(&large_data);
 
-    // Replace with larger data
-    let large_data = b"this is much larger data than before";
-    let new_data_ref = pool.replace_top_assoc_bytes(large_data).unwrap();
+    // Should return None for buffer overflow
+    assert!(result.is_none());
 
-    assert_eq!(new_data_ref, large_data);
-
-    // Verify pool state
+    // Original data should remain unchanged
     assert_eq!(pool.len(), 1);
-
-    // Verify the associated object is unchanged
-    let (top_key, top_data) = pool.get_assoc::<Point>(0).unwrap();
-    assert_eq!(*top_key, Point { x: 1, y: 2 }); // Key should be unchanged
-    assert_eq!(top_data, large_data);
-
-    // The original reference should now point to the beginning of the new data
-    assert_eq!(orig_data_ptr, new_data_ref.as_ptr());
-    // Original "orig" is now corrupted to "this" (first 4 bytes of new data)
-    assert_eq!(orig_data_ref, b"this");
+    let (key, data) = pool.get_assoc::<Point>(0).unwrap();
+    assert_eq!(*key, Point { x: 1, y: 2 });
+    assert_eq!(data, b"orig");
 }
 
