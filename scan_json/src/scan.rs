@@ -42,9 +42,9 @@ fn handle_object<'a, T: ?Sized>(
     find_action: &impl Fn(&[u8], ContextIter) -> Option<BoxedAction<T>>,
     find_end_action: &impl Fn(&[u8], ContextIter) -> Option<BoxedEndAction<T>>,
     mut cur_level_frame: StateFrame,
-    mut cur_level_key: Vec<u8>,
+    mut cur_level_key: &'a [u8],
     context: &'a mut U8Pool,
-) -> ScanResult<(StreamOp, StateFrame, Vec<u8>)>
+) -> ScanResult<(StreamOp, StateFrame, &'a [u8])>
 {
     {
         //
@@ -99,7 +99,7 @@ fn handle_object<'a, T: ?Sized>(
         // If there is a next key, update the current key and continue
         //
         if let Some(key) = keyr? {
-            cur_level_key = key.as_bytes().to_vec();
+            cur_level_key = key.as_bytes();
         } else {
             //
             // Call the end-trigger for the object
@@ -116,7 +116,7 @@ fn handle_object<'a, T: ?Sized>(
             // End of the object: mutate the context and end the function
             //
             return match context.pop_assoc::<StateFrame>() {
-                Some((frame, key_slice)) => Ok((StreamOp::ValueIsConsumed, *frame, key_slice.to_vec())),
+                Some((frame, key_slice)) => Ok((StreamOp::ValueIsConsumed, *frame, key_slice)),
                 None => Err(ScanError::UnbalancedJson(rjiter.current_index())),
             };
         }
@@ -295,11 +295,11 @@ pub fn scan<T: ?Sized>(
                 &find_action,
                 &find_end_action,
                 cur_level_frame,
-                cur_level_key_storage.clone(),
+                &cur_level_key_storage,
                 context,
             )?;
             cur_level_frame = new_state_frame;
-            cur_level_key_storage = new_key;
+            cur_level_key_storage = new_key.to_vec();
 
             match action_result {
                 StreamOp::ValueIsConsumed => continue,
@@ -324,7 +324,7 @@ pub fn scan<T: ?Sized>(
                 context,
             )?;
             cur_level_frame = new_state_frame;
-            cur_level_key_storage = new_key;
+            cur_level_key_storage = new_key.to_vec();
 
             if arr_peeked.is_none() {
                 continue;
