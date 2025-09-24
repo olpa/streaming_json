@@ -790,3 +790,61 @@ fn test_push_assoc_return_value_with_alignment_requirements() {
     assert_eq!(*get_4, aligned4_val);
     assert_eq!(get_data_4, b"four");
 }
+
+#[test]
+fn test_replace_top_assoc_bytes_basic() {
+    let mut buffer = [0u8; 256];
+    let mut pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+    let key = Point { x: 42, y: 100 };
+
+    // Push initial data (setup)
+    pool.push_assoc(key, b"orig").unwrap();
+    assert_eq!(pool.len(), 1);
+
+    // Replace only the data bytes, keeping the same associated object
+    let new_data_ref = pool.replace_top_assoc_bytes::<Point>(b"replaced").unwrap();
+
+    // Verify the new data is correct
+    assert_eq!(new_data_ref, b"replaced");
+
+    // Pool should still have 1 item
+    assert_eq!(pool.len(), 1);
+
+    // Verify the top item has the original key but new data
+    let (top_key, top_data) = pool.get_assoc::<Point>(0).unwrap();
+    assert_eq!(*top_key, Point { x: 42, y: 100 }); // Key unchanged
+    assert_eq!(top_data, b"replaced"); // Data changed
+}
+
+#[test]
+fn test_replace_top_assoc_bytes_empty_pool() {
+    let mut buffer = [0u8; 256];
+    let mut pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+    // Try to replace on empty pool
+    let result = pool.replace_top_assoc_bytes::<Point>(b"test");
+    assert!(matches!(result, Err(U8PoolError::IndexOutOfBounds { .. })));
+}
+
+#[test]
+fn test_replace_top_assoc_bytes_buffer_overflow() {
+    let mut buffer = [0u8; 64]; // Small buffer
+    let mut pool = U8Pool::new(&mut buffer, 2).unwrap();
+
+    // Push initial small data (setup)
+    pool.push_assoc(Point { x: 1, y: 2 }, b"orig").unwrap();
+
+    // Try to replace with data that's too large for buffer
+    let large_data = [0u8; 100];
+    let result = pool.replace_top_assoc_bytes::<Point>(&large_data);
+
+    // Should return BufferOverflow error
+    assert!(matches!(result, Err(U8PoolError::BufferOverflow { .. })));
+
+    // Original data should remain unchanged
+    assert_eq!(pool.len(), 1);
+    let (key, data) = pool.get_assoc::<Point>(0).unwrap();
+    assert_eq!(*key, Point { x: 1, y: 2 });
+    assert_eq!(data, b"orig");
+}
