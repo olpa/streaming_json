@@ -41,10 +41,10 @@ fn handle_object<'a, T: ?Sized>(
     baton_cell: &RefCell<T>,
     find_action: &impl Fn(&[u8], ContextIter) -> Option<BoxedAction<T>>,
     find_end_action: &impl Fn(&[u8], ContextIter) -> Option<BoxedEndAction<T>>,
-    mut cur_level_frame: StateFrame,
+    cur_level_frame: &'a mut StateFrame,
     mut cur_level_key: &'a [u8],
     context: &'a mut U8Pool,
-) -> ScanResult<(StreamOp, StateFrame, &'a [u8])>
+) -> ScanResult<(StreamOp, &'a StateFrame, &'a [u8])>
 {
     {
         //
@@ -99,7 +99,11 @@ fn handle_object<'a, T: ?Sized>(
         // If there is a next key, update the current key and continue
         //
         if let Some(key) = keyr? {
-            cur_level_key = key.as_bytes();
+            cur_level_key = context.replace_top_assoc_bytes::<StateFrame>(key.as_bytes())
+                .map_err(|_| ScanError::InternalError(
+                    rjiter.current_index(),
+                    "Failed to replace key in context pool".to_string()
+                ))?;
         } else {
             //
             // Call the end-trigger for the object
@@ -108,7 +112,7 @@ fn handle_object<'a, T: ?Sized>(
                 if let Err(e) = end_action(baton_cell) {
                     return Err(ScanError::ActionError(
                         e,
-                        rjiter_cell.borrow().current_index(),
+                        rjiter.current_index(),
                     ));
                 }
             }
@@ -116,7 +120,7 @@ fn handle_object<'a, T: ?Sized>(
             // End of the object: mutate the context and end the function
             //
             return match context.pop_assoc::<StateFrame>() {
-                Some((frame, key_slice)) => Ok((StreamOp::ValueIsConsumed, *frame, key_slice)),
+                Some((frame, key_slice)) => Ok((StreamOp::ValueIsConsumed, frame, key_slice)),
                 None => Err(ScanError::UnbalancedJson(rjiter.current_index())),
             };
         }
@@ -294,11 +298,11 @@ pub fn scan<T: ?Sized>(
                 baton_cell,
                 &find_action,
                 &find_end_action,
-                cur_level_frame,
+                &mut cur_level_frame,
                 &cur_level_key_storage,
                 context,
             )?;
-            cur_level_frame = new_state_frame;
+            cur_level_frame = *new_state_frame;
             cur_level_key_storage = new_key.to_vec();
 
             match action_result {
