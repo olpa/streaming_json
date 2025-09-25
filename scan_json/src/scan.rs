@@ -167,63 +167,64 @@ fn handle_object<T: ?Sized>(
 }
 
 // Handle a JSON array item.
-// Pop the context stack if the array is ended.
+//
+// - Call the begin-trigger at the beginning of the array
+// - Get the next item in the array
+// - Call the end-trigger at the end of the array
 fn handle_array<T: ?Sized>(
     rjiter_cell: &RefCell<RJiter>,
     baton_cell: &RefCell<T>,
     find_action: &impl Fn(&[u8], ContextIter) -> Option<BoxedAction<T>>,
     find_end_action: &impl Fn(&[u8], ContextIter) -> Option<BoxedEndAction<T>>,
-    mut cur_level_frame: StateFrame,
-    cur_level_key: Vec<u8>,
+    position: StructurePosition,
     context: &mut U8Pool,
-) -> ScanResult<(Option<Peek>, StateFrame, Vec<u8>)>
+) -> ScanResult<(Option<Peek>, StructurePosition)>
 {
+    //
     // Call the begin-trigger at the beginning of the array
-    let mut is_array_consumed = false;
-    if cur_level_frame.is_elem_begin {
+    //
+    if position == StructurePosition::ArrayBegin {
         if let Some(begin_action) = find_action(b"#array", ContextIter::new(context)) {
             match begin_action(rjiter_cell, baton_cell) {
                 StreamOp::None => (),
-                StreamOp::ValueIsConsumed => is_array_consumed = true,
+                StreamOp::ValueIsConsumed => {
+                    return Ok((None, StructurePosition::ContainerEnd));
+                }
                 StreamOp::Error(e) => {
-                    let rjiter = rjiter_cell.borrow();
-                    return Err(ScanError::ActionError(e, rjiter.current_index()));
+                    return Err(ScanError::ActionError(e, rjiter_cell.borrow().current_index()));
                 }
             }
         }
     }
 
+    //
     // Get the next item in the array
-    let apickedr = if is_array_consumed {
-        Ok(None)
-    } else if cur_level_frame.is_elem_begin {
+    //
+    let peeked = if position == StructurePosition::ArrayBegin {
         let mut rjiter = rjiter_cell.borrow_mut();
         rjiter.known_array()
     } else {
         let mut rjiter = rjiter_cell.borrow_mut();
         rjiter.array_step()
-    };
-    cur_level_frame.is_elem_begin = false;
+    }?;
 
+    //
     // Call the end-trigger at the end of the array
-    let peeked = apickedr?;
+    //
     if peeked.is_none() {
         if let Some(end_action) = find_end_action(b"#array", ContextIter::new(context)) {
             if let Err(e) = end_action(baton_cell) {
-                let rjiter = rjiter_cell.borrow();
-                return Err(ScanError::ActionError(e, rjiter.current_index()));
+                return Err(ScanError::ActionError(e, rjiter_cell.borrow().current_index()));
             }
         }
-        if let Some((frame, key_slice)) = context.pop_assoc::<StateFrame>() {
-            return Ok((None, *frame, key_slice.to_vec()));
-        }
-        let rjiter = rjiter_cell.borrow();
-        return Err(ScanError::UnbalancedJson(rjiter.current_index()));
+        return Ok((None, StructurePosition::ContainerEnd));
     }
-    Ok((peeked, cur_level_frame, cur_level_key))
+    Ok((peeked, StructurePosition::ArrayMiddle))
 }
 
+///
 /// Skips over basic JSON values (null, true, false, numbers, strings)
+///
 fn skip_basic_values(peeked: Peek, rjiter: &mut RJiter) -> ScanResult<()> {
     if peeked == Peek::String {
         rjiter.write_long_bytes(&mut io::sink())?;
