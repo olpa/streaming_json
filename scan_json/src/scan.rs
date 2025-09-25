@@ -29,6 +29,25 @@ impl Options {
 
 use crate::stack::{StateFrame, ContextIter};
 
+/// Position in the JSON structure during scanning
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StructurePosition {
+    /// At the top level of the JSON document
+    Top,
+    /// At the beginning of an object (just opened)
+    ObjectBegin,
+    /// In the middle of an object, previous key is stored in the stack
+    ObjectMiddleWithPrevKey,
+    /// In the middle of an object, previous key is not stored in the stack
+    ObjectMiddleNoPrevKey,
+    /// At the beginning of an array (just opened)
+    ArrayBegin,
+    /// In the middle of an array
+    ArrayMiddle,
+    /// At the end of an object or array (about to close)
+    ContainerEnd,
+}
+
 
 // Handle a JSON object key
 //
@@ -41,10 +60,10 @@ fn handle_object<'a, T: ?Sized>(
     baton_cell: &RefCell<T>,
     find_action: &impl Fn(&[u8], ContextIter) -> Option<BoxedAction<T>>,
     find_end_action: &impl Fn(&[u8], ContextIter) -> Option<BoxedEndAction<T>>,
-    cur_level_frame: &'a mut StateFrame,
+    position: StructurePosition,
     mut cur_level_key: &'a [u8],
     context: &'a mut U8Pool,
-) -> ScanResult<(StreamOp, &'a StateFrame, &'a [u8])>
+) -> ScanResult<(StreamOp, StructurePosition, &'a [u8])>
 {
     {
         //
