@@ -38,8 +38,10 @@ pub enum StructurePosition {
     ObjectBegin,
     /// In the middle of an object, previous key is stored in the stack
     ObjectMiddleWithPrevKey,
-    /// In the middle of an object, previous key is not stored in the stack
-    ObjectMiddleNoPrevKey,
+    /// In the middle of an object
+    ObjectMiddle,
+    /// Between key and value in an object
+    ObjectBetweenKV,
     /// At the beginning of an array (just opened)
     ArrayBegin,
     /// In the middle of an array
@@ -51,25 +53,25 @@ pub enum StructurePosition {
 
 // Handle a JSON object key
 //
-// - Call the end-trigger for the previous key
-// - Call the action for the current key
-// - Pop the context stack if the object is ended
-// - Push the current key onto the context stack
-fn handle_object<'a, T: ?Sized>(
+// - Call the begin-action for the object
+// - Call the end-action for the previous key
+// - Find the next key in the object or the end of the object
+// - Push the current key onto the context stack, or call the end-action for the object
+// - Call the begin-action for the current key
+fn handle_object<T: ?Sized>(
     rjiter_cell: &RefCell<RJiter>,
     baton_cell: &RefCell<T>,
     find_action: &impl Fn(&[u8], ContextIter) -> Option<BoxedAction<T>>,
     find_end_action: &impl Fn(&[u8], ContextIter) -> Option<BoxedEndAction<T>>,
     position: StructurePosition,
-    mut cur_level_key: &'a [u8],
-    context: &'a mut U8Pool,
-) -> ScanResult<(StreamOp, StructurePosition, &'a [u8])>
+    context: &mut U8Pool,
+) -> ScanResult<StructurePosition>
 {
-    {
+    let key = {
         //
         // Call the begin-trigger for the object
         //
-        if cur_level_frame.is_elem_begin {
+        if position == StructurePosition::ObjectBegin {
             if let Some(begin_action) = find_action(b"#object", ContextIter::new(context)) {
                 match begin_action(rjiter_cell, baton_cell) {
                     StreamOp::None => (),
@@ -80,10 +82,7 @@ fn handle_object<'a, T: ?Sized>(
                         ))
                     }
                     StreamOp::ValueIsConsumed => {
-                        return Err(ScanError::ActionError(
-                            "ValueIsConsumed is not supported for #top actions".into(),
-                            rjiter_cell.borrow().current_index(),
-                        ));
+                        return Ok(StructurePosition::ContainerEnd);
                     }
                 }
             }
@@ -92,8 +91,13 @@ fn handle_object<'a, T: ?Sized>(
         //
         // Call the end-trigger for the previous key
         //
-        if !cur_level_frame.is_elem_begin {
-            if let Some(end_action) = find_end_action(&cur_level_key, ContextIter::new(context)) {
+        if position == StructurePosition::ObjectMiddleWithPrevKey {
+            let (_, prev_key) = context.pop_assoc::<StructurePosition>()
+                .ok_or_else(|| ScanError::InternalError(
+                    rjiter_cell.borrow().current_index(),
+                    "Context stack is empty when it should contain previous key".to_string(),
+                ))?;
+            if let Some(end_action) = find_end_action(prev_key, ContextIter::new(context)) {
                 if let Err(e) = end_action(baton_cell) {
                     return Err(ScanError::ActionError(
                         e,
@@ -107,58 +111,59 @@ fn handle_object<'a, T: ?Sized>(
         // Find the next key in the object or the end of the object
         //
         let mut rjiter = rjiter_cell.borrow_mut();
-        let keyr = if cur_level_frame.is_elem_begin {
+        let keyr = if position == StructurePosition::ObjectBegin {
             rjiter.next_object()
         } else {
             rjiter.next_key()
-        };
-        cur_level_frame.is_elem_begin = false;
+        }?;
 
-        //
-        // If there is a next key, update the current key and continue
-        //
-        if let Some(key) = keyr? {
-            cur_level_key = context.replace_top_assoc_bytes::<StateFrame>(key.as_bytes())
-                .map_err(|_| ScanError::InternalError(
-                    rjiter.current_index(),
-                    "Failed to replace key in context pool".to_string()
-                ))?;
-        } else {
-            //
-            // Call the end-trigger for the object
-            //
-            if let Some(end_action) = find_end_action(b"#object", ContextIter::new(context)) {
-                if let Err(e) = end_action(baton_cell) {
-                    return Err(ScanError::ActionError(
-                        e,
-                        rjiter.current_index(),
-                    ));
+        match keyr {
+            None => {
+                //
+                // Call the end-trigger for the object
+                //
+                if let Some(end_action) = find_end_action(b"#object", ContextIter::new(context)) {
+                    if let Err(e) = end_action(baton_cell) {
+                        return Err(ScanError::ActionError(
+                            e,
+                            rjiter.current_index(),
+                        ));
+                    }
                 }
+                return Ok(StructurePosition::ContainerEnd);
             }
-            //
-            // End of the object: mutate the context and end the function
-            //
-            return match context.pop_assoc::<StateFrame>() {
-                Some((frame, key_slice)) => Ok((StreamOp::ValueIsConsumed, frame, key_slice)),
-                None => Err(ScanError::UnbalancedJson(rjiter.current_index())),
-            };
+            Some(key) => {
+                //
+                // Remember the current key
+                //
+                let (_, stored_key) = context.push_assoc(StructurePosition::ObjectMiddle, key.as_bytes())
+                    .map_err(|_| ScanError::InternalError(
+                        rjiter.current_index(),
+                        "Failed to push key to context pool".to_string()
+                    ))?;
+                stored_key
+            }
         }
-    }
+    };
 
     //
     // Execute the action for the current key
     //
-    if let Some(action) = find_action(&cur_level_key, ContextIter::new(context)) {
-        let action_result = action(rjiter_cell, baton_cell);
-        return match action_result {
-            StreamOp::Error(e) => Err(ScanError::ActionError(
-                e,
-                rjiter_cell.borrow().current_index(),
-            )),
-            StreamOp::None | StreamOp::ValueIsConsumed => Ok((action_result, cur_level_frame, cur_level_key)),
-        };
+    if let Some(action) = find_action(key, ContextIter::new(context)) {
+        match action(rjiter_cell, baton_cell) {
+            StreamOp::Error(e) => {
+                return Err(ScanError::ActionError(
+                    e,
+                    rjiter_cell.borrow().current_index(),
+                ));
+            }
+            StreamOp::ValueIsConsumed => {
+                return Ok(StructurePosition::ObjectMiddle);
+            }
+            StreamOp::None => (),
+        }
     }
-    Ok((StreamOp::None, cur_level_frame, cur_level_key))
+    Ok(StructurePosition::ObjectBetweenKV)
 }
 
 // Handle a JSON array item.
