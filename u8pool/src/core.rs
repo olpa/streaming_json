@@ -610,4 +610,17 @@ impl<'a> U8Pool<'a> {
     pub(crate) fn data(&self) -> &[u8] {
         self.data
     }
+
+    /// Peeks at the associated object of the top item without removing it.
+    ///
+    /// Returns `None` if the pool is empty.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that the top item was pushed with `push_assoc`
+    /// and that the type `T` matches the original associated type.
+    #[must_use]
+    pub fn peek_top_assoc_obj<T: Sized>(&self) -> Option<&T> {
+        panic!("to be implemented");
+    }
 }
