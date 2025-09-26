@@ -169,9 +169,19 @@ fn handle_object<T: ?Sized>(
 
 // Handle a JSON array item.
 //
-// - Call the begin-trigger at the beginning of the array
-// - Get the next item in the array
-// - Call the end-trigger at the end of the array
+// - If at the beginning of the array
+//   - Call the begin-trigger
+//   - Push "#array" to the context stack
+// - Return the next item in the array
+// - If at the end of the array
+//   - Pop the "#array" from the context stack
+//   - Call the end-trigger
+//
+// Stack:
+// - On the first item, push "#array"
+// - On subsequent items, do nothing
+// - On end of array, pop "#array"
+//
 fn handle_array<T: ?Sized>(
     rjiter_cell: &RefCell<RJiter>,
     baton_cell: &RefCell<T>,
@@ -196,6 +206,13 @@ fn handle_array<T: ?Sized>(
                 }
             }
         }
+
+        // Push to context with position "middle in array" and name "#array"
+        context.push_assoc(StructurePosition::ArrayMiddle, b"#array")
+            .map_err(|_| ScanError::MaxNestingExceeded(
+                rjiter_cell.borrow().current_index(),
+                context.len(),
+            ))?;
     }
 
     //
@@ -210,9 +227,21 @@ fn handle_array<T: ?Sized>(
     }?;
 
     //
-    // Call the end-trigger at the end of the array
+    // If at the end of the array
     //
     if peeked.is_none() {
+        //
+        // Pop the context before calling the end-trigger
+        //
+        context.pop_assoc::<StructurePosition>()
+            .ok_or_else(|| ScanError::InternalError(
+                rjiter_cell.borrow().current_index(),
+                "Context stack is empty when ending array".to_string(),
+            ))?;
+
+        //
+        // Call the end-trigger
+        //
         if let Some(end_action) = find_end_action(b"#array", ContextIter::new(context)) {
             if let Err(e) = end_action(baton_cell) {
                 return Err(ScanError::ActionError(e, rjiter_cell.borrow().current_index()));
@@ -316,6 +345,9 @@ pub fn scan<T: ?Sized>(
 
         let mut peeked = None;
 
+        //
+        // Handle object states
+        //
         if position == StructurePosition::ObjectBegin || position == StructurePosition::ObjectMiddle {
             match handle_object(
                 rjiter_cell,
@@ -355,23 +387,43 @@ pub fn scan<T: ?Sized>(
             }
         }
 
-        if cur_level_frame.is_in_array {
-            let (arr_peeked, new_state_frame, new_key) = handle_array(
+        //
+        // Handle array states
+        //
+        if position == StructurePosition::ArrayBegin || position == StructurePosition::ArrayMiddle {
+            match handle_array(
                 rjiter_cell,
                 baton_cell,
                 &find_action,
                 &find_end_action,
-                cur_level_frame,
-                cur_level_key_storage.clone(),
+                position,
                 context,
-            )?;
-            cur_level_frame = new_state_frame;
-            cur_level_key_storage = new_key.to_vec();
-
-            if arr_peeked.is_none() {
-                continue;
+            ) {
+                Ok((Some(arr_peeked), StructurePosition::ArrayMiddle)) => {
+                    position = StructurePosition::ArrayMiddle;
+                    peeked = Some(arr_peeked);
+                    // Continue inside the loop to process the array item
+                }
+                Ok((None, StructurePosition::ContainerEnd)) => {
+                    // Stack is already popped in `handle_array`
+                    if let Some(prev_position) = context.peek_top_assoc_obj::<StructurePosition>() {
+                        position = *prev_position;
+                    } else {
+                        return Err(ScanError::InternalError(
+                            rjiter_cell.borrow().current_index(),
+                            "Context stack is empty when handling array container end".to_string(),
+                        ));
+                    }
+                    continue 'main_loop;
+                }
+                Ok((peeked_val, unexpected)) => {
+                    return Err(ScanError::InternalError(
+                        rjiter_cell.borrow().current_index(),
+                        format!("Unexpected position from handle_array: {:?} with peeked: {:?}", unexpected, peeked_val),
+                    ));
+                }
+                Err(e) => return Err(e),
             }
-            peeked = arr_peeked;
         }
 
         let mut rjiter = rjiter_cell.borrow_mut();
