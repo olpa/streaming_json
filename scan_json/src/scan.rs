@@ -99,6 +99,8 @@ fn handle_object<T: ?Sized>(
                 rjiter_cell.borrow().current_index(),
                 "Context stack is empty when it should contain previous key".to_string(),
             ))?;
+        // Safe: We use `prev_key` immediately without modifying the context
+        let prev_key = unsafe { core::mem::transmute::<&[u8], &[u8]>(prev_key) };
         if let Some(end_action) = find_end_action(prev_key, ContextIter::new(context)) {
             if let Err(e) = end_action(baton_cell) {
                 return Err(ScanError::ActionError(
@@ -107,6 +109,7 @@ fn handle_object<T: ?Sized>(
                 ));
             }
         }
+        let _ = prev_key;
 
         //
         // Find the next key in the object or the end of the object
@@ -150,6 +153,8 @@ fn handle_object<T: ?Sized>(
     //
     // Execute the action for the current key
     //
+    // Safe: We use `key` immediately without modifying the context
+    let key = unsafe { core::mem::transmute::<&[u8], &[u8]>(key) };
     if let Some(action) = find_action(key, ContextIter::new(context)) {
         match action(rjiter_cell, baton_cell) {
             StreamOp::Error(e) => {
@@ -164,6 +169,8 @@ fn handle_object<T: ?Sized>(
             StreamOp::None => (),
         }
     }
+    let _ = key;
+
     Ok(StructurePosition::ObjectBetweenKV)
 }
 
@@ -208,11 +215,12 @@ fn handle_array<T: ?Sized>(
         }
 
         // Push to context with position "middle in array" and name "#array"
-        context.push_assoc(StructurePosition::ArrayMiddle, b"#array")
-            .map_err(|_| ScanError::MaxNestingExceeded(
+        if context.push_assoc(StructurePosition::ArrayMiddle, b"#array").is_err() {
+            return Err(ScanError::MaxNestingExceeded(
                 rjiter_cell.borrow().current_index(),
                 context.len(),
-            ))?;
+            ));
+        }
     }
 
     //
