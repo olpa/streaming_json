@@ -428,6 +428,10 @@ pub fn scan<T: ?Sized>(
 
         let mut rjiter = rjiter_cell.borrow_mut();
 
+        //
+        // Peek the next JSON value
+        // The only case we have it already is when we are continuing from the `handle_array` block
+        //
         if peeked.is_none() {
             let peekedr = rjiter.peek();
             if let Err(rjiter::Error {
@@ -438,7 +442,7 @@ pub fn scan<T: ?Sized>(
                 ..
             }) = peekedr
             {
-                if !context.is_empty() {
+                if position != StructurePosition::Top {
                     return Err(ScanError::UnbalancedJson(rjiter.current_index()));
                 }
                 if rjiter.finish().is_err() {
@@ -458,46 +462,27 @@ pub fn scan<T: ?Sized>(
             "peeked is none when it should not be".to_string(),
         ))?;
 
+        //
+        // Branch based on the type of the peeked value
+        //
+
         if peeked == Peek::Array {
-            push_context(context, cur_level_frame, &cur_level_key_storage, &rjiter)?;
-            cur_level_key_storage = Vec::from(b"#array" as &[u8]);
-            cur_level_frame = StateFrame {
-                is_in_array: true,
-                is_in_object: false,
-                is_elem_begin: true,
-            };
-            continue;
+            position = StructurePosition::ArrayBegin;
+            continue 'main_loop;
         }
 
         if peeked == Peek::Object {
-            push_context(context, cur_level_frame, &cur_level_key_storage, &rjiter)?;
-            cur_level_key_storage = Vec::from(b"#object" as &[u8]);
-            cur_level_frame = StateFrame {
-                is_in_array: false,
-                is_in_object: true,
-                is_elem_begin: true,
-            };
-            continue;
+            position = StructurePosition::ObjectBegin;
+            continue 'main_loop;
         }
 
-        // Handle basic (aka atomic) values
-        push_context(context, cur_level_frame, &cur_level_key_storage, &rjiter)?;
-
-        // Find action with current context
+        //
+        // Call the action for the atom, then
+        // - return if an error
+        // - continue to the main loop if value is consumed, or
+        // - pass through to the default handler
+        //
         let action = find_action(b"#atom", ContextIter::new(context));
-
-        // Pop the context we just pushed
-        let (frame, key_slice) = context.pop_assoc::<StateFrame>().ok_or_else(|| {
-            ScanError::InternalError(
-                rjiter.current_index(),
-                "Context stack is empty when it should not be".to_string(),
-            )
-        })?;
-        cur_level_frame = *frame;
-        cur_level_key_storage = key_slice.to_vec();
-
-        // Call the action for the atom, then return (error) or continue (value is consumed)
-        // or pass through to the default handler
         if let Some(action) = action {
             drop(rjiter);
             let action_result = action(rjiter_cell, baton_cell);
@@ -507,7 +492,7 @@ pub fn scan<T: ?Sized>(
                 StreamOp::Error(e) => {
                     return Err(ScanError::ActionError(e, rjiter.current_index()))
                 }
-                StreamOp::ValueIsConsumed => continue,
+                StreamOp::ValueIsConsumed => continue 'main_loop,
                 StreamOp::None => (),
             }
         }
@@ -516,10 +501,12 @@ pub fn scan<T: ?Sized>(
             continue;
         }
 
+        //
         // If we are at the top level, we need to drop the SSE tokens
         // The array condition is to handle the token "[DONE]", which is
         // parsed as an array with one element, the string "DONE".
-        if context.is_empty() || (cur_level_frame.is_in_array && context.len() == 1) {
+        //
+        if (position == StructurePosition::Top) || (position == StructurePosition::ArrayBegin && context.len() == 2) {
             for sse_token in &options.sse_tokens {
                 let found = rjiter.known_skip_token(sse_token.as_bytes());
                 if found.is_ok() {
