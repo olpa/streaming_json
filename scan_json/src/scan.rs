@@ -376,7 +376,7 @@ pub fn scan<T: ?Sized>(
                 }
                 Ok(StructurePosition::ContainerEnd) => {
                     // Stack is already popped in `handle_object`
-                    if let Some(prev_position) = context.peek_top_assoc_obj::<StructurePosition>() {
+                    if let Some(prev_position) = context.top_assoc_obj::<StructurePosition>() {
                         position = *prev_position;
                     } else {
                         return Err(ScanError::InternalError(
@@ -414,7 +414,7 @@ pub fn scan<T: ?Sized>(
                 }
                 Ok((None, StructurePosition::ContainerEnd)) => {
                     // Stack is already popped in `handle_array`
-                    if let Some(prev_position) = context.peek_top_assoc_obj::<StructurePosition>() {
+                    if let Some(prev_position) = context.top_assoc_obj::<StructurePosition>() {
                         position = *prev_position;
                     } else {
                         return Err(ScanError::InternalError(
