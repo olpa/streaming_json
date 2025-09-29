@@ -94,22 +94,23 @@ fn handle_object<T: ?Sized>(
         //
         // Call the end-trigger for the previous key
         //
-        let (_, prev_key) = context.pop_assoc::<StructurePosition>()
-            .ok_or_else(|| ScanError::InternalError(
-                rjiter_cell.borrow().current_index(),
-                "Context stack is empty when it should contain previous key".to_string(),
-            ))?;
-        // Safe: We use `prev_key` immediately without modifying the context
-        let prev_key = unsafe { core::mem::transmute::<&[u8], &[u8]>(prev_key) };
-        if let Some(end_action) = find_end_action(prev_key, ContextIter::new(context)) {
-            if let Err(e) = end_action(baton_cell) {
-                return Err(ScanError::ActionError(
-                    e,
+        if position != StructurePosition::ObjectBegin {
+            let (_, prev_key) = context.pop_assoc::<StructurePosition>()
+                .ok_or_else(|| ScanError::InternalError(
                     rjiter_cell.borrow().current_index(),
-                ));
+                    "Context stack is empty when it should contain previous key".to_string(),
+                ))?;
+            // Safe: We use `prev_key` immediately without modifying the context
+            let prev_key = unsafe { core::mem::transmute::<&[u8], &[u8]>(prev_key) };
+            if let Some(end_action) = find_end_action(prev_key, ContextIter::new(context)) {
+                if let Err(e) = end_action(baton_cell) {
+                    return Err(ScanError::ActionError(
+                        e,
+                        rjiter_cell.borrow().current_index(),
+                    ));
+                }
             }
         }
-        let _ = prev_key;
 
         //
         // Find the next key in the object or the end of the object
