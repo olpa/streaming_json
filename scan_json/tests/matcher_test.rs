@@ -1,12 +1,9 @@
 use scan_json::matcher::{iter_match, debug_print_no_match};
-use scan_json::stack::{ContextIter, StateFrame};
+use scan_json::stack::ContextIter;
+use scan_json::scan::StructurePosition;
 use u8pool::U8Pool;
 
-const S: StateFrame = StateFrame {
-    is_in_object: false,
-    is_in_array: false,
-    is_elem_begin: false
-};
+const S: StructurePosition = StructurePosition::ObjectMiddle;
 
 #[test]
 fn test_iter_match_empty_iterator() {
