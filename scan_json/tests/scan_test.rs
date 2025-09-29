@@ -392,16 +392,12 @@ fn notify_for_object_in_array() {
 
     // find_action that matches #object with parent #array and grandparent #top
     let find_action = |name: &[u8], context: ContextIter| -> Option<BoxedAction<(i32, i32)>> {
-        // Filter out "#top" from context before matching
-        let filtered_context: ContextIter = context.clone().filter(|&c| c != b"#top").collect::<Vec<_>>();
-        iter_match(|| ["#object".as_bytes(), "#array".as_bytes()], name, filtered_context.clone())
+        iter_match(|| ["#object".as_bytes(), "#array".as_bytes(), "#top".as_bytes()], name, context)
             .then(|| Box::new(increment_begin_count) as BoxedAction<(i32, i32)>)
     };
     // find_end_action that matches #object with parent #array and grandparent #top
     let find_end_action = |name: &[u8], context: ContextIter| -> Option<BoxedEndAction<(i32, i32)>> {
-        // Filter out "#top" from context before matching
-        let filtered_context: ContextIter = context.clone().filter(|&c| c != b"#top").collect::<Vec<_>>();
-        iter_match(|| ["#object".as_bytes(), "#array".as_bytes()], name, filtered_context.clone())
+        iter_match(|| ["#object".as_bytes(), "#array".as_bytes(), "#top".as_bytes()], name, context)
             .then(|| Box::new(increment_end_count) as BoxedEndAction<(i32, i32)>)
     };
 
@@ -448,16 +444,12 @@ fn notify_for_array() {
 
     // find_action that matches #array with parent items
     let find_action = |name: &[u8], context: ContextIter| -> Option<BoxedAction<(bool, bool)>> {
-        // Filter out "#top" from context before matching
-        let filtered_context: ContextIter = context.clone().filter(|&c| c != b"#top").collect::<Vec<_>>();
-        iter_match(|| ["#array".as_bytes(), "items".as_bytes()], name, filtered_context.clone())
+        iter_match(|| ["#array".as_bytes(), "items".as_bytes(), "#top".as_bytes()], name, context)
             .then(|| Box::new(set_array_begin_called) as BoxedAction<(bool, bool)>)
     };
     // find_end_action that matches #array with parent items
     let find_end_action = |name: &[u8], context: ContextIter| -> Option<BoxedEndAction<(bool, bool)>> {
-        // Filter out "#top" from context before matching
-        let filtered_context: ContextIter = context.clone().filter(|&c| c != b"#top").collect::<Vec<_>>();
-        iter_match(|| ["#array".as_bytes(), "items".as_bytes()], name, filtered_context.clone())
+        iter_match(|| ["#array".as_bytes(), "items".as_bytes(), "#top".as_bytes()], name, context)
             .then(|| Box::new(set_array_end_called) as BoxedEndAction<(bool, bool)>)
     };
 
@@ -502,16 +494,12 @@ fn client_can_consume_array() {
 
     // find_action that matches #array with parent items
     let find_action = |name: &[u8], context: ContextIter| -> Option<BoxedAction<dyn Write>> {
-        // Filter out "#top" from context before matching
-        let filtered_context: ContextIter = context.clone().filter(|&c| c != b"#top").collect::<Vec<_>>();
-        iter_match(|| ["#array".as_bytes(), "items".as_bytes()], name, filtered_context.clone())
+        iter_match(|| ["#array".as_bytes(), "items".as_bytes(), "#top".as_bytes()], name, context)
             .then(|| Box::new(consume_array_and_write) as BoxedAction<dyn Write>)
     };
     // find_end_action that matches #array with parent items
     let find_end_action = |name: &[u8], context: ContextIter| -> Option<BoxedEndAction<dyn Write>> {
-        // Filter out "#top" from context before matching
-        let filtered_context: ContextIter = context.clone().filter(|&c| c != b"#top").collect::<Vec<_>>();
-        iter_match(|| ["#array".as_bytes(), "items".as_bytes()], name, filtered_context.clone())
+        iter_match(|| ["#array".as_bytes(), "items".as_bytes(), "#top".as_bytes()], name, context)
             .then(|| Box::new(write_array_end) as BoxedEndAction<dyn Write>)
     };
 
@@ -543,9 +531,7 @@ fn several_arrays_top_level() {
 
     // find_action that matches #array with parent #top
     let find_action = |name: &[u8], context: ContextIter| -> Option<BoxedAction<dyn Write>> {
-        // Filter out "#top" from context before matching
-        let filtered_context: ContextIter = context.clone().filter(|&c| c != b"#top").collect::<Vec<_>>();
-        if iter_match(|| ["#array".as_bytes()], name, filtered_context.clone()) {
+        if iter_match(|| ["#array".as_bytes(), "#top".as_bytes()], name, context) {
             let action: BoxedAction<dyn Write> = Box::new(|_: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
                 writer.borrow_mut().write_all(b"<array>").unwrap();
                 StreamOp::None
@@ -557,9 +543,7 @@ fn several_arrays_top_level() {
     };
     // find_end_action that matches #array with parent #top
     let find_end_action = |name: &[u8], context: ContextIter| -> Option<BoxedEndAction<dyn Write>> {
-        // Filter out "#top" from context before matching
-        let filtered_context: ContextIter = context.clone().filter(|&c| c != b"#top").collect::<Vec<_>>();
-        if iter_match(|| ["#array".as_bytes()], name, filtered_context.clone()) {
+        if iter_match(|| ["#array".as_bytes(), "#top".as_bytes()], name, context) {
             let action: BoxedEndAction<dyn Write> = Box::new(|writer: &RefCell<dyn Write>| {
                 writer.borrow_mut().write_all(b"</array>").unwrap();
                 Ok(())
@@ -651,9 +635,7 @@ fn error_in_begin_action() {
 
     // find_action that matches "foo" and returns error
     let find_action = |name: &[u8], context: ContextIter| -> Option<BoxedAction<()>> {
-        // Filter out "#top" from context before matching
-        let filtered_context: ContextIter = context.clone().filter(|&c| c != b"#top").collect::<Vec<_>>();
-        if iter_match(|| ["foo".as_bytes()], name, filtered_context.clone()) {
+        if iter_match(|| ["foo".as_bytes(), "#top".as_bytes()], name, context) {
             let action: BoxedAction<()> = Box::new(|_: &RefCell<RJiter>, _: &RefCell<()>| {
                 StreamOp::Error("Test error in begin-action".into())
             });
@@ -694,9 +676,7 @@ fn error_in_end_action() {
     let find_action = |_name: &[u8], _context: ContextIter| -> Option<BoxedAction<()>> { None };
     // find_end_action that matches "foo" and returns error
     let find_end_action = |name: &[u8], context: ContextIter| -> Option<BoxedEndAction<()>> {
-        // Filter out "#top" from context before matching
-        let filtered_context: ContextIter = context.clone().filter(|&c| c != b"#top").collect::<Vec<_>>();
-        if iter_match(|| ["foo".as_bytes()], name, filtered_context.clone()) {
+        if iter_match(|| ["foo".as_bytes(), "#top".as_bytes()], name, context) {
             let action: BoxedEndAction<()> = Box::new(|_: &RefCell<()>| Err("Test error in end-action".into()));
             Some(action)
         } else {
@@ -732,9 +712,7 @@ fn several_objects_top_level() {
 
     // find_action that matches "foo"
     let find_action = |name: &[u8], context: ContextIter| -> Option<BoxedAction<dyn Write>> {
-        // Filter out "#top" from context before matching
-        let filtered_context: ContextIter = context.clone().filter(|&c| c != b"#top").collect::<Vec<_>>();
-        if iter_match(|| ["foo".as_bytes()], name, filtered_context.clone()) {
+        if iter_match(|| ["foo".as_bytes(), "#top".as_bytes()], name, context) {
             let action: BoxedAction<dyn Write> = Box::new(|_: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
                 writer.borrow_mut().write_all(b"<foo>").unwrap();
                 StreamOp::None
@@ -746,9 +724,7 @@ fn several_objects_top_level() {
     };
     // find_end_action that matches "foo"
     let find_end_action = |name: &[u8], context: ContextIter| -> Option<BoxedEndAction<dyn Write>> {
-        // Filter out "#top" from context before matching
-        let filtered_context: ContextIter = context.clone().filter(|&c| c != b"#top").collect::<Vec<_>>();
-        if iter_match(|| ["foo".as_bytes()], name, filtered_context.clone()) {
+        if iter_match(|| ["foo".as_bytes(), "#top".as_bytes()], name, context) {
             let action: BoxedEndAction<dyn Write> = Box::new(|writer: &RefCell<dyn Write>| {
                 writer.borrow_mut().write_all(b"</foo>").unwrap();
                 Ok(())
@@ -784,9 +760,7 @@ fn match_in_array_context() {
 
     // find_action that matches name with parent #array and grandparent items
     let find_action = |name: &[u8], context: ContextIter| -> Option<BoxedAction<dyn Write>> {
-        // Filter out "#top" from context before matching
-        let filtered_context: ContextIter = context.clone().filter(|&c| c != b"#top").collect::<Vec<_>>();
-        if iter_match(|| ["name".as_bytes(), "#array".as_bytes(), "items".as_bytes()], name, filtered_context.clone()) {
+        if iter_match(|| ["name".as_bytes(), "#array".as_bytes(), "items".as_bytes(), "#top".as_bytes()], name, context) {
             let action: BoxedAction<dyn Write> = Box::new(
                 |rjiter_cell: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
                     let mut rjiter = rjiter_cell.borrow_mut();
@@ -833,9 +807,7 @@ fn atoms_on_top_level() {
 
     // find_action that matches #atom with parent #top
     let find_action = |name: &[u8], context: ContextIter| -> Option<BoxedAction<dyn Write>> {
-        // Filter out "#top" from context before matching
-        let filtered_context: ContextIter = context.clone().filter(|&c| c != b"#top").collect::<Vec<_>>();
-        if iter_match(|| ["#atom".as_bytes()], name, filtered_context.clone()) {
+        if iter_match(|| ["#atom".as_bytes(), "#top".as_bytes()], name, context) {
             let action: BoxedAction<dyn Write> = Box::new(
                 |rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>| {
                     let mut rjiter = rjiter_cell.borrow_mut();
@@ -881,9 +853,7 @@ fn atoms_in_array() {
     let writer_cell = RefCell::new(Vec::new());
 
     let find_action = |name: &[u8], context: ContextIter| -> Option<BoxedAction<dyn Write>> {
-        // Filter out "#top" from context before matching
-        let filtered_context: ContextIter = context.clone().filter(|&c| c != b"#top").collect::<Vec<_>>();
-        if iter_match(|| ["#atom".as_bytes(), "#array".as_bytes()], name, filtered_context.clone()) {
+        if iter_match(|| ["#atom".as_bytes(), "#array".as_bytes(), "#top".as_bytes()], name, context) {
             Some(Box::new(|rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>| {
                 let mut rjiter = rjiter_cell.borrow_mut();
                 let mut writer = writer_cell.borrow_mut();
@@ -934,11 +904,9 @@ fn atoms_in_object() {
 
     let fields = vec!['a', 'b', 'c', 'd', 'e', 'f'];
     let find_action = |name: &[u8], context: ContextIter| -> Option<BoxedAction<dyn Write>> {
-        // Filter out "#top" from context before matching
-        let filtered_context: ContextIter = context.clone().filter(|&c| c != b"#top").collect::<Vec<_>>();
         for field in &fields {
             let field_str = field.to_string();
-            if iter_match(|| ["#atom".as_bytes(), field_str.as_bytes()], name, filtered_context.clone()) {
+            if iter_match(|| ["#atom".as_bytes(), field_str.as_bytes(), "#top".as_bytes()], name, context.clone()) {
                 return Some(Box::new(handle_atom));
             }
         }
@@ -975,9 +943,7 @@ fn atoms_stream_op_return_values() {
     let writer_cell = RefCell::new(Vec::new());
 
     let find_action = |name: &[u8], context: ContextIter| -> Option<BoxedAction<dyn Write>> {
-        // Filter out "#top" from context before matching
-        let filtered_context: ContextIter = context.clone().filter(|&c| c != b"#top").collect::<Vec<_>>();
-        if iter_match(|| ["#atom".as_bytes()], name, filtered_context.clone()) {
+        if iter_match(|| ["#atom".as_bytes(), "#top".as_bytes()], name, context) {
             Some(Box::new(|rjiter_cell: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
                 let mut rjiter = rjiter_cell.borrow_mut();
                 let mut writer = writer.borrow_mut();
