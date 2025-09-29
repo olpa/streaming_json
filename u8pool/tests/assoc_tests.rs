@@ -1032,7 +1032,8 @@ fn test_top_pointer_equality() {
     let mut buffer = [0u8; 256];
     let mut pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
-    pool.push_assoc(Point { x: 42, y: 84 }, b"test data").unwrap();
+    pool.push_assoc(Point { x: 42, y: 84 }, b"test data")
+        .unwrap();
 
     // All top methods should return references pointing to the same memory
     let (assoc_key, assoc_data) = pool.top_assoc::<Point>().unwrap();

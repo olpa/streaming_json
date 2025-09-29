@@ -453,7 +453,7 @@ impl<'a> U8Pool<'a> {
             return None;
         }
         let last_index = self.count - 1;
-        let (start, assoc_end, data_end) = self.get_validated_assoc_positions::<T>(last_index)?;
+        let (start, assoc_end, _data_end) = self.get_validated_assoc_positions::<T>(last_index)?;
 
         // Safe: get_validated_assoc_positions() guarantees all positions are within bounds
         #[allow(unsafe_code)]
@@ -480,7 +480,7 @@ impl<'a> U8Pool<'a> {
             return None;
         }
         let last_index = self.count - 1;
-        let (start, assoc_end, data_end) = self.get_validated_assoc_positions::<T>(last_index)?;
+        let (_start, assoc_end, data_end) = self.get_validated_assoc_positions::<T>(last_index)?;
 
         // Safe: get_validated_assoc_positions() guarantees all positions are within bounds
         #[allow(clippy::indexing_slicing)]
