@@ -287,3 +287,74 @@ fn test_push_return_value_with_empty_data() {
     );
     assert_eq!(empty_len, get_empty_len);
 }
+
+// Tests for top() method - returns reference to top slice without removing it
+
+#[test]
+fn test_top_basic() {
+    let mut buffer = [0u8; 256];
+    let mut pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+    pool.push(b"first").unwrap();
+    pool.push(b"second").unwrap();
+    pool.push(b"third").unwrap();
+
+    // Top should return the last pushed item
+    let top_ref = pool.top().unwrap();
+    assert_eq!(top_ref, b"third");
+    assert_eq!(pool.len(), 3); // Stack should still have all items
+
+    // Verify other elements are unchanged
+    assert_eq!(pool.get(0).unwrap(), b"first");
+    assert_eq!(pool.get(1).unwrap(), b"second");
+    assert_eq!(pool.get(2).unwrap(), b"third");
+}
+
+#[test]
+fn test_top_empty_pool() {
+    let mut buffer = [0u8; 256];
+    let pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+    assert!(pool.top().is_none());
+}
+
+#[test]
+fn test_top_single_item() {
+    let mut buffer = [0u8; 256];
+    let mut pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+    pool.push(b"only").unwrap();
+    let top_ref = pool.top().unwrap();
+    assert_eq!(top_ref, b"only");
+    assert_eq!(pool.len(), 1);
+}
+
+#[test]
+fn test_top_after_pop() {
+    let mut buffer = [0u8; 256];
+    let mut pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+    pool.push(b"first").unwrap();
+    pool.push(b"second").unwrap();
+    pool.push(b"third").unwrap();
+
+    pool.pop().unwrap(); // Remove "third"
+    let top_ref = pool.top().unwrap();
+    assert_eq!(top_ref, b"second"); // Now "second" is top
+    assert_eq!(pool.len(), 2);
+}
+
+#[test]
+fn test_top_pointer_equality_with_get() {
+    let mut buffer = [0u8; 256];
+    let mut pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+    pool.push(b"test data").unwrap();
+
+    // top() and get() should return references pointing to the same memory
+    let top_ref = pool.top().unwrap();
+    let get_ref = pool.get(0).unwrap();
+
+    assert_eq!(top_ref.as_ptr(), get_ref.as_ptr());
+    assert_eq!(top_ref, get_ref);
+}
