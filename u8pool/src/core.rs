@@ -223,6 +223,17 @@ impl<'a> U8Pool<'a> {
         Some(&self.data[start..start + length])
     }
 
+    /// Returns a reference to the top slice without removing it.
+    ///
+    /// Returns `None` if the stack is empty.
+    #[must_use]
+    pub fn top(&self) -> Option<&[u8]> {
+        if self.count == 0 {
+            return None;
+        }
+        self.get(self.count - 1)
+    }
+
     // -------------------------------------------------------------------------
     // Associated push/pop/get methods
     //
@@ -410,6 +421,71 @@ impl<'a> U8Pool<'a> {
         unsafe {
             Some(self.extract_assoc_ref::<T>(start, assoc_end, data_end))
         }
+    }
+
+    /// Returns references to the top associated value and data slice without removing them.
+    ///
+    /// Returns `None` if the stack is empty.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that the last pushed item was indeed pushed with `push_assoc`
+    /// and that the type `T` matches the original associated type.
+    #[must_use]
+    pub fn top_assoc<T: Sized>(&self) -> Option<(&T, &[u8])> {
+        if self.count == 0 {
+            return None;
+        }
+        self.get_assoc::<T>(self.count - 1)
+    }
+
+    /// Returns a reference to the top associated object without removing it.
+    ///
+    /// Returns `None` if the stack is empty.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that the last pushed item was indeed pushed with `push_assoc`
+    /// and that the type `T` matches the original associated type.
+    #[must_use]
+    pub fn top_assoc_obj<'b, T: Sized + 'b>(&'b self) -> Option<&'b T> {
+        if self.count == 0 {
+            return None;
+        }
+        let last_index = self.count - 1;
+        let (start, assoc_end, _data_end) = self.get_validated_assoc_positions::<T>(last_index)?;
+
+        // Safe: get_validated_assoc_positions() guarantees all positions are within bounds
+        #[allow(unsafe_code)]
+        unsafe {
+            #[allow(clippy::indexing_slicing)]
+            let assoc_slice = &self.data[start..assoc_end];
+            let assoc_ptr = assoc_slice.as_ptr().cast::<T>();
+            let assoc_ref = &*assoc_ptr;
+            Some(assoc_ref)
+        }
+    }
+
+    /// Returns a reference to the top data bytes without removing them.
+    ///
+    /// Returns `None` if the stack is empty.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that the last pushed item was indeed pushed with `push_assoc`
+    /// and that the type `T` matches the original associated type.
+    #[must_use]
+    pub fn top_assoc_bytes<'b, T: Sized + 'b>(&'b self) -> Option<&'b [u8]> {
+        if self.count == 0 {
+            return None;
+        }
+        let last_index = self.count - 1;
+        let (_start, assoc_end, data_end) = self.get_validated_assoc_positions::<T>(last_index)?;
+
+        // Safe: get_validated_assoc_positions() guarantees all positions are within bounds
+        #[allow(clippy::indexing_slicing)]
+        let data_slice = &self.data[assoc_end..data_end];
+        Some(data_slice)
     }
 
     /// Replaces the data bytes of the top associated item with new data, keeping the associated object unchanged.

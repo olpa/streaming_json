@@ -104,7 +104,7 @@ Associated values must implement the `Sized` trait and are stored using their me
 - `push(&mut self, data: &[u8]) -> Result<&[u8], U8PoolError>` - Adds a slice to the pool and returns a reference to the stored slice
 - `pop(&mut self) -> Option<&[u8]>` - Removes and returns the last slice
 - `get(&self, index: usize) -> Option<&[u8]>` - Accesses a slice by index
-- `top(&self) -> Option<&[u8]>` - Returns the last slice without removing it. Can be implemented as `self.iter_rev().next()`
+- `top(&self) -> Option<&[u8]>` - Returns the last slice without removing it
 - `clear(&mut self)` - Removes all slices
 
 **Associative Operations:**
@@ -112,6 +112,9 @@ Associated values must implement the `Sized` trait and are stored using their me
 - `push_assoc<T: Sized>(&mut self, assoc: T, data: &[u8]) -> Result<(&T, &[u8]), U8PoolError>` - Adds an associated value followed by a data slice and returns references to the stored values. Automatically handles memory alignment with padding as needed.
 - `pop_assoc<T: Sized>(&mut self) -> Option<(&T, &[u8])>` - Removes and returns the last associated value and data slice
 - `get_assoc<T: Sized>(&self, index: usize) -> Option<(&T, &[u8])>` - Accesses an associated value and data slice by index
+- `top_assoc<T: Sized>(&self) -> Option<(&T, &[u8])>` - Returns references to the top associated value and data slice without removing them
+- `top_assoc_obj<T: Sized>(&self) -> Option<&T>` - Returns a reference to the top associated object without removing it
+- `top_assoc_bytes<T: Sized>(&self) -> Option<&[u8]>` - Returns a reference to the top data bytes without removing them
 - `replace_top_assoc_bytes<T: Sized>(&mut self, new_data: &[u8]) -> Result<&[u8], U8PoolError>` - Optimized replacement of the top item's data bytes while keeping the associated object unchanged
 
 **Information:**

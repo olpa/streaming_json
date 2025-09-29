@@ -848,3 +848,239 @@ fn test_replace_top_assoc_bytes_buffer_overflow() {
     assert_eq!(*key, Point { x: 1, y: 2 });
     assert_eq!(data, b"orig");
 }
+
+// Tests for top_assoc() method - returns reference to top associated pair without removing it
+
+#[test]
+fn test_top_assoc_basic() {
+    let mut buffer = [0u8; 256];
+    let mut pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+    pool.push_assoc(Point { x: 10, y: 20 }, b"first").unwrap();
+    pool.push_assoc(Point { x: 30, y: 40 }, b"second").unwrap();
+    pool.push_assoc(Point { x: 50, y: 60 }, b"third").unwrap();
+
+    // Top should return the last pushed associated item
+    let (key, data) = pool.top_assoc::<Point>().unwrap();
+    assert_eq!(*key, Point { x: 50, y: 60 });
+    assert_eq!(data, b"third");
+    assert_eq!(pool.len(), 3); // Stack should still have all items
+
+    // Verify other elements are unchanged
+    let (k1, d1) = pool.get_assoc::<Point>(0).unwrap();
+    assert_eq!(*k1, Point { x: 10, y: 20 });
+    assert_eq!(d1, b"first");
+    let (k2, d2) = pool.get_assoc::<Point>(1).unwrap();
+    assert_eq!(*k2, Point { x: 30, y: 40 });
+    assert_eq!(d2, b"second");
+}
+
+#[test]
+fn test_top_assoc_empty_pool() {
+    let mut buffer = [0u8; 256];
+    let pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+    assert!(pool.top_assoc::<Point>().is_none());
+}
+
+#[test]
+fn test_top_assoc_single_item() {
+    let mut buffer = [0u8; 256];
+    let mut pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+    pool.push_assoc(Point { x: 100, y: 200 }, b"only").unwrap();
+    let (key, data) = pool.top_assoc::<Point>().unwrap();
+    assert_eq!(*key, Point { x: 100, y: 200 });
+    assert_eq!(data, b"only");
+    assert_eq!(pool.len(), 1);
+}
+
+#[test]
+fn test_top_assoc_after_pop() {
+    let mut buffer = [0u8; 256];
+    let mut pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+    pool.push_assoc(Point { x: 10, y: 20 }, b"first").unwrap();
+    pool.push_assoc(Point { x: 30, y: 40 }, b"second").unwrap();
+    pool.push_assoc(Point { x: 50, y: 60 }, b"third").unwrap();
+
+    pool.pop_assoc::<Point>().unwrap(); // Remove "third"
+    let (key, data) = pool.top_assoc::<Point>().unwrap();
+    assert_eq!(*key, Point { x: 30, y: 40 }); // Now "second" is top
+    assert_eq!(data, b"second");
+    assert_eq!(pool.len(), 2);
+}
+
+// Tests for top_assoc_obj() method - returns reference to top associated object only
+
+#[test]
+fn test_top_assoc_obj_basic() {
+    let mut buffer = [0u8; 256];
+    let mut pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+    pool.push_assoc(Point { x: 10, y: 20 }, b"first").unwrap();
+    pool.push_assoc(Point { x: 30, y: 40 }, b"second").unwrap();
+    pool.push_assoc(Point { x: 50, y: 60 }, b"third").unwrap();
+
+    // Top should return only the associated object of the last item
+    let key = pool.top_assoc_obj::<Point>().unwrap();
+    assert_eq!(*key, Point { x: 50, y: 60 });
+    assert_eq!(pool.len(), 3); // Stack should still have all items
+}
+
+#[test]
+fn test_top_assoc_obj_empty_pool() {
+    let mut buffer = [0u8; 256];
+    let pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+    assert!(pool.top_assoc_obj::<Point>().is_none());
+}
+
+#[test]
+fn test_top_assoc_obj_single_item() {
+    let mut buffer = [0u8; 256];
+    let mut pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+    pool.push_assoc(Point { x: 100, y: 200 }, b"only").unwrap();
+    let key = pool.top_assoc_obj::<Point>().unwrap();
+    assert_eq!(*key, Point { x: 100, y: 200 });
+    assert_eq!(pool.len(), 1);
+}
+
+#[test]
+fn test_top_assoc_obj_after_pop() {
+    let mut buffer = [0u8; 256];
+    let mut pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+    pool.push_assoc(Point { x: 10, y: 20 }, b"first").unwrap();
+    pool.push_assoc(Point { x: 30, y: 40 }, b"second").unwrap();
+    pool.push_assoc(Point { x: 50, y: 60 }, b"third").unwrap();
+
+    pool.pop_assoc::<Point>().unwrap(); // Remove "third"
+    let key = pool.top_assoc_obj::<Point>().unwrap();
+    assert_eq!(*key, Point { x: 30, y: 40 }); // Now "second" is top
+    assert_eq!(pool.len(), 2);
+}
+
+// Tests for top_assoc_bytes() method - returns reference to top data bytes only
+
+#[test]
+fn test_top_assoc_bytes_basic() {
+    let mut buffer = [0u8; 256];
+    let mut pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+    pool.push_assoc(Point { x: 10, y: 20 }, b"first").unwrap();
+    pool.push_assoc(Point { x: 30, y: 40 }, b"second").unwrap();
+    pool.push_assoc(Point { x: 50, y: 60 }, b"third").unwrap();
+
+    // Top should return only the data bytes of the last item
+    let data = pool.top_assoc_bytes::<Point>().unwrap();
+    assert_eq!(data, b"third");
+    assert_eq!(pool.len(), 3); // Stack should still have all items
+}
+
+#[test]
+fn test_top_assoc_bytes_empty_pool() {
+    let mut buffer = [0u8; 256];
+    let pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+    assert!(pool.top_assoc_bytes::<Point>().is_none());
+}
+
+#[test]
+fn test_top_assoc_bytes_single_item() {
+    let mut buffer = [0u8; 256];
+    let mut pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+    pool.push_assoc(Point { x: 100, y: 200 }, b"only").unwrap();
+    let data = pool.top_assoc_bytes::<Point>().unwrap();
+    assert_eq!(data, b"only");
+    assert_eq!(pool.len(), 1);
+}
+
+#[test]
+fn test_top_assoc_bytes_after_pop() {
+    let mut buffer = [0u8; 256];
+    let mut pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+    pool.push_assoc(Point { x: 10, y: 20 }, b"first").unwrap();
+    pool.push_assoc(Point { x: 30, y: 40 }, b"second").unwrap();
+    pool.push_assoc(Point { x: 50, y: 60 }, b"third").unwrap();
+
+    pool.pop_assoc::<Point>().unwrap(); // Remove "third"
+    let data = pool.top_assoc_bytes::<Point>().unwrap();
+    assert_eq!(data, b"second"); // Now "second" is top
+    assert_eq!(pool.len(), 2);
+}
+
+#[test]
+fn test_top_assoc_bytes_empty_data() {
+    let mut buffer = [0u8; 256];
+    let mut pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+    pool.push_assoc(Point { x: 42, y: 84 }, b"").unwrap();
+    let data = pool.top_assoc_bytes::<Point>().unwrap();
+    assert_eq!(data, b"");
+    assert_eq!(data.len(), 0);
+    assert_eq!(pool.len(), 1);
+}
+
+// Tests combining different top methods
+
+#[test]
+fn test_top_pointer_equality() {
+    let mut buffer = [0u8; 256];
+    let mut pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+    pool.push_assoc(Point { x: 42, y: 84 }, b"test data")
+        .unwrap();
+
+    // All top methods should return references pointing to the same memory
+    let (assoc_key, assoc_data) = pool.top_assoc::<Point>().unwrap();
+    let obj_key = pool.top_assoc_obj::<Point>().unwrap();
+    let bytes_data = pool.top_assoc_bytes::<Point>().unwrap();
+
+    // Pointers should be equal
+    assert_eq!(assoc_key as *const Point, obj_key as *const Point);
+    assert_eq!(assoc_data.as_ptr(), bytes_data.as_ptr());
+
+    // Content should be equal
+    assert_eq!(*assoc_key, *obj_key);
+    assert_eq!(assoc_data, bytes_data);
+}
+
+#[test]
+fn test_top_methods_with_alignment() {
+    let mut buffer = [0u8; 512];
+    let mut pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
+
+    // Create misalignment with a regular push
+    pool.push(b"odd").unwrap(); // 3 bytes
+
+    // Define types with different alignment requirements
+    #[derive(Debug, PartialEq, Clone, Copy)]
+    struct Aligned8 {
+        value: u64,
+    }
+
+    let aligned_val = Aligned8 {
+        value: 0x123456789ABCDEF0,
+    };
+
+    pool.push_assoc(aligned_val, b"aligned data").unwrap();
+
+    // Test all top methods work with aligned types
+    let (key, data) = pool.top_assoc::<Aligned8>().unwrap();
+    assert_eq!(key.value, 0x123456789ABCDEF0);
+    assert_eq!(data, b"aligned data");
+
+    let obj = pool.top_assoc_obj::<Aligned8>().unwrap();
+    assert_eq!(obj.value, 0x123456789ABCDEF0);
+
+    let bytes = pool.top_assoc_bytes::<Aligned8>().unwrap();
+    assert_eq!(bytes, b"aligned data");
+
+    // Verify alignment
+    let ptr = obj as *const Aligned8 as usize;
+    assert_eq!(ptr % 8, 0, "Aligned8 should be 8-byte aligned");
+}
