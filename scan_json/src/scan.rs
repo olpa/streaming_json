@@ -27,7 +27,7 @@ impl Options {
     }
 }
 
-use crate::stack::{StateFrame, ContextIter};
+use crate::stack::ContextIter;
 
 /// Position in the JSON structure during scanning
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -287,14 +287,6 @@ fn skip_basic_values(peeked: Peek, rjiter: &mut RJiter) -> ScanResult<()> {
     Err(ScanError::UnhandledPeek(peeked, rjiter.current_index()))
 }
 
-/// Pushes a new context frame onto the context stack
-fn push_context(context: &mut U8Pool, cur_level_frame: StateFrame, cur_level_key: &[u8], rjiter: &RJiter) -> ScanResult<()> {
-    let context_len = context.len();
-    context
-        .push_assoc(cur_level_frame, cur_level_key)
-        .map_err(|_e| ScanError::MaxNestingExceeded(rjiter.current_index(), context_len))?;
-    Ok(())
-}
 
 /// Scan a JSON stream, executing actions based on matched triggers and
 /// handling nested structures. The caller provides a working buffer for
