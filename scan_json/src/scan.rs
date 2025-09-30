@@ -487,7 +487,7 @@ pub fn scan<T: ?Sized>(
         // The array condition is to handle the token "[DONE]", which is
         // parsed as an array with one element, the string "DONE".
         //
-        if (position == StructurePosition::Top) || (position == StructurePosition::ArrayBegin && context.len() == 2) {
+        if (position == StructurePosition::Top) || ((position == StructurePosition::ArrayBegin || position == StructurePosition::ArrayMiddle) && context.len() == 2) {
             for sse_token in &options.sse_tokens {
                 let found = rjiter.known_skip_token(sse_token.as_bytes());
                 if found.is_ok() {
