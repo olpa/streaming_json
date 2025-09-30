@@ -32,6 +32,7 @@ use crate::{
     BoxedAction, BoxedEndAction,
 };
 use crate::stack::ContextIter;
+use crate::matcher::StructuralPseudoname;
 use std::cell::RefCell;
 use std::io::Write;
 use u8pool::U8Pool;
@@ -170,34 +171,47 @@ impl<'a> IdTransform<'a> {
 /// `find_action` parameter for the `scan` function
 fn create_idtransform_find_action<'a>(
     idt_cell: &'a RefCell<IdTransform<'a>>
-) -> impl Fn(&[u8], ContextIter) -> Option<BoxedAction<IdTransform<'a>>> + 'a {
-    move |name: &[u8], context: ContextIter| -> Option<BoxedAction<IdTransform<'a>>> {
+) -> impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<IdTransform<'a>>> + 'a {
+    move |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedAction<IdTransform<'a>>> {
         let context: Vec<&[u8]> = context.collect();
-        if name == b"#atom" {
-            // Handle context for is_top_level
-            let mut idt = idt_cell.borrow_mut();
-            let context_count = context.len();
-            idt.is_top_level = context_count < 2;
-            Some(Box::new(on_atom))
-        } else if name == b"#object" {
-            let mut idt = idt_cell.borrow_mut();
-            let context_count = context.len();
-            idt.is_top_level = context_count < 2;
-            Some(Box::new(on_object))
-        } else if name == b"#array" {
-            let mut idt = idt_cell.borrow_mut();
-            let context_count = context.len();
-            idt.is_top_level = context_count < 2;
-            Some(Box::new(on_array))
-        } else {
-            // Handle key matching - match any key that isn't a special token
-            let mut idt = idt_cell.borrow_mut();
-            let name_str = String::from_utf8_lossy(name).to_string();
-            idt.seqpos = match &idt.seqpos {
-                IdtSequencePos::AtBeginning => IdtSequencePos::AtBeginningKey(name_str),
-                _ => IdtSequencePos::InMiddleKey(name_str),
-            };
-            Some(Box::new(on_key))
+        match structural_pseudoname {
+            StructuralPseudoname::Atom => {
+                // Handle context for is_top_level
+                let mut idt = idt_cell.borrow_mut();
+                let context_count = context.len();
+                idt.is_top_level = context_count < 2;
+                Some(Box::new(on_atom))
+            }
+            StructuralPseudoname::Object => {
+                let mut idt = idt_cell.borrow_mut();
+                let context_count = context.len();
+                idt.is_top_level = context_count < 2;
+                Some(Box::new(on_object))
+            }
+            StructuralPseudoname::Array => {
+                let mut idt = idt_cell.borrow_mut();
+                let context_count = context.len();
+                idt.is_top_level = context_count < 2;
+                Some(Box::new(on_array))
+            }
+            StructuralPseudoname::None => {
+                // Handle key matching - for object keys, the key name is in the context path
+                if let Some(key_bytes) = context.first() {
+                    if key_bytes != b"#top" && key_bytes != b"#array" {
+                        let mut idt = idt_cell.borrow_mut();
+                        let name_str = String::from_utf8_lossy(key_bytes).to_string();
+                        idt.seqpos = match &idt.seqpos {
+                            IdtSequencePos::AtBeginning => IdtSequencePos::AtBeginningKey(name_str),
+                            _ => IdtSequencePos::InMiddleKey(name_str),
+                        };
+                        Some(Box::new(on_key))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            }
         }
     }
 }
@@ -206,14 +220,12 @@ fn create_idtransform_find_action<'a>(
 ///
 /// # Returns
 /// `find_end_action` parameter for the `scan` function
-fn create_idtransform_find_end_action<'a>() -> impl Fn(&[u8], ContextIter) -> Option<BoxedEndAction<IdTransform<'a>>> {
-    |name: &[u8], _context: ContextIter| -> Option<BoxedEndAction<IdTransform<'a>>> {
-        if name == b"#object" {
-            Some(Box::new(on_object_end))
-        } else if name == b"#array" {
-            Some(Box::new(on_array_end))
-        } else {
-            None
+fn create_idtransform_find_end_action<'a>() -> impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedEndAction<IdTransform<'a>>> {
+    |structural_pseudoname: StructuralPseudoname, _context: ContextIter| -> Option<BoxedEndAction<IdTransform<'a>>> {
+        match structural_pseudoname {
+            StructuralPseudoname::Object => Some(Box::new(on_object_end)),
+            StructuralPseudoname::Array => Some(Box::new(on_array_end)),
+            StructuralPseudoname::Atom | StructuralPseudoname::None => None,
         }
     }
 }
