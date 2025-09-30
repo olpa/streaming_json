@@ -187,6 +187,8 @@ fn handle_object<T: ?Sized>(
 // - On the first item, push "#array"
 // - On subsequent items, do nothing
 // - On end of array, pop "#array"
+// - Contract: The stack state after the end of the array is the same as before the begin of the array.
+//   The returned StructurePosition after the end is one from the top of the stack before the begin of the array.
 //
 fn handle_array<T: ?Sized>(
     rjiter_cell: &RefCell<RJiter>,
@@ -364,18 +366,9 @@ pub fn scan<T: ?Sized>(
                 position,
                 context,
             ) {
-                Ok(StructurePosition::ObjectMiddle) => {
-                    position = StructurePosition::ObjectMiddle;
-                    // Continue to the next key-value pair
-                    continue 'main_loop;
-                }
-                Ok(StructurePosition::ObjectBetweenKV) => {
-                    position = StructurePosition::ObjectBetweenKV;
-                    // Continue inside the loop to get the value
-                }
                 Ok(new_position) => {
-                    // handle_object returned the position from the stack
                     position = new_position;
+                    continue 'main_loop;
                 }
                 Err(e) => return Err(e),
             }
@@ -416,8 +409,8 @@ pub fn scan<T: ?Sized>(
         let mut rjiter = rjiter_cell.borrow_mut();
 
         //
-        // Peek the next JSON value
-        // The only case we have it already is when we are continuing from the `handle_array` block
+        // Peek the next JSON value, handling end of the input
+        // The only case we have a value already is when we are continuing from the `handle_array` block
         //
         if peeked.is_none() {
             let peekedr = rjiter.peek();
