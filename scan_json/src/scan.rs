@@ -28,6 +28,7 @@ impl Options {
 }
 
 use crate::stack::ContextIter;
+use crate::matcher::StructuralPseudoname;
 
 /// Position in the JSON structure during scanning
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -64,8 +65,8 @@ pub enum StructurePosition {
 fn handle_object<T: ?Sized>(
     rjiter_cell: &RefCell<RJiter>,
     baton_cell: &RefCell<T>,
-    find_action: &impl Fn(&[u8], ContextIter) -> Option<BoxedAction<T>>,
-    find_end_action: &impl Fn(&[u8], ContextIter) -> Option<BoxedEndAction<T>>,
+    find_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<T>>,
+    find_end_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedEndAction<T>>,
     position: StructurePosition,
     context: &mut U8Pool,
 ) -> ScanResult<StructurePosition>
@@ -75,7 +76,7 @@ fn handle_object<T: ?Sized>(
         // Call the begin-trigger for the object
         //
         if position == StructurePosition::ObjectBegin {
-            if let Some(begin_action) = find_action(b"#object", ContextIter::new(context)) {
+            if let Some(begin_action) = find_action(StructuralPseudoname::Object, ContextIter::new(context)) {
                 match begin_action(rjiter_cell, baton_cell) {
                     StreamOp::None => (),
                     StreamOp::Error(e) => {
@@ -101,8 +102,9 @@ fn handle_object<T: ?Sized>(
                     "Context stack is empty when it should contain previous key".to_string(),
                 ))?;
             // Safe: We use `prev_key` immediately without modifying the context
-            let prev_key = unsafe { core::mem::transmute::<&[u8], &[u8]>(prev_key) };
-            if let Some(end_action) = find_end_action(prev_key, ContextIter::new(context)) {
+            let _prev_key = unsafe { core::mem::transmute::<&[u8], &[u8]>(prev_key) };
+            // FIXME: was prev_key, now using None since prev_key should be in path
+            if let Some(end_action) = find_end_action(StructuralPseudoname::None, ContextIter::new(context)) {
                 if let Err(e) = end_action(baton_cell) {
                     return Err(ScanError::ActionError(
                         e,
@@ -127,7 +129,7 @@ fn handle_object<T: ?Sized>(
                 //
                 // Call the end-trigger for the object
                 //
-                if let Some(end_action) = find_end_action(b"#object", ContextIter::new(context)) {
+                if let Some(end_action) = find_end_action(StructuralPseudoname::Object, ContextIter::new(context)) {
                     if let Err(e) = end_action(baton_cell) {
                         return Err(ScanError::ActionError(
                             e,
@@ -156,7 +158,8 @@ fn handle_object<T: ?Sized>(
     //
     // Safe: We use `key` immediately without modifying the context
     let key = unsafe { core::mem::transmute::<&[u8], &[u8]>(key) };
-    if let Some(action) = find_action(key, ContextIter::new(context)) {
+    // FIXME: was key, now using None since key should be in path
+    if let Some(action) = find_action(StructuralPseudoname::None, ContextIter::new(context)) {
         match action(rjiter_cell, baton_cell) {
             StreamOp::Error(e) => {
                 return Err(ScanError::ActionError(
@@ -193,8 +196,8 @@ fn handle_object<T: ?Sized>(
 fn handle_array<T: ?Sized>(
     rjiter_cell: &RefCell<RJiter>,
     baton_cell: &RefCell<T>,
-    find_action: &impl Fn(&[u8], ContextIter) -> Option<BoxedAction<T>>,
-    find_end_action: &impl Fn(&[u8], ContextIter) -> Option<BoxedEndAction<T>>,
+    find_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<T>>,
+    find_end_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedEndAction<T>>,
     position: StructurePosition,
     context: &mut U8Pool,
 ) -> ScanResult<(Option<Peek>, StructurePosition)>
@@ -203,7 +206,7 @@ fn handle_array<T: ?Sized>(
     // Call the begin-trigger at the beginning of the array
     //
     if position == StructurePosition::ArrayBegin {
-        if let Some(begin_action) = find_action(b"#array", ContextIter::new(context)) {
+        if let Some(begin_action) = find_action(StructuralPseudoname::Array, ContextIter::new(context)) {
             match begin_action(rjiter_cell, baton_cell) {
                 StreamOp::None => (),
                 StreamOp::ValueIsConsumed => {
@@ -251,7 +254,7 @@ fn handle_array<T: ?Sized>(
         //
         // Call the end-trigger
         //
-        if let Some(end_action) = find_end_action(b"#array", ContextIter::new(context)) {
+        if let Some(end_action) = find_end_action(StructuralPseudoname::Array, ContextIter::new(context)) {
             if let Err(e) = end_action(baton_cell) {
                 return Err(ScanError::ActionError(e, rjiter_cell.borrow().current_index()));
             }
@@ -322,8 +325,8 @@ fn skip_basic_values(peeked: Peek, rjiter: &mut RJiter) -> ScanResult<()> {
 /// * `MaxNestingExceeded` - When the JSON nesting depth exceeds the working buffer capacity
 #[allow(clippy::too_many_lines)]
 pub fn scan<T: ?Sized>(
-    find_action: impl Fn(&[u8], ContextIter) -> Option<BoxedAction<T>>,
-    find_end_action: impl Fn(&[u8], ContextIter) -> Option<BoxedEndAction<T>>,
+    find_action: impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<T>>,
+    find_end_action: impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedEndAction<T>>,
     rjiter_cell: &RefCell<RJiter>,
     baton_cell: &RefCell<T>,
     working_buffer: &mut U8Pool,
@@ -483,7 +486,7 @@ pub fn scan<T: ?Sized>(
         // - continue to the main loop if value is consumed, or
         // - pass through to the default handler
         //
-        let action = find_action(b"#atom", ContextIter::new(context));
+        let action = find_action(StructuralPseudoname::Atom, ContextIter::new(context));
         if let Some(action) = action {
             drop(rjiter);
             let action_result = action(rjiter_cell, baton_cell);
