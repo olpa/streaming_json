@@ -441,16 +441,17 @@ pub fn scan<T: ?Sized>(
             rjiter.current_index(),
             "peeked is none when it should not be".to_string(),
         ))?;
+        if position == StructurePosition::ObjectBetweenKV {
+            position = StructurePosition::ObjectMiddle;
+        }
 
         //
         // Branch based on the type of the peeked value
         //
-
         if peeked == Peek::Array {
             position = StructurePosition::ArrayBegin;
             continue 'main_loop;
         }
-
         if peeked == Peek::Object {
             position = StructurePosition::ObjectBegin;
             continue 'main_loop;
