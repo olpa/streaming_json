@@ -156,6 +156,7 @@ fn handle_object<T: ?Sized>(
     // Execute the action for the current key
     //
     if let Some(action) = find_action(StructuralPseudoname::None, ContextIter::new(context)) {
+        drop(rjiter);
         match action(rjiter_cell, baton_cell) {
             StreamOp::Error(e) => {
                 return Err(ScanError::ActionError(
