@@ -45,8 +45,6 @@ pub enum StructurePosition {
     ArrayBegin,
     /// In the middle of an array
     ArrayMiddle,
-    /// At the end of an object or array (about to close)
-    ContainerEnd,
 }
 
 
@@ -62,6 +60,8 @@ pub enum StructurePosition {
 // - On the first key, push it
 // - On subsequent keys, pop the previous key, push the current key
 // - On end of object, pop the last key
+// - Contract: The stack state after the end of the object is the same as before the begin of the object.
+//   The returned StructurePosition after the end is one from the top of the stack before the begin of the object.
 fn handle_object<T: ?Sized>(
     rjiter_cell: &RefCell<RJiter>,
     baton_cell: &RefCell<T>,
@@ -71,94 +71,90 @@ fn handle_object<T: ?Sized>(
     context: &mut U8Pool,
 ) -> ScanResult<StructurePosition>
 {
-    let key = {
-        //
-        // Call the begin-trigger for the object
-        //
-        if position == StructurePosition::ObjectBegin {
-            if let Some(begin_action) = find_action(StructuralPseudoname::Object, ContextIter::new(context)) {
-                match begin_action(rjiter_cell, baton_cell) {
-                    StreamOp::None => (),
-                    StreamOp::Error(e) => {
-                        return Err(ScanError::ActionError(
-                            e,
-                            rjiter_cell.borrow().current_index(),
-                        ))
-                    }
-                    StreamOp::ValueIsConsumed => {
-                        return Ok(StructurePosition::ContainerEnd);
-                    }
-                }
-            }
-        }
-
-        //
-        // Call the end-trigger for the previous key
-        //
-        if position != StructurePosition::ObjectBegin {
-            let (_, prev_key) = context.pop_assoc::<StructurePosition>()
-                .ok_or_else(|| ScanError::InternalError(
-                    rjiter_cell.borrow().current_index(),
-                    "Context stack is empty when it should contain previous key".to_string(),
-                ))?;
-            // Safe: We use `prev_key` immediately without modifying the context
-            let _prev_key = unsafe { core::mem::transmute::<&[u8], &[u8]>(prev_key) };
-            // FIXME: was prev_key, now using None since prev_key should be in path
-            if let Some(end_action) = find_end_action(StructuralPseudoname::None, ContextIter::new(context)) {
-                if let Err(e) = end_action(baton_cell) {
+    //
+    // Call the begin-trigger for the object
+    //
+    if position == StructurePosition::ObjectBegin {
+        if let Some(begin_action) = find_action(StructuralPseudoname::Object, ContextIter::new(context)) {
+            match begin_action(rjiter_cell, baton_cell) {
+                StreamOp::None => (),
+                StreamOp::Error(e) => {
                     return Err(ScanError::ActionError(
                         e,
                         rjiter_cell.borrow().current_index(),
+                    ))
+                }
+                StreamOp::ValueIsConsumed => {
+                    return Ok(*context.top_assoc_obj::<StructurePosition>()
+                        .ok_or_else(|| ScanError::InternalError(
+                            rjiter_cell.borrow().current_index(),
+                            "Context stack is empty when handling ValueIsConsumed".to_string(),
+                        ))?);
+                }
+            }
+        }
+    }
+
+    //
+    // Call the end-trigger for the previous key
+    //
+    if position != StructurePosition::ObjectBegin {
+        let end_action = find_end_action(StructuralPseudoname::None, ContextIter::new(context));
+        let _ = context.pop_assoc::<StructurePosition>();
+        if let Some(end_action) = end_action {
+            if let Err(e) = end_action(baton_cell) {
+                return Err(ScanError::ActionError(
+                    e,
+                    rjiter_cell.borrow().current_index(),
+                ));
+            }
+        }
+    }
+
+    //
+    // Find the next key in the object or the end of the object
+    //
+    let mut rjiter = rjiter_cell.borrow_mut();
+    let keyr = if position == StructurePosition::ObjectBegin {
+        rjiter.next_object()
+    } else {
+        rjiter.next_key()
+    }?;
+
+    match keyr {
+        None => {
+            //
+            // Call the end-trigger for the object
+            //
+            if let Some(end_action) = find_end_action(StructuralPseudoname::Object, ContextIter::new(context)) {
+                if let Err(e) = end_action(baton_cell) {
+                    return Err(ScanError::ActionError(
+                        e,
+                        rjiter.current_index(),
                     ));
                 }
             }
+            return Ok(*context.top_assoc_obj::<StructurePosition>()
+                .ok_or_else(|| ScanError::InternalError(
+                    rjiter.current_index(),
+                    "Context stack is empty when ending object".to_string(),
+                ))?);
         }
-
-        //
-        // Find the next key in the object or the end of the object
-        //
-        let mut rjiter = rjiter_cell.borrow_mut();
-        let keyr = if position == StructurePosition::ObjectBegin {
-            rjiter.next_object()
-        } else {
-            rjiter.next_key()
-        }?;
-
-        match keyr {
-            None => {
-                //
-                // Call the end-trigger for the object
-                //
-                if let Some(end_action) = find_end_action(StructuralPseudoname::Object, ContextIter::new(context)) {
-                    if let Err(e) = end_action(baton_cell) {
-                        return Err(ScanError::ActionError(
-                            e,
-                            rjiter.current_index(),
-                        ));
-                    }
-                }
-                return Ok(StructurePosition::ContainerEnd);
-            }
-            Some(key) => {
-                //
-                // Remember the current key
-                //
-                let (_, stored_key) = context.push_assoc(StructurePosition::ObjectMiddle, key.as_bytes())
-                    .map_err(|_| ScanError::InternalError(
-                        rjiter.current_index(),
-                        "Failed to push key to context pool".to_string()
-                    ))?;
-                stored_key
-            }
+        Some(key) => {
+            //
+            // Remember the current key
+            //
+            context.push_assoc(StructurePosition::ObjectMiddle, key.as_bytes())
+                .map_err(|_| ScanError::InternalError(
+                    rjiter.current_index(),
+                    "Failed to push key to context pool".to_string()
+                ))?;
         }
-    };
+    }
 
     //
     // Execute the action for the current key
     //
-    // Safe: We use `key` immediately without modifying the context
-    let key = unsafe { core::mem::transmute::<&[u8], &[u8]>(key) };
-    // FIXME: was key, now using None since key should be in path
     if let Some(action) = find_action(StructuralPseudoname::None, ContextIter::new(context)) {
         match action(rjiter_cell, baton_cell) {
             StreamOp::Error(e) => {
@@ -173,7 +169,6 @@ fn handle_object<T: ?Sized>(
             StreamOp::None => (),
         }
     }
-    let _ = key;
 
     Ok(StructurePosition::ObjectBetweenKV)
 }
@@ -210,7 +205,11 @@ fn handle_array<T: ?Sized>(
             match begin_action(rjiter_cell, baton_cell) {
                 StreamOp::None => (),
                 StreamOp::ValueIsConsumed => {
-                    return Ok((None, StructurePosition::ContainerEnd));
+                    return Ok((None, *context.top_assoc_obj::<StructurePosition>()
+                        .ok_or_else(|| ScanError::InternalError(
+                            rjiter_cell.borrow().current_index(),
+                            "Context stack is empty when handling ValueIsConsumed in array".to_string(),
+                        ))?));
                 }
                 StreamOp::Error(e) => {
                     return Err(ScanError::ActionError(e, rjiter_cell.borrow().current_index()));
@@ -259,7 +258,11 @@ fn handle_array<T: ?Sized>(
                 return Err(ScanError::ActionError(e, rjiter_cell.borrow().current_index()));
             }
         }
-        return Ok((None, StructurePosition::ContainerEnd));
+        return Ok((None, *context.top_assoc_obj::<StructurePosition>()
+            .ok_or_else(|| ScanError::InternalError(
+                rjiter_cell.borrow().current_index(),
+                "Context stack is empty when ending array".to_string(),
+            ))?));
     }
     Ok((peeked, StructurePosition::ArrayMiddle))
 }
@@ -370,22 +373,9 @@ pub fn scan<T: ?Sized>(
                     position = StructurePosition::ObjectBetweenKV;
                     // Continue inside the loop to get the value
                 }
-                Ok(StructurePosition::ContainerEnd) => {
-                    // Stack is already popped in `handle_object`
-                    if let Some(prev_position) = context.top_assoc_obj::<StructurePosition>() {
-                        position = *prev_position;
-                    } else {
-                        return Err(ScanError::InternalError(
-                            rjiter_cell.borrow().current_index(),
-                            "Context stack is empty when handling container end".to_string(),
-                        ));
-                    }
-                }
-                Ok(unexpected) => {
-                    return Err(ScanError::InternalError(
-                        rjiter_cell.borrow().current_index(),
-                        format!("Unexpected position from handle_object: {:?}", unexpected),
-                    ));
+                Ok(new_position) => {
+                    // handle_object returned the position from the stack
+                    position = new_position;
                 }
                 Err(e) => return Err(e),
             }
@@ -408,16 +398,9 @@ pub fn scan<T: ?Sized>(
                     peeked = Some(arr_peeked);
                     // Continue inside the loop to process the array item
                 }
-                Ok((None, StructurePosition::ContainerEnd)) => {
-                    // Stack is already popped in `handle_array`
-                    if let Some(prev_position) = context.top_assoc_obj::<StructurePosition>() {
-                        position = *prev_position;
-                    } else {
-                        return Err(ScanError::InternalError(
-                            rjiter_cell.borrow().current_index(),
-                            "Context stack is empty when handling array container end".to_string(),
-                        ));
-                    }
+                Ok((None, new_position)) => {
+                    // handle_array returned the position from the stack
+                    position = new_position;
                     continue 'main_loop;
                 }
                 Ok((peeked_val, unexpected)) => {
