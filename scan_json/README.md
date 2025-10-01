@@ -30,15 +30,13 @@ Getting the value requires using the `RJiter` parser to consume the next token. 
 The type annotation `Trigger<BoxedAction<dyn Write>>` is not needed in this code fragment, but it is often required when using closure handlers and several triggers.
 
 ```rust
-use scan_json::{Name, Trigger, BoxedAction, StreamOp, rjiter::RJiter};
+use scan_json::{scan, iter_match, BoxedAction, StreamOp, Options};
+use scan_json::matcher::StructuralPseudoname;
+use scan_json::stack::ContextIter;
+use rjiter::RJiter;
 use std::cell::RefCell;
 use std::io::Write;
-
-
-let content_trigger: Trigger<BoxedAction<dyn Write>> = Trigger::new(
-  Box::new(Name::new("content".to_string())),
-  Box::new(on_content)
-);
+use u8pool::U8Pool;
 
 fn on_content(rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>) -> StreamOp {
     let mut rjiter = rjiter_cell.borrow_mut();
@@ -51,6 +49,15 @@ fn on_content(rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>) -
         Err(e) => StreamOp::Error(Box::new(e)),
     }
 }
+
+// Find action function that matches "content" key
+let find_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedAction<dyn Write>> {
+    if iter_match(|| ["content".as_bytes()], structural_pseudoname, context) {
+        Some(Box::new(on_content))
+    } else {
+        None
+    }
+};
 ```
 
 ## Complete example: Identity transformation
@@ -80,11 +87,36 @@ The example demonstrates that `scan` can be used to handle LLM streaming output:
 ```rust
 use std::cell::RefCell;
 use std::io::Write;
-use scan_json::scan;
-use scan_json::{Name, ParentAndName, BoxedAction, BoxedEndAction, StreamOp, Trigger, rjiter::RJiter};
-use scan_json::Options;
+use scan_json::{scan, iter_match, BoxedAction, BoxedEndAction, StreamOp, Options};
+use scan_json::matcher::StructuralPseudoname;
+use scan_json::stack::ContextIter;
+use rjiter::RJiter;
 use u8pool::U8Pool;
 
+fn on_begin_message(_: &RefCell<RJiter>, writer: &RefCell<dyn Write>) -> StreamOp {
+    let result = writer.borrow_mut().write_all(b"(new message)\n");
+    match result {
+        Ok(_) => StreamOp::None,
+        Err(e) => StreamOp::Error(Box::new(e)),
+    }
+}
+
+fn on_content(rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>) -> StreamOp {
+    let mut rjiter = rjiter_cell.borrow_mut();
+    let mut writer = writer_cell.borrow_mut();
+    let result = rjiter
+        .peek()
+        .and_then(|_| rjiter.write_long_bytes(&mut *writer));
+    match result {
+        Ok(_) => StreamOp::ValueIsConsumed,
+        Err(e) => StreamOp::Error(Box::new(e)),
+    }
+}
+
+fn on_end_message(writer: &RefCell<dyn Write>) -> Result<(), Box<dyn std::error::Error>> {
+    writer.borrow_mut().write_all(b"\n")?;
+    Ok(())
+}
 
 fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
     let mut reader = json.as_bytes();
@@ -92,39 +124,22 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
     let rjiter_cell = RefCell::new(RJiter::new(&mut reader, &mut buffer));
     let writer_cell = RefCell::new(Vec::new());
 
-    let begin_message: Trigger<BoxedAction<dyn Write>> = Trigger::new(
-        Box::new(Name::new("message".to_string())),
-        Box::new(|_: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
-            let result = writer.borrow_mut().write_all(b"(new message)\n");
-            match result {
-                Ok(_) => StreamOp::None,
-                Err(e) => StreamOp::Error(Box::new(e)),
-            }
-        }),
-    );
-    let content: Trigger<BoxedAction<dyn Write>> = Trigger::new(
-        Box::new(Name::new("content".to_string())),
-        Box::new(
-            |rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>| {
-                let mut rjiter = rjiter_cell.borrow_mut();
-                let mut writer = writer_cell.borrow_mut();
-                let result = rjiter
-                    .peek()
-                    .and_then(|_| rjiter.write_long_bytes(&mut *writer));
-                match result {
-                    Ok(_) => StreamOp::ValueIsConsumed,
-                    Err(e) => StreamOp::Error(Box::new(e)),
-                }
-            },
-        ),
-    );
-    let end_message: Trigger<BoxedEndAction<dyn Write>> = Trigger::new(
-        Box::new(Name::new("message".to_string())),
-        Box::new(|writer: &RefCell<dyn Write>| {
-            writer.borrow_mut().write_all(b"\n")?;
-            Ok(())
-        }),
-    );
+    let find_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedAction<dyn Write>> {
+        if iter_match(|| ["content".as_bytes()], structural_pseudoname, context.clone()) {
+            Some(Box::new(on_content))
+        } else if iter_match(|| ["message".as_bytes()], structural_pseudoname, context.clone()) {
+            Some(Box::new(on_begin_message))
+        } else {
+            None
+        }
+    };
+    let find_end_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedEndAction<dyn Write>> {
+        if iter_match(|| ["message".as_bytes()], structural_pseudoname, context.clone()) {
+            Some(Box::new(on_end_message))
+        } else {
+            None
+        }
+    };
 
     // Create working buffer for context stack (512 bytes, up to 20 nesting levels)
     // Based on estimation: 16 bytes per JSON key, plus 8 bytes per frame for state tracking
@@ -132,8 +147,8 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
     let mut context = U8Pool::new(&mut working_buffer, 20).unwrap();
 
     scan(
-        &vec![begin_message, content],
-        &vec![end_message],
+        find_action,
+        find_end_action,
         &rjiter_cell,
         &writer_cell,
         &mut context,
