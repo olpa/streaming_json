@@ -8,7 +8,6 @@ pub type BoxedAction<T> = Box<dyn Fn(&RefCell<RJiter>, &RefCell<T>) -> StreamOp>
 /// Type alias for boxed end action functions that are called when a matched key ends
 pub type BoxedEndAction<T> = Box<dyn Fn(&RefCell<T>) -> Result<(), Box<dyn std::error::Error>>>;
 
-
 /// Interact from a callback to the `scan` function.
 #[derive(Debug)]
 pub enum StreamOp {
@@ -31,5 +30,3 @@ impl<E: std::error::Error + 'static> From<E> for StreamOp {
 // - Closures: impl Fn(&RefCell<RJiter>, &RefCell<T>) -> StreamOp
 // - Structs with call operators
 // - Any callable type
-
-

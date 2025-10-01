@@ -1,17 +1,21 @@
 //! Stack management for JSON parsing context
 
-use u8pool::{U8Pool, U8PoolAssocRevIter};
 use crate::scan::StructurePosition;
+use u8pool::{U8Pool, U8PoolAssocRevIter};
 
-/// Wrapper around the U8Pool associated iterator for context iteration
-/// Provides a convenient interface with syntactic sugar for for-loops and .next()
+/// Wrapper around the `U8Pool` associated iterator for context iteration
+/// Provides a convenient interface with syntactic sugar for for-loops and `.next()`
 pub struct ContextIter<'a> {
     inner: U8PoolAssocRevIter<'a, StructurePosition>,
 }
 
 impl<'a> ContextIter<'a> {
+    /// Creates a new `ContextIter` from a `U8Pool` reference
+    #[must_use]
     pub fn new(pool: &'a U8Pool) -> Self {
-        Self { inner: pool.iter_assoc_rev::<StructurePosition>() }
+        Self {
+            inner: pool.iter_assoc_rev::<StructurePosition>(),
+        }
     }
 }
 
@@ -23,7 +27,7 @@ impl<'a> Iterator for ContextIter<'a> {
     }
 }
 
-impl<'a> Clone for ContextIter<'a> {
+impl Clone for ContextIter<'_> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),

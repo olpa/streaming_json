@@ -23,7 +23,7 @@ pub enum StructuralPseudoname {
 /// the third element with the grandparent name, and so on.
 ///
 /// An empty iterator always returns true (matches everything).
-/// 
+///
 /// As a performance optimization, the structural pseudo-names are passed not in `path`,
 /// but as a separate argument. Logically, they could be part of the iterator as well.
 ///
@@ -50,7 +50,7 @@ pub enum StructuralPseudoname {
 pub fn iter_match<F, T, Item>(
     iter_creator: F,
     structural_pseudoname: StructuralPseudoname,
-    mut path: ContextIter
+    mut path: ContextIter,
 ) -> bool
 where
     F: Fn() -> T,
@@ -63,32 +63,32 @@ where
     match structural_pseudoname {
         StructuralPseudoname::Array => {
             match expected.next() {
-                Some(expected_name) if expected_name.as_ref() == b"#array" => {},
+                Some(expected_name) if expected_name.as_ref() == b"#array" => {}
                 Some(_) => return false,
                 None => return true, // Empty match-iterator always returns true
             }
         }
         StructuralPseudoname::Object => {
             match expected.next() {
-                Some(expected_name) if expected_name.as_ref() == b"#object" => {},
+                Some(expected_name) if expected_name.as_ref() == b"#object" => {}
                 Some(_) => return false,
                 None => return true, // Empty match-iterator always returns true
             }
         }
         StructuralPseudoname::Atom => {
             match expected.next() {
-                Some(expected_name) if expected_name.as_ref() == b"#atom" => {},
+                Some(expected_name) if expected_name.as_ref() == b"#atom" => {}
                 Some(_) => return false,
                 None => return true, // Empty match-iterator always returns true
             }
         }
-        StructuralPseudoname::None => { }
+        StructuralPseudoname::None => {}
     }
 
     // Compare each path element with expected elements
     for expected_context in expected {
         match path.next() {
-            Some(actual_context) if expected_context.as_ref() == actual_context => {},
+            Some(actual_context) if expected_context.as_ref() == actual_context => {}
             _ => return false,
         }
     }
@@ -108,11 +108,14 @@ where
 /// # Returns
 ///
 /// * Always returns `false`
-pub fn debug_print_no_match(structural_pseudoname: StructuralPseudoname, path: ContextIter) -> bool
-{
-    println!("debug_print_no_match: structural_pseudoname: {:?}", structural_pseudoname);
+#[must_use]
+pub fn debug_print_no_match(
+    structural_pseudoname: StructuralPseudoname,
+    path: ContextIter,
+) -> bool {
+    println!("debug_print_no_match: structural_pseudoname: {structural_pseudoname:?}");
     for (i, ctx) in path.enumerate() {
-        println!("  path[{}]: {:?}", i, ctx);
+        println!("  path[{i}]: {ctx:?}");
     }
     false
 }

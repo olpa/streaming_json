@@ -1,6 +1,6 @@
-use scan_json::matcher::{iter_match, debug_print_no_match, StructuralPseudoname};
-use scan_json::stack::ContextIter;
+use scan_json::matcher::{debug_print_no_match, iter_match, StructuralPseudoname};
 use scan_json::scan::StructurePosition;
+use scan_json::stack::ContextIter;
 use u8pool::U8Pool;
 
 const S: StructurePosition = StructurePosition::ObjectMiddle;
@@ -14,14 +14,22 @@ fn test_iter_match_empty_iterator() {
     pool.clear();
     pool.push_assoc(S, b"any").unwrap();
     let path = ContextIter::new(&pool);
-    assert!(iter_match(|| std::iter::empty::<&[u8]>(), StructuralPseudoname::None, path));
+    assert!(iter_match(
+        || std::iter::empty::<&[u8]>(),
+        StructuralPseudoname::None,
+        path
+    ));
 
     // Test with parent in path
     pool.clear();
     pool.push_assoc(S, b"parent").unwrap();
     pool.push_assoc(S, b"name").unwrap();
     let path = ContextIter::new(&pool);
-    assert!(iter_match(|| std::iter::empty::<&[u8]>(), StructuralPseudoname::None, path));
+    assert!(iter_match(
+        || std::iter::empty::<&[u8]>(),
+        StructuralPseudoname::None,
+        path
+    ));
 
     // Test with grandparent in path
     pool.clear();
@@ -29,7 +37,11 @@ fn test_iter_match_empty_iterator() {
     pool.push_assoc(S, b"parent").unwrap();
     pool.push_assoc(S, b"field").unwrap();
     let path = ContextIter::new(&pool);
-    assert!(iter_match(|| std::iter::empty::<&[u8]>(), StructuralPseudoname::None, path));
+    assert!(iter_match(
+        || std::iter::empty::<&[u8]>(),
+        StructuralPseudoname::None,
+        path
+    ));
 }
 
 #[test]
@@ -66,27 +78,43 @@ fn test_iter_match_name_and_parent() {
     pool.push_assoc(S, b"child").unwrap();
     let path = ContextIter::new(&pool);
 
-    assert!(iter_match(|| ["child".as_bytes(), "parent".as_bytes()], StructuralPseudoname::None, path));
+    assert!(iter_match(
+        || ["child".as_bytes(), "parent".as_bytes()],
+        StructuralPseudoname::None,
+        path
+    ));
 
     // Should not match when name is wrong
     pool.clear();
     pool.push_assoc(S, b"parent").unwrap();
     pool.push_assoc(S, b"wrong").unwrap();
     let path = ContextIter::new(&pool);
-    assert!(!iter_match(|| ["child".as_bytes(), "parent".as_bytes()], StructuralPseudoname::None, path));
+    assert!(!iter_match(
+        || ["child".as_bytes(), "parent".as_bytes()],
+        StructuralPseudoname::None,
+        path
+    ));
 
     // Should not match when parent is wrong
     pool.clear();
     pool.push_assoc(S, b"wrong").unwrap();
     pool.push_assoc(S, b"child").unwrap();
     let path = ContextIter::new(&pool);
-    assert!(!iter_match(|| ["child".as_bytes(), "parent".as_bytes()], StructuralPseudoname::None, path));
+    assert!(!iter_match(
+        || ["child".as_bytes(), "parent".as_bytes()],
+        StructuralPseudoname::None,
+        path
+    ));
 
     // Should not match when no parent in path
     pool.clear();
     pool.push_assoc(S, b"child").unwrap();
     let path = ContextIter::new(&pool);
-    assert!(!iter_match(|| ["child".as_bytes(), "parent".as_bytes()], StructuralPseudoname::None, path));
+    assert!(!iter_match(
+        || ["child".as_bytes(), "parent".as_bytes()],
+        StructuralPseudoname::None,
+        path
+    ));
 
     // Should match with extra ancestor in path
     pool.clear();
@@ -95,7 +123,11 @@ fn test_iter_match_name_and_parent() {
     pool.push_assoc(S, b"child").unwrap();
     let path = ContextIter::new(&pool);
 
-    assert!(iter_match(|| ["child".as_bytes(), "parent".as_bytes()], StructuralPseudoname::None, path));
+    assert!(iter_match(
+        || ["child".as_bytes(), "parent".as_bytes()],
+        StructuralPseudoname::None,
+        path
+    ));
 }
 
 #[test]
@@ -113,10 +145,22 @@ fn test_iter_match_name_parent_grandparent() {
     let debug_path = ContextIter::new(&pool);
     println!("Grandparent test path:");
     for (i, item) in debug_path.enumerate() {
-        println!("  path[{}]: {:?}", i, std::str::from_utf8(item).unwrap_or("invalid utf8"));
+        println!(
+            "  path[{}]: {:?}",
+            i,
+            std::str::from_utf8(item).unwrap_or("invalid utf8")
+        );
     }
 
-    assert!(iter_match(|| ["child".as_bytes(), "parent".as_bytes(), "grandparent".as_bytes()], StructuralPseudoname::None, path));
+    assert!(iter_match(
+        || [
+            "child".as_bytes(),
+            "parent".as_bytes(),
+            "grandparent".as_bytes()
+        ],
+        StructuralPseudoname::None,
+        path
+    ));
 
     // Should not match when name is wrong
     pool.clear();
@@ -124,7 +168,15 @@ fn test_iter_match_name_parent_grandparent() {
     pool.push_assoc(S, b"parent").unwrap();
     pool.push_assoc(S, b"wrong").unwrap();
     let path = ContextIter::new(&pool);
-    assert!(!iter_match(|| ["child".as_bytes(), "parent".as_bytes(), "grandparent".as_bytes()], StructuralPseudoname::None, path));
+    assert!(!iter_match(
+        || [
+            "child".as_bytes(),
+            "parent".as_bytes(),
+            "grandparent".as_bytes()
+        ],
+        StructuralPseudoname::None,
+        path
+    ));
 
     // Should not match when parent is wrong
     pool.clear();
@@ -132,7 +184,15 @@ fn test_iter_match_name_parent_grandparent() {
     pool.push_assoc(S, b"wrong").unwrap();
     pool.push_assoc(S, b"child").unwrap();
     let path = ContextIter::new(&pool);
-    assert!(!iter_match(|| ["child".as_bytes(), "parent".as_bytes(), "grandparent".as_bytes()], StructuralPseudoname::None, path));
+    assert!(!iter_match(
+        || [
+            "child".as_bytes(),
+            "parent".as_bytes(),
+            "grandparent".as_bytes()
+        ],
+        StructuralPseudoname::None,
+        path
+    ));
 
     // Should not match when grandparent is wrong
     pool.clear();
@@ -140,14 +200,30 @@ fn test_iter_match_name_parent_grandparent() {
     pool.push_assoc(S, b"parent").unwrap();
     pool.push_assoc(S, b"child").unwrap();
     let path = ContextIter::new(&pool);
-    assert!(!iter_match(|| ["child".as_bytes(), "parent".as_bytes(), "grandparent".as_bytes()], StructuralPseudoname::None, path));
+    assert!(!iter_match(
+        || [
+            "child".as_bytes(),
+            "parent".as_bytes(),
+            "grandparent".as_bytes()
+        ],
+        StructuralPseudoname::None,
+        path
+    ));
 
     // Should not match when insufficient ancestors in path
     pool.clear();
     pool.push_assoc(S, b"parent").unwrap();
     pool.push_assoc(S, b"child").unwrap();
     let path = ContextIter::new(&pool);
-    assert!(!iter_match(|| ["child".as_bytes(), "parent".as_bytes(), "grandparent".as_bytes()], StructuralPseudoname::None, path));
+    assert!(!iter_match(
+        || [
+            "child".as_bytes(),
+            "parent".as_bytes(),
+            "grandparent".as_bytes()
+        ],
+        StructuralPseudoname::None,
+        path
+    ));
 
     // Should match with extra ancestors in path
     pool.clear();
@@ -156,7 +232,15 @@ fn test_iter_match_name_parent_grandparent() {
     pool.push_assoc(S, b"parent").unwrap();
     pool.push_assoc(S, b"child").unwrap();
     let path = ContextIter::new(&pool);
-    assert!(iter_match(|| ["child".as_bytes(), "parent".as_bytes(), "grandparent".as_bytes()], StructuralPseudoname::None, path));
+    assert!(iter_match(
+        || [
+            "child".as_bytes(),
+            "parent".as_bytes(),
+            "grandparent".as_bytes()
+        ],
+        StructuralPseudoname::None,
+        path
+    ));
 }
 
 #[test]
@@ -168,20 +252,36 @@ fn test_iter_match_reusable() {
     pool.push_assoc(S, b"parent").unwrap();
     pool.push_assoc(S, b"field").unwrap();
     let path = ContextIter::new(&pool);
-    assert!(iter_match(|| ["field".as_bytes(), "parent".as_bytes()], StructuralPseudoname::None, path));
+    assert!(iter_match(
+        || ["field".as_bytes(), "parent".as_bytes()],
+        StructuralPseudoname::None,
+        path
+    ));
 
     let path = ContextIter::new(&pool);
-    assert!(iter_match(|| ["field".as_bytes(), "parent".as_bytes()], StructuralPseudoname::None, path));
+    assert!(iter_match(
+        || ["field".as_bytes(), "parent".as_bytes()],
+        StructuralPseudoname::None,
+        path
+    ));
 
     // Test with wrong name
     pool.clear();
     pool.push_assoc(S, b"parent").unwrap();
     pool.push_assoc(S, b"wrong").unwrap();
     let path = ContextIter::new(&pool);
-    assert!(!iter_match(|| ["field".as_bytes(), "parent".as_bytes()], StructuralPseudoname::None, path));
+    assert!(!iter_match(
+        || ["field".as_bytes(), "parent".as_bytes()],
+        StructuralPseudoname::None,
+        path
+    ));
 
     let path = ContextIter::new(&pool);
-    assert!(!iter_match(|| ["field".as_bytes(), "parent".as_bytes()], StructuralPseudoname::None, path));
+    assert!(!iter_match(
+        || ["field".as_bytes(), "parent".as_bytes()],
+        StructuralPseudoname::None,
+        path
+    ));
 }
 
 #[test]
@@ -195,13 +295,17 @@ fn test_iter_match_deep_nesting() {
     pool.push_assoc(S, b"level1").unwrap();
     pool.push_assoc(S, b"field").unwrap();
     let path = ContextIter::new(&pool);
-    assert!(iter_match(|| [
-        "field".as_bytes(),
-        "level1".as_bytes(),
-        "level2".as_bytes(),
-        "level3".as_bytes(),
-        "level4".as_bytes()
-    ], StructuralPseudoname::None, path));
+    assert!(iter_match(
+        || [
+            "field".as_bytes(),
+            "level1".as_bytes(),
+            "level2".as_bytes(),
+            "level3".as_bytes(),
+            "level4".as_bytes()
+        ],
+        StructuralPseudoname::None,
+        path
+    ));
 
     // Wrong at any level should fail
     pool.clear();
@@ -211,13 +315,17 @@ fn test_iter_match_deep_nesting() {
     pool.push_assoc(S, b"level1").unwrap();
     pool.push_assoc(S, b"field").unwrap();
     let path = ContextIter::new(&pool);
-    assert!(!iter_match(|| [
-        "field".as_bytes(),
-        "level1".as_bytes(),
-        "level2".as_bytes(),
-        "level3".as_bytes(),
-        "level4".as_bytes()
-    ], StructuralPseudoname::None, path));
+    assert!(!iter_match(
+        || [
+            "field".as_bytes(),
+            "level1".as_bytes(),
+            "level2".as_bytes(),
+            "level3".as_bytes(),
+            "level4".as_bytes()
+        ],
+        StructuralPseudoname::None,
+        path
+    ));
 }
 
 #[test]
@@ -249,13 +357,25 @@ fn test_iter_match_empty_iterator_structural_pseudonames() {
 
     // Empty iterator always returns true for all structural pseudonames
     let path = ContextIter::new(&pool);
-    assert!(iter_match(|| std::iter::empty::<&[u8]>(), StructuralPseudoname::Array, path));
+    assert!(iter_match(
+        || std::iter::empty::<&[u8]>(),
+        StructuralPseudoname::Array,
+        path
+    ));
 
     let path = ContextIter::new(&pool);
-    assert!(iter_match(|| std::iter::empty::<&[u8]>(), StructuralPseudoname::Object, path));
+    assert!(iter_match(
+        || std::iter::empty::<&[u8]>(),
+        StructuralPseudoname::Object,
+        path
+    ));
 
     let path = ContextIter::new(&pool);
-    assert!(iter_match(|| std::iter::empty::<&[u8]>(), StructuralPseudoname::Atom, path));
+    assert!(iter_match(
+        || std::iter::empty::<&[u8]>(),
+        StructuralPseudoname::Atom,
+        path
+    ));
 }
 
 #[test]
@@ -265,33 +385,69 @@ fn test_iter_match_structural_pseudonames() {
 
     // Test Array pseudoname
     let path = ContextIter::new(&pool);
-    assert!(iter_match(|| ["#array".as_bytes()], StructuralPseudoname::Array, path));
+    assert!(iter_match(
+        || ["#array".as_bytes()],
+        StructuralPseudoname::Array,
+        path
+    ));
 
     let path = ContextIter::new(&pool);
-    assert!(!iter_match(|| ["#object".as_bytes()], StructuralPseudoname::Array, path));
+    assert!(!iter_match(
+        || ["#object".as_bytes()],
+        StructuralPseudoname::Array,
+        path
+    ));
 
     let path = ContextIter::new(&pool);
-    assert!(!iter_match(|| ["#atom".as_bytes()], StructuralPseudoname::Array, path));
+    assert!(!iter_match(
+        || ["#atom".as_bytes()],
+        StructuralPseudoname::Array,
+        path
+    ));
 
     // Test Object pseudoname
     let path = ContextIter::new(&pool);
-    assert!(iter_match(|| ["#object".as_bytes()], StructuralPseudoname::Object, path));
+    assert!(iter_match(
+        || ["#object".as_bytes()],
+        StructuralPseudoname::Object,
+        path
+    ));
 
     let path = ContextIter::new(&pool);
-    assert!(!iter_match(|| ["#array".as_bytes()], StructuralPseudoname::Object, path));
+    assert!(!iter_match(
+        || ["#array".as_bytes()],
+        StructuralPseudoname::Object,
+        path
+    ));
 
     let path = ContextIter::new(&pool);
-    assert!(!iter_match(|| ["#atom".as_bytes()], StructuralPseudoname::Object, path));
+    assert!(!iter_match(
+        || ["#atom".as_bytes()],
+        StructuralPseudoname::Object,
+        path
+    ));
 
     // Test Atom pseudoname
     let path = ContextIter::new(&pool);
-    assert!(iter_match(|| ["#atom".as_bytes()], StructuralPseudoname::Atom, path));
+    assert!(iter_match(
+        || ["#atom".as_bytes()],
+        StructuralPseudoname::Atom,
+        path
+    ));
 
     let path = ContextIter::new(&pool);
-    assert!(!iter_match(|| ["#array".as_bytes()], StructuralPseudoname::Atom, path));
+    assert!(!iter_match(
+        || ["#array".as_bytes()],
+        StructuralPseudoname::Atom,
+        path
+    ));
 
     let path = ContextIter::new(&pool);
-    assert!(!iter_match(|| ["#object".as_bytes()], StructuralPseudoname::Atom, path));
+    assert!(!iter_match(
+        || ["#object".as_bytes()],
+        StructuralPseudoname::Atom,
+        path
+    ));
 }
 
 #[test]
@@ -302,45 +458,85 @@ fn test_iter_match_structural_pseudonames_with_context() {
     // Test Array with parent context
     pool.push_assoc(S, b"parent").unwrap();
     let path = ContextIter::new(&pool);
-    assert!(iter_match(|| ["#array".as_bytes(), "parent".as_bytes()], StructuralPseudoname::Array, path));
+    assert!(iter_match(
+        || ["#array".as_bytes(), "parent".as_bytes()],
+        StructuralPseudoname::Array,
+        path
+    ));
 
     pool.clear();
     pool.push_assoc(S, b"wrong").unwrap();
     let path = ContextIter::new(&pool);
-    assert!(!iter_match(|| ["#array".as_bytes(), "parent".as_bytes()], StructuralPseudoname::Array, path));
+    assert!(!iter_match(
+        || ["#array".as_bytes(), "parent".as_bytes()],
+        StructuralPseudoname::Array,
+        path
+    ));
 
     // Test Object with parent context
     pool.clear();
     pool.push_assoc(S, b"parent").unwrap();
     let path = ContextIter::new(&pool);
-    assert!(iter_match(|| ["#object".as_bytes(), "parent".as_bytes()], StructuralPseudoname::Object, path));
+    assert!(iter_match(
+        || ["#object".as_bytes(), "parent".as_bytes()],
+        StructuralPseudoname::Object,
+        path
+    ));
 
     pool.clear();
     pool.push_assoc(S, b"wrong").unwrap();
     let path = ContextIter::new(&pool);
-    assert!(!iter_match(|| ["#object".as_bytes(), "parent".as_bytes()], StructuralPseudoname::Object, path));
+    assert!(!iter_match(
+        || ["#object".as_bytes(), "parent".as_bytes()],
+        StructuralPseudoname::Object,
+        path
+    ));
 
     // Test Atom with parent context
     pool.clear();
     pool.push_assoc(S, b"parent").unwrap();
     let path = ContextIter::new(&pool);
-    assert!(iter_match(|| ["#atom".as_bytes(), "parent".as_bytes()], StructuralPseudoname::Atom, path));
+    assert!(iter_match(
+        || ["#atom".as_bytes(), "parent".as_bytes()],
+        StructuralPseudoname::Atom,
+        path
+    ));
 
     pool.clear();
     pool.push_assoc(S, b"wrong").unwrap();
     let path = ContextIter::new(&pool);
-    assert!(!iter_match(|| ["#atom".as_bytes(), "parent".as_bytes()], StructuralPseudoname::Atom, path));
+    assert!(!iter_match(
+        || ["#atom".as_bytes(), "parent".as_bytes()],
+        StructuralPseudoname::Atom,
+        path
+    ));
 
     // Test with multiple levels
     pool.clear();
     pool.push_assoc(S, b"grandparent").unwrap();
     pool.push_assoc(S, b"parent").unwrap();
     let path = ContextIter::new(&pool);
-    assert!(iter_match(|| ["#array".as_bytes(), "parent".as_bytes(), "grandparent".as_bytes()], StructuralPseudoname::Array, path));
+    assert!(iter_match(
+        || [
+            "#array".as_bytes(),
+            "parent".as_bytes(),
+            "grandparent".as_bytes()
+        ],
+        StructuralPseudoname::Array,
+        path
+    ));
 
     pool.clear();
     pool.push_assoc(S, b"grandparent").unwrap();
     pool.push_assoc(S, b"wrong").unwrap();
     let path = ContextIter::new(&pool);
-    assert!(!iter_match(|| ["#array".as_bytes(), "parent".as_bytes(), "grandparent".as_bytes()], StructuralPseudoname::Array, path));
+    assert!(!iter_match(
+        || [
+            "#array".as_bytes(),
+            "parent".as_bytes(),
+            "grandparent".as_bytes()
+        ],
+        StructuralPseudoname::Array,
+        path
+    ));
 }

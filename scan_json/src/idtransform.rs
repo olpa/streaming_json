@@ -25,14 +25,13 @@
 //!   In this case: 1) the matcher produces a side effect, 2) the printing is postponed
 //!   to some unknown point in the future.
 //!
+use crate::matcher::StructuralPseudoname;
+use crate::stack::ContextIter;
 use crate::StreamOp;
 use crate::{
-    rjiter::jiter::Peek, scan, Error as ScanError,
-    Options, RJiter, Result as ScanResult,
-    BoxedAction, BoxedEndAction,
+    rjiter::jiter::Peek, scan, BoxedAction, BoxedEndAction, Error as ScanError, Options, RJiter,
+    Result as ScanResult,
 };
-use crate::stack::ContextIter;
-use crate::matcher::StructuralPseudoname;
 use std::cell::RefCell;
 use std::io::Write;
 use u8pool::U8Pool;
@@ -165,14 +164,16 @@ impl<'a> IdTransform<'a> {
 /// Creates a `find_action` closure for `idtransform` that handles all JSON elements
 ///
 /// # Arguments
-/// * `idt_cell` - Reference cell containing the IdTransform state
+/// * `idt_cell` - Reference cell containing the `IdTransform` state
 ///
 /// # Returns
 /// `find_action` parameter for the `scan` function
 fn create_idtransform_find_action<'a>(
-    idt_cell: &'a RefCell<IdTransform<'a>>
+    idt_cell: &'a RefCell<IdTransform<'a>>,
 ) -> impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<IdTransform<'a>>> + 'a {
-    move |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedAction<IdTransform<'a>>> {
+    move |structural_pseudoname: StructuralPseudoname,
+          context: ContextIter|
+          -> Option<BoxedAction<IdTransform<'a>>> {
         let context: Vec<&[u8]> = context.collect();
         match structural_pseudoname {
             StructuralPseudoname::Atom => {
@@ -220,8 +221,11 @@ fn create_idtransform_find_action<'a>(
 ///
 /// # Returns
 /// `find_end_action` parameter for the `scan` function
-fn create_idtransform_find_end_action<'a>() -> impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedEndAction<IdTransform<'a>>> {
-    |structural_pseudoname: StructuralPseudoname, _context: ContextIter| -> Option<BoxedEndAction<IdTransform<'a>>> {
+fn create_idtransform_find_end_action<'a>(
+) -> impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedEndAction<IdTransform<'a>>> {
+    |structural_pseudoname: StructuralPseudoname,
+     _context: ContextIter|
+     -> Option<BoxedEndAction<IdTransform<'a>>> {
         match structural_pseudoname {
             StructuralPseudoname::Object => Some(Box::new(on_object_end)),
             StructuralPseudoname::Array => Some(Box::new(on_array_end)),
@@ -229,7 +233,6 @@ fn create_idtransform_find_end_action<'a>() -> impl Fn(StructuralPseudoname, Con
         }
     }
 }
-
 
 // ---------------- Handlers
 

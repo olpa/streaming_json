@@ -17,9 +17,13 @@ fn test_scan_json_empty_input() {
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
     // find_action that never matches anything
-    let find_action = |_structural_pseudoname: StructuralPseudoname, _context: ContextIter| -> Option<BoxedAction<()>> { None };
+    let find_action = |_structural_pseudoname: StructuralPseudoname,
+                       _context: ContextIter|
+     -> Option<BoxedAction<()>> { None };
     // find_end_action that never matches anything
-    let find_end_action = |_structural_pseudoname: StructuralPseudoname, _context: ContextIter| -> Option<BoxedEndAction<()>> { None };
+    let find_end_action = |_structural_pseudoname: StructuralPseudoname,
+                           _context: ContextIter|
+     -> Option<BoxedEndAction<()>> { None };
 
     scan(
         find_action,
@@ -42,9 +46,13 @@ fn test_scan_json_top_level_types() {
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
     // find_action that never matches anything
-    let find_action = |_structural_pseudoname: StructuralPseudoname, _context: ContextIter| -> Option<BoxedAction<()>> { None };
+    let find_action = |_structural_pseudoname: StructuralPseudoname,
+                       _context: ContextIter|
+     -> Option<BoxedAction<()>> { None };
     // find_end_action that never matches anything
-    let find_end_action = |_structural_pseudoname: StructuralPseudoname, _context: ContextIter| -> Option<BoxedEndAction<()>> { None };
+    let find_end_action = |_structural_pseudoname: StructuralPseudoname,
+                           _context: ContextIter|
+     -> Option<BoxedEndAction<()>> { None };
 
     scan(
         find_action,
@@ -67,9 +75,13 @@ fn test_scan_json_simple_object() {
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
     // find_action that never matches anything
-    let find_action = |_structural_pseudoname: StructuralPseudoname, _context: ContextIter| -> Option<BoxedAction<()>> { None };
+    let find_action = |_structural_pseudoname: StructuralPseudoname,
+                       _context: ContextIter|
+     -> Option<BoxedAction<()>> { None };
     // find_end_action that never matches anything
-    let find_end_action = |_structural_pseudoname: StructuralPseudoname, _context: ContextIter| -> Option<BoxedEndAction<()>> { None };
+    let find_end_action = |_structural_pseudoname: StructuralPseudoname,
+                           _context: ContextIter|
+     -> Option<BoxedEndAction<()>> { None };
 
     scan(
         find_action,
@@ -92,9 +104,13 @@ fn test_scan_json_simple_array() {
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
     // find_action that never matches anything
-    let find_action = |_structural_pseudoname: StructuralPseudoname, _context: ContextIter| -> Option<BoxedAction<()>> { None };
+    let find_action = |_structural_pseudoname: StructuralPseudoname,
+                       _context: ContextIter|
+     -> Option<BoxedAction<()>> { None };
     // find_end_action that never matches anything
-    let find_end_action = |_structural_pseudoname: StructuralPseudoname, _context: ContextIter| -> Option<BoxedEndAction<()>> { None };
+    let find_end_action = |_structural_pseudoname: StructuralPseudoname,
+                           _context: ContextIter|
+     -> Option<BoxedEndAction<()>> { None };
 
     scan(
         find_action,
@@ -138,9 +154,13 @@ fn test_scan_json_nested_complex() {
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
     // find_action that never matches anything
-    let find_action = |_structural_pseudoname: StructuralPseudoname, _context: ContextIter| -> Option<BoxedAction<()>> { None };
+    let find_action = |_structural_pseudoname: StructuralPseudoname,
+                       _context: ContextIter|
+     -> Option<BoxedAction<()>> { None };
     // find_end_action that never matches anything
-    let find_end_action = |_structural_pseudoname: StructuralPseudoname, _context: ContextIter| -> Option<BoxedEndAction<()>> { None };
+    let find_end_action = |_structural_pseudoname: StructuralPseudoname,
+                           _context: ContextIter|
+     -> Option<BoxedEndAction<()>> { None };
 
     scan(
         find_action,
@@ -162,8 +182,12 @@ fn skip_long_string() {
     let mut scan_buffer = [0u8; 512];
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
-    let find_action = |_structural_pseudoname: StructuralPseudoname, _context: ContextIter| -> Option<BoxedAction<()>> { None };
-    let find_end_action = |_structural_pseudoname: StructuralPseudoname, _context: ContextIter| -> Option<BoxedEndAction<()>> { None };
+    let find_action = |_structural_pseudoname: StructuralPseudoname,
+                       _context: ContextIter|
+     -> Option<BoxedAction<()>> { None };
+    let find_end_action = |_structural_pseudoname: StructuralPseudoname,
+                           _context: ContextIter|
+     -> Option<BoxedEndAction<()>> { None };
 
     scan(
         find_action,
@@ -190,8 +214,12 @@ fn test_skip_sse_tokens() {
         stop_early: false,
     };
 
-    let find_action = |_structural_pseudoname: StructuralPseudoname, _context: ContextIter| -> Option<BoxedAction<()>> { None };
-    let find_end_action = |_structural_pseudoname: StructuralPseudoname, _context: ContextIter| -> Option<BoxedEndAction<()>> { None };
+    let find_action = |_structural_pseudoname: StructuralPseudoname,
+                       _context: ContextIter|
+     -> Option<BoxedAction<()>> { None };
+    let find_end_action = |_structural_pseudoname: StructuralPseudoname,
+                           _context: ContextIter|
+     -> Option<BoxedEndAction<()>> { None };
 
     scan(
         find_action,
@@ -221,7 +249,9 @@ fn test_call_begin_dont_touch_value() {
         StreamOp::None
     }
     // find_action that matches "foo"
-    let find_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedAction<bool>> {
+    let find_action = |structural_pseudoname: StructuralPseudoname,
+                       context: ContextIter|
+     -> Option<BoxedAction<bool>> {
         if structural_pseudoname == StructuralPseudoname::None {
             if let Some(key) = context.into_iter().next() {
                 (key == b"foo").then(|| Box::new(set_state_true) as BoxedAction<bool>)
@@ -233,7 +263,9 @@ fn test_call_begin_dont_touch_value() {
         }
     };
     // find_end_action that never matches anything
-    let find_end_action = |_structural_pseudoname: StructuralPseudoname, _context: ContextIter| -> Option<BoxedEndAction<bool>> { None };
+    let find_end_action = |_structural_pseudoname: StructuralPseudoname,
+                           _context: ContextIter|
+     -> Option<BoxedEndAction<bool>> { None };
 
     scan(
         find_action,
@@ -268,7 +300,9 @@ fn test_call_begin_consume_value() {
         StreamOp::ValueIsConsumed
     }
     // find_action that matches "foo" and consumes value
-    let find_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedAction<bool>> {
+    let find_action = |structural_pseudoname: StructuralPseudoname,
+                       context: ContextIter|
+     -> Option<BoxedAction<bool>> {
         if structural_pseudoname == StructuralPseudoname::None {
             if let Some(key) = context.into_iter().next() {
                 (key == b"foo").then(|| Box::new(consume_foo_value) as BoxedAction<bool>)
@@ -280,7 +314,9 @@ fn test_call_begin_consume_value() {
         }
     };
     // find_end_action that never matches anything
-    let find_end_action = |_structural_pseudoname: StructuralPseudoname, _context: ContextIter| -> Option<BoxedEndAction<bool>> { None };
+    let find_end_action = |_structural_pseudoname: StructuralPseudoname,
+                           _context: ContextIter|
+     -> Option<BoxedEndAction<bool>> { None };
 
     scan(
         find_action,
@@ -318,9 +354,13 @@ fn test_call_end() {
         Ok(())
     }
     // find_action that never matches anything
-    let find_action = |_structural_pseudoname: StructuralPseudoname, _context: ContextIter| -> Option<BoxedAction<i32>> { None };
+    let find_action = |_structural_pseudoname: StructuralPseudoname,
+                       _context: ContextIter|
+     -> Option<BoxedAction<i32>> { None };
     // find_end_action that matches "foo"
-    let find_end_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedEndAction<i32>> {
+    let find_end_action = |structural_pseudoname: StructuralPseudoname,
+                           context: ContextIter|
+     -> Option<BoxedEndAction<i32>> {
         if structural_pseudoname == StructuralPseudoname::None {
             if let Some(key) = context.into_iter().next() {
                 (key == b"foo").then(|| Box::new(increment_counter) as BoxedEndAction<i32>)
@@ -369,14 +409,26 @@ fn notify_for_top_level_object() {
     }
 
     // find_action that matches #object with parent #top
-    let find_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedAction<(bool, bool)>> {
-        iter_match(|| ["#object".as_bytes(), "#top".as_bytes()], structural_pseudoname, context.clone())
-            .then(|| Box::new(set_begin_called) as BoxedAction<(bool, bool)>)
+    let find_action = |structural_pseudoname: StructuralPseudoname,
+                       context: ContextIter|
+     -> Option<BoxedAction<(bool, bool)>> {
+        iter_match(
+            || ["#object".as_bytes(), "#top".as_bytes()],
+            structural_pseudoname,
+            context.clone(),
+        )
+        .then(|| Box::new(set_begin_called) as BoxedAction<(bool, bool)>)
     };
     // find_end_action that matches #object with parent #top
-    let find_end_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedEndAction<(bool, bool)>> {
-        iter_match(|| ["#object".as_bytes(), "#top".as_bytes()], structural_pseudoname, context.clone())
-            .then(|| Box::new(set_end_called) as BoxedEndAction<(bool, bool)>)
+    let find_end_action = |structural_pseudoname: StructuralPseudoname,
+                           context: ContextIter|
+     -> Option<BoxedEndAction<(bool, bool)>> {
+        iter_match(
+            || ["#object".as_bytes(), "#top".as_bytes()],
+            structural_pseudoname,
+            context.clone(),
+        )
+        .then(|| Box::new(set_end_called) as BoxedEndAction<(bool, bool)>)
     };
 
     scan(
@@ -415,14 +467,26 @@ fn notify_for_object_in_array() {
     }
 
     // find_action that matches #object with parent #array and grandparent #top
-    let find_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedAction<(i32, i32)>> {
-        iter_match(|| ["#object".as_bytes(), "#array".as_bytes(), "#top".as_bytes()], structural_pseudoname, context)
-            .then(|| Box::new(increment_begin_count) as BoxedAction<(i32, i32)>)
+    let find_action = |structural_pseudoname: StructuralPseudoname,
+                       context: ContextIter|
+     -> Option<BoxedAction<(i32, i32)>> {
+        iter_match(
+            || ["#object".as_bytes(), "#array".as_bytes(), "#top".as_bytes()],
+            structural_pseudoname,
+            context,
+        )
+        .then(|| Box::new(increment_begin_count) as BoxedAction<(i32, i32)>)
     };
     // find_end_action that matches #object with parent #array and grandparent #top
-    let find_end_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedEndAction<(i32, i32)>> {
-        iter_match(|| ["#object".as_bytes(), "#array".as_bytes(), "#top".as_bytes()], structural_pseudoname, context)
-            .then(|| Box::new(increment_end_count) as BoxedEndAction<(i32, i32)>)
+    let find_end_action = |structural_pseudoname: StructuralPseudoname,
+                           context: ContextIter|
+     -> Option<BoxedEndAction<(i32, i32)>> {
+        iter_match(
+            || ["#object".as_bytes(), "#array".as_bytes(), "#top".as_bytes()],
+            structural_pseudoname,
+            context,
+        )
+        .then(|| Box::new(increment_end_count) as BoxedEndAction<(i32, i32)>)
     };
 
     scan(
@@ -457,24 +521,41 @@ fn notify_for_array() {
     let state = RefCell::new((false, false)); // (begin_called, end_called)
 
     // Action functions for #array with parent items matching
-    fn set_array_begin_called(_rjiter: &RefCell<RJiter>, state: &RefCell<(bool, bool)>) -> StreamOp {
+    fn set_array_begin_called(
+        _rjiter: &RefCell<RJiter>,
+        state: &RefCell<(bool, bool)>,
+    ) -> StreamOp {
         state.borrow_mut().0 = true;
         StreamOp::None
     }
-    fn set_array_end_called(state: &RefCell<(bool, bool)>) -> Result<(), Box<dyn std::error::Error>> {
+    fn set_array_end_called(
+        state: &RefCell<(bool, bool)>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         state.borrow_mut().1 = true;
         Ok(())
     }
 
     // find_action that matches #array with parent items
-    let find_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedAction<(bool, bool)>> {
-        iter_match(|| ["#array".as_bytes(), "items".as_bytes(), "#top".as_bytes()], structural_pseudoname, context)
-            .then(|| Box::new(set_array_begin_called) as BoxedAction<(bool, bool)>)
+    let find_action = |structural_pseudoname: StructuralPseudoname,
+                       context: ContextIter|
+     -> Option<BoxedAction<(bool, bool)>> {
+        iter_match(
+            || ["#array".as_bytes(), "items".as_bytes(), "#top".as_bytes()],
+            structural_pseudoname,
+            context,
+        )
+        .then(|| Box::new(set_array_begin_called) as BoxedAction<(bool, bool)>)
     };
     // find_end_action that matches #array with parent items
-    let find_end_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedEndAction<(bool, bool)>> {
-        iter_match(|| ["#array".as_bytes(), "items".as_bytes(), "#top".as_bytes()], structural_pseudoname, context)
-            .then(|| Box::new(set_array_end_called) as BoxedEndAction<(bool, bool)>)
+    let find_end_action = |structural_pseudoname: StructuralPseudoname,
+                           context: ContextIter|
+     -> Option<BoxedEndAction<(bool, bool)>> {
+        iter_match(
+            || ["#array".as_bytes(), "items".as_bytes(), "#top".as_bytes()],
+            structural_pseudoname,
+            context,
+        )
+        .then(|| Box::new(set_array_end_called) as BoxedEndAction<(bool, bool)>)
     };
 
     scan(
@@ -503,7 +584,10 @@ fn client_can_consume_array() {
     let writer_cell = RefCell::new(Vec::new());
 
     // Action functions for #array with parent items consuming
-    fn consume_array_and_write(rjiter_cell: &RefCell<RJiter>, writer: &RefCell<dyn Write>) -> StreamOp {
+    fn consume_array_and_write(
+        rjiter_cell: &RefCell<RJiter>,
+        writer: &RefCell<dyn Write>,
+    ) -> StreamOp {
         let mut rjiter = rjiter_cell.borrow_mut();
         let mut writer = writer.borrow_mut();
         writer.write_all(b"Consuming array: ").unwrap();
@@ -517,15 +601,27 @@ fn client_can_consume_array() {
     }
 
     // find_action that matches #array with parent items
-    let find_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedAction<dyn Write>> {
-        iter_match(|| ["#array".as_bytes(), "items".as_bytes(), "#top".as_bytes()], structural_pseudoname, context)
-            .then(|| Box::new(consume_array_and_write) as BoxedAction<dyn Write>)
+    let find_action = |structural_pseudoname: StructuralPseudoname,
+                       context: ContextIter|
+     -> Option<BoxedAction<dyn Write>> {
+        iter_match(
+            || ["#array".as_bytes(), "items".as_bytes(), "#top".as_bytes()],
+            structural_pseudoname,
+            context,
+        )
+        .then(|| Box::new(consume_array_and_write) as BoxedAction<dyn Write>)
     };
     // find_end_action that matches #array with parent items
     // Will not be called because the array is consumed in the begin action
-    let find_end_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedEndAction<dyn Write>> {
-        iter_match(|| ["#array".as_bytes(), "items".as_bytes(), "#top".as_bytes()], structural_pseudoname, context)
-            .then(|| Box::new(write_array_end) as BoxedEndAction<dyn Write>)
+    let find_end_action = |structural_pseudoname: StructuralPseudoname,
+                           context: ContextIter|
+     -> Option<BoxedEndAction<dyn Write>> {
+        iter_match(
+            || ["#array".as_bytes(), "items".as_bytes(), "#top".as_bytes()],
+            structural_pseudoname,
+            context,
+        )
+        .then(|| Box::new(write_array_end) as BoxedEndAction<dyn Write>)
     };
 
     scan(
@@ -555,20 +651,33 @@ fn several_arrays_top_level() {
     let writer_cell = RefCell::new(Vec::new());
 
     // find_action that matches #array with parent #top
-    let find_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedAction<dyn Write>> {
-        if iter_match(|| ["#array".as_bytes(), "#top".as_bytes()], structural_pseudoname, context) {
-            let action: BoxedAction<dyn Write> = Box::new(|_: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
-                writer.borrow_mut().write_all(b"<array>").unwrap();
-                StreamOp::None
-            });
+    let find_action = |structural_pseudoname: StructuralPseudoname,
+                       context: ContextIter|
+     -> Option<BoxedAction<dyn Write>> {
+        if iter_match(
+            || ["#array".as_bytes(), "#top".as_bytes()],
+            structural_pseudoname,
+            context,
+        ) {
+            let action: BoxedAction<dyn Write> =
+                Box::new(|_: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
+                    writer.borrow_mut().write_all(b"<array>").unwrap();
+                    StreamOp::None
+                });
             Some(action)
         } else {
             None
         }
     };
     // find_end_action that matches #array with parent #top
-    let find_end_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedEndAction<dyn Write>> {
-        if iter_match(|| ["#array".as_bytes(), "#top".as_bytes()], structural_pseudoname, context) {
+    let find_end_action = |structural_pseudoname: StructuralPseudoname,
+                           context: ContextIter|
+     -> Option<BoxedEndAction<dyn Write>> {
+        if iter_match(
+            || ["#array".as_bytes(), "#top".as_bytes()],
+            structural_pseudoname,
+            context,
+        ) {
             let action: BoxedEndAction<dyn Write> = Box::new(|writer: &RefCell<dyn Write>| {
                 writer.borrow_mut().write_all(b"</array>").unwrap();
                 Ok(())
@@ -604,8 +713,12 @@ fn max_nesting_array() {
     let mut scan_buffer = [0u8; 64];
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 3).unwrap();
 
-    let find_action = |_structural_pseudoname: StructuralPseudoname, _context: ContextIter| -> Option<BoxedAction<()>> { None };
-    let find_end_action = |_structural_pseudoname: StructuralPseudoname, _context: ContextIter| -> Option<BoxedEndAction<()>> { None };
+    let find_action = |_structural_pseudoname: StructuralPseudoname,
+                       _context: ContextIter|
+     -> Option<BoxedAction<()>> { None };
+    let find_end_action = |_structural_pseudoname: StructuralPseudoname,
+                           _context: ContextIter|
+     -> Option<BoxedEndAction<()>> { None };
 
     let result = scan(
         find_action,
@@ -631,8 +744,12 @@ fn max_nesting_object() {
     let mut scan_buffer = [0u8; 64];
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 3).unwrap();
 
-    let find_action = |_structural_pseudoname: StructuralPseudoname, _context: ContextIter| -> Option<BoxedAction<()>> { None };
-    let find_end_action = |_structural_pseudoname: StructuralPseudoname, _context: ContextIter| -> Option<BoxedEndAction<()>> { None };
+    let find_action = |_structural_pseudoname: StructuralPseudoname,
+                       _context: ContextIter|
+     -> Option<BoxedAction<()>> { None };
+    let find_end_action = |_structural_pseudoname: StructuralPseudoname,
+                           _context: ContextIter|
+     -> Option<BoxedEndAction<()>> { None };
 
     let result = scan(
         find_action,
@@ -659,8 +776,14 @@ fn error_in_begin_action() {
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 3).unwrap();
 
     // find_action that matches "foo" and returns error
-    let find_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedAction<()>> {
-        if iter_match(|| ["foo".as_bytes(), "#top".as_bytes()], structural_pseudoname, context) {
+    let find_action = |structural_pseudoname: StructuralPseudoname,
+                       context: ContextIter|
+     -> Option<BoxedAction<()>> {
+        if iter_match(
+            || ["foo".as_bytes(), "#top".as_bytes()],
+            structural_pseudoname,
+            context,
+        ) {
             let action: BoxedAction<()> = Box::new(|_: &RefCell<RJiter>, _: &RefCell<()>| {
                 StreamOp::Error("Test error in begin-action".into())
             });
@@ -670,7 +793,9 @@ fn error_in_begin_action() {
         }
     };
     // find_end_action that never matches anything
-    let find_end_action = |_structural_pseudoname: StructuralPseudoname, _context: ContextIter| -> Option<BoxedEndAction<()>> { None };
+    let find_end_action = |_structural_pseudoname: StructuralPseudoname,
+                           _context: ContextIter|
+     -> Option<BoxedEndAction<()>> { None };
 
     let result = scan(
         find_action,
@@ -698,11 +823,20 @@ fn error_in_end_action() {
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
     // find_action that never matches anything
-    let find_action = |_structural_pseudoname: StructuralPseudoname, _context: ContextIter| -> Option<BoxedAction<()>> { None };
+    let find_action = |_structural_pseudoname: StructuralPseudoname,
+                       _context: ContextIter|
+     -> Option<BoxedAction<()>> { None };
     // find_end_action that matches "foo" and returns error
-    let find_end_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedEndAction<()>> {
-        if iter_match(|| ["foo".as_bytes(), "#top".as_bytes()], structural_pseudoname, context) {
-            let action: BoxedEndAction<()> = Box::new(|_: &RefCell<()>| Err("Test error in end-action".into()));
+    let find_end_action = |structural_pseudoname: StructuralPseudoname,
+                           context: ContextIter|
+     -> Option<BoxedEndAction<()>> {
+        if iter_match(
+            || ["foo".as_bytes(), "#top".as_bytes()],
+            structural_pseudoname,
+            context,
+        ) {
+            let action: BoxedEndAction<()> =
+                Box::new(|_: &RefCell<()>| Err("Test error in end-action".into()));
             Some(action)
         } else {
             None
@@ -736,20 +870,33 @@ fn several_objects_top_level() {
     let writer_cell = RefCell::new(Vec::new());
 
     // find_action that matches "foo"
-    let find_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedAction<dyn Write>> {
-        if iter_match(|| ["foo".as_bytes(), "#top".as_bytes()], structural_pseudoname, context) {
-            let action: BoxedAction<dyn Write> = Box::new(|_: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
-                writer.borrow_mut().write_all(b"<foo>").unwrap();
-                StreamOp::None
-            });
+    let find_action = |structural_pseudoname: StructuralPseudoname,
+                       context: ContextIter|
+     -> Option<BoxedAction<dyn Write>> {
+        if iter_match(
+            || ["foo".as_bytes(), "#top".as_bytes()],
+            structural_pseudoname,
+            context,
+        ) {
+            let action: BoxedAction<dyn Write> =
+                Box::new(|_: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
+                    writer.borrow_mut().write_all(b"<foo>").unwrap();
+                    StreamOp::None
+                });
             Some(action)
         } else {
             None
         }
     };
     // find_end_action that matches "foo"
-    let find_end_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedEndAction<dyn Write>> {
-        if iter_match(|| ["foo".as_bytes(), "#top".as_bytes()], structural_pseudoname, context) {
+    let find_end_action = |structural_pseudoname: StructuralPseudoname,
+                           context: ContextIter|
+     -> Option<BoxedEndAction<dyn Write>> {
+        if iter_match(
+            || ["foo".as_bytes(), "#top".as_bytes()],
+            structural_pseudoname,
+            context,
+        ) {
             let action: BoxedEndAction<dyn Write> = Box::new(|writer: &RefCell<dyn Write>| {
                 writer.borrow_mut().write_all(b"</foo>").unwrap();
                 Ok(())
@@ -784,8 +931,21 @@ fn match_in_array_context() {
     let writer_cell = RefCell::new(Vec::new());
 
     // find_action that matches name with parent #array and grandparent items
-    let find_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedAction<dyn Write>> {
-        if iter_match(|| ["name".as_bytes(), "#array".as_bytes(), "items".as_bytes(), "#top".as_bytes()], structural_pseudoname, context) {
+    let find_action = |structural_pseudoname: StructuralPseudoname,
+                       context: ContextIter|
+     -> Option<BoxedAction<dyn Write>> {
+        if iter_match(
+            || {
+                [
+                    "name".as_bytes(),
+                    "#array".as_bytes(),
+                    "items".as_bytes(),
+                    "#top".as_bytes(),
+                ]
+            },
+            structural_pseudoname,
+            context,
+        ) {
             let action: BoxedAction<dyn Write> = Box::new(
                 |rjiter_cell: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
                     let mut rjiter = rjiter_cell.borrow_mut();
@@ -805,7 +965,9 @@ fn match_in_array_context() {
         }
     };
     // find_end_action that never matches anything
-    let find_end_action = |_structural_pseudoname: StructuralPseudoname, _context: ContextIter| -> Option<BoxedEndAction<dyn Write>> { None };
+    let find_end_action = |_structural_pseudoname: StructuralPseudoname,
+                           _context: ContextIter|
+     -> Option<BoxedEndAction<dyn Write>> { None };
 
     scan(
         find_action,
@@ -831,8 +993,14 @@ fn atoms_on_top_level() {
     let writer_cell = RefCell::new(Vec::new());
 
     // find_action that matches #atom with parent #top
-    let find_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedAction<dyn Write>> {
-        if iter_match(|| ["#atom".as_bytes(), "#top".as_bytes()], structural_pseudoname, context) {
+    let find_action = |structural_pseudoname: StructuralPseudoname,
+                       context: ContextIter|
+     -> Option<BoxedAction<dyn Write>> {
+        if iter_match(
+            || ["#atom".as_bytes(), "#top".as_bytes()],
+            structural_pseudoname,
+            context,
+        ) {
             let action: BoxedAction<dyn Write> = Box::new(
                 |rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>| {
                     let mut rjiter = rjiter_cell.borrow_mut();
@@ -848,7 +1016,9 @@ fn atoms_on_top_level() {
         }
     };
     // find_end_action that never matches anything
-    let find_end_action = |_structural_pseudoname: StructuralPseudoname, _context: ContextIter| -> Option<BoxedEndAction<dyn Write>> { None };
+    let find_end_action = |_structural_pseudoname: StructuralPseudoname,
+                           _context: ContextIter|
+     -> Option<BoxedEndAction<dyn Write>> { None };
 
     let result = scan(
         find_action,
@@ -877,20 +1047,30 @@ fn atoms_in_array() {
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let writer_cell = RefCell::new(Vec::new());
 
-    let find_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedAction<dyn Write>> {
-        if iter_match(|| ["#atom".as_bytes(), "#array".as_bytes(), "#top".as_bytes()], structural_pseudoname, context) {
-            Some(Box::new(|rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>| {
-                let mut rjiter = rjiter_cell.borrow_mut();
-                let mut writer = writer_cell.borrow_mut();
-                let peek = rjiter.peek().unwrap();
-                write!(writer, "(matched {:?})", peek).unwrap();
-                StreamOp::None
-            }))
+    let find_action = |structural_pseudoname: StructuralPseudoname,
+                       context: ContextIter|
+     -> Option<BoxedAction<dyn Write>> {
+        if iter_match(
+            || ["#atom".as_bytes(), "#array".as_bytes(), "#top".as_bytes()],
+            structural_pseudoname,
+            context,
+        ) {
+            Some(Box::new(
+                |rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>| {
+                    let mut rjiter = rjiter_cell.borrow_mut();
+                    let mut writer = writer_cell.borrow_mut();
+                    let peek = rjiter.peek().unwrap();
+                    write!(writer, "(matched {:?})", peek).unwrap();
+                    StreamOp::None
+                },
+            ))
         } else {
             None
         }
     };
-    let find_end_action = |_structural_pseudoname: StructuralPseudoname, _context: ContextIter| -> Option<BoxedEndAction<dyn Write>> { None };
+    let find_end_action = |_structural_pseudoname: StructuralPseudoname,
+                           _context: ContextIter|
+     -> Option<BoxedEndAction<dyn Write>> { None };
 
     let result = scan(
         find_action,
@@ -928,16 +1108,24 @@ fn atoms_in_object() {
     }
 
     let fields = vec!['a', 'b', 'c', 'd', 'e', 'f'];
-    let find_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedAction<dyn Write>> {
+    let find_action = |structural_pseudoname: StructuralPseudoname,
+                       context: ContextIter|
+     -> Option<BoxedAction<dyn Write>> {
         for field in &fields {
             let field_str = field.to_string();
-            if iter_match(|| ["#atom".as_bytes(), field_str.as_bytes(), "#top".as_bytes()], structural_pseudoname, context.clone()) {
+            if iter_match(
+                || ["#atom".as_bytes(), field_str.as_bytes(), "#top".as_bytes()],
+                structural_pseudoname,
+                context.clone(),
+            ) {
                 return Some(Box::new(handle_atom));
             }
         }
         None
     };
-    let find_end_action = |_structural_pseudoname: StructuralPseudoname, _context: ContextIter| -> Option<BoxedEndAction<dyn Write>> { None };
+    let find_end_action = |_structural_pseudoname: StructuralPseudoname,
+                           _context: ContextIter|
+     -> Option<BoxedEndAction<dyn Write>> { None };
 
     let result = scan(
         find_action,
@@ -967,34 +1155,44 @@ fn atoms_stream_op_return_values() {
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let writer_cell = RefCell::new(Vec::new());
 
-    let find_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedAction<dyn Write>> {
-        if iter_match(|| ["#atom".as_bytes(), "#top".as_bytes()], structural_pseudoname, context) {
-            Some(Box::new(|rjiter_cell: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
-                let mut rjiter = rjiter_cell.borrow_mut();
-                let mut writer = writer.borrow_mut();
-                let peeked = rjiter.peek().unwrap();
+    let find_action = |structural_pseudoname: StructuralPseudoname,
+                       context: ContextIter|
+     -> Option<BoxedAction<dyn Write>> {
+        if iter_match(
+            || ["#atom".as_bytes(), "#top".as_bytes()],
+            structural_pseudoname,
+            context,
+        ) {
+            Some(Box::new(
+                |rjiter_cell: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
+                    let mut rjiter = rjiter_cell.borrow_mut();
+                    let mut writer = writer.borrow_mut();
+                    let peeked = rjiter.peek().unwrap();
 
-                match peeked {
-                    Peek::True => {
-                        rjiter.next_value().unwrap();
-                        writer.write_all(b"consumed,").unwrap();
-                        StreamOp::ValueIsConsumed
+                    match peeked {
+                        Peek::True => {
+                            rjiter.next_value().unwrap();
+                            writer.write_all(b"consumed,").unwrap();
+                            StreamOp::ValueIsConsumed
+                        }
+                        Peek::False => {
+                            writer.write_all(b"not consumed,").unwrap();
+                            StreamOp::None
+                        }
+                        _ => {
+                            writer.write_all(b"unexpected,").unwrap();
+                            StreamOp::Error("Expected error for the test".into())
+                        }
                     }
-                    Peek::False => {
-                        writer.write_all(b"not consumed,").unwrap();
-                        StreamOp::None
-                    }
-                    _ => {
-                        writer.write_all(b"unexpected,").unwrap();
-                        StreamOp::Error("Expected error for the test".into())
-                    }
-                }
-            }))
+                },
+            ))
         } else {
             None
         }
     };
-    let find_end_action = |_structural_pseudoname: StructuralPseudoname, _context: ContextIter| -> Option<BoxedEndAction<dyn Write>> { None };
+    let find_end_action = |_structural_pseudoname: StructuralPseudoname,
+                           _context: ContextIter|
+     -> Option<BoxedEndAction<dyn Write>> { None };
 
     let result = scan(
         find_action,
@@ -1023,33 +1221,53 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let writer_cell = RefCell::new(Vec::new());
 
-    let find_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedAction<dyn Write>> {
-        if iter_match(|| ["message".as_bytes()], structural_pseudoname, context.clone()) {
-            Some(Box::new(|_: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
-                let result = writer.borrow_mut().write_all(b"(new message)\n");
-                match result {
-                    Ok(_) => StreamOp::None,
-                    Err(e) => StreamOp::Error(Box::new(e)),
-                }
-            }))
-        } else if iter_match(|| ["content".as_bytes()], structural_pseudoname, context.clone()) {
-            Some(Box::new(|rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>| {
-                let mut rjiter = rjiter_cell.borrow_mut();
-                let mut writer = writer_cell.borrow_mut();
-                let result = rjiter
-                    .peek()
-                    .and_then(|_| rjiter.write_long_bytes(&mut *writer));
-                match result {
-                    Ok(_) => StreamOp::ValueIsConsumed,
-                    Err(e) => StreamOp::Error(Box::new(e)),
-                }
-            }))
+    let find_action = |structural_pseudoname: StructuralPseudoname,
+                       context: ContextIter|
+     -> Option<BoxedAction<dyn Write>> {
+        if iter_match(
+            || ["message".as_bytes()],
+            structural_pseudoname,
+            context.clone(),
+        ) {
+            Some(Box::new(
+                |_: &RefCell<RJiter>, writer: &RefCell<dyn Write>| {
+                    let result = writer.borrow_mut().write_all(b"(new message)\n");
+                    match result {
+                        Ok(_) => StreamOp::None,
+                        Err(e) => StreamOp::Error(Box::new(e)),
+                    }
+                },
+            ))
+        } else if iter_match(
+            || ["content".as_bytes()],
+            structural_pseudoname,
+            context.clone(),
+        ) {
+            Some(Box::new(
+                |rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>| {
+                    let mut rjiter = rjiter_cell.borrow_mut();
+                    let mut writer = writer_cell.borrow_mut();
+                    let result = rjiter
+                        .peek()
+                        .and_then(|_| rjiter.write_long_bytes(&mut *writer));
+                    match result {
+                        Ok(_) => StreamOp::ValueIsConsumed,
+                        Err(e) => StreamOp::Error(Box::new(e)),
+                    }
+                },
+            ))
         } else {
             None
         }
     };
-    let find_end_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedEndAction<dyn Write>> {
-        if iter_match(|| ["message".as_bytes()], structural_pseudoname, context.clone()) {
+    let find_end_action = |structural_pseudoname: StructuralPseudoname,
+                           context: ContextIter|
+     -> Option<BoxedEndAction<dyn Write>> {
+        if iter_match(
+            || ["message".as_bytes()],
+            structural_pseudoname,
+            context.clone(),
+        ) {
             Some(Box::new(|writer: &RefCell<dyn Write>| {
                 writer.borrow_mut().write_all(b"\n")?;
                 Ok(())
@@ -1164,9 +1382,13 @@ fn stop_early() {
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
     // find_action that never matches anything
-    let find_action = |_structural_pseudoname: StructuralPseudoname, _context: ContextIter| -> Option<BoxedAction<()>> { None };
+    let find_action = |_structural_pseudoname: StructuralPseudoname,
+                       _context: ContextIter|
+     -> Option<BoxedAction<()>> { None };
     // find_end_action that never matches anything
-    let find_end_action = |_structural_pseudoname: StructuralPseudoname, _context: ContextIter| -> Option<BoxedEndAction<()>> { None };
+    let find_end_action = |_structural_pseudoname: StructuralPseudoname,
+                           _context: ContextIter|
+     -> Option<BoxedEndAction<()>> { None };
 
     scan(
         find_action,
