@@ -152,9 +152,9 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
         &rjiter_cell,
         &writer_cell,
         &mut context,
-        &Options {
-            sse_tokens: vec!["data:".to_string(), "DONE".to_string()],
-            stop_early: false,
+        {
+            let sse_tokens: &[&[u8]] = &[b"data:", b"DONE"];
+            &Options::with_sse_tokens(sse_tokens)
         },
     )
     .unwrap();

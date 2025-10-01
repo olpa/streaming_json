@@ -12,19 +12,31 @@ use std::io;
 use u8pool::{U8Pool, U8PoolError};
 
 /// Options for configuring the scan behavior
-#[derive(Debug, Clone, Default)]
-pub struct Options {
-    /// List of SSE tokens to ignore at the top level
-    pub sse_tokens: Vec<String>,
+#[derive(Debug, Clone)]
+pub struct Options<'options> {
+    /// Slice of SSE tokens to ignore at the top level
+    pub sse_tokens: &'options [&'options [u8]],
     /// Whether to stop scanning as soon as possible, or scan the complete JSON stream
     pub stop_early: bool,
 }
 
-impl Options {
-    #[allow(clippy::must_use_candidate)]
-    /// Creates new default options
+impl<'options> Options<'options> {
+    #[allow(clippy::new_without_default, clippy::must_use_candidate)]
+    /// Creates new default options with no SSE tokens
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            sse_tokens: &[],
+            stop_early: false,
+        }
+    }
+
+    #[must_use]
+    /// Creates options with specified SSE tokens
+    pub fn with_sse_tokens(tokens: &'options [&'options [u8]]) -> Self {
+        Self {
+            sse_tokens: tokens,
+            stop_early: false,
+        }
     }
 }
 
@@ -363,14 +375,14 @@ fn skip_basic_values(peeked: Peek, rjiter: &mut RJiter) -> ScanResult<()> {
 ///
 /// * `ScanError` - A wrapper over `Rjiter` errors, over an error from a trigger actions, or over wrong JSON structure
 /// * `MaxNestingExceeded` - When the JSON nesting depth exceeds the working buffer capacity
-#[allow(clippy::too_many_lines)]
-pub fn scan<T: ?Sized>(
+#[allow(clippy::too_many_lines, clippy::elidable_lifetime_names)]
+pub fn scan<'options, T: ?Sized>(
     find_action: impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<T>>,
     find_end_action: impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedEndAction<T>>,
     rjiter_cell: &RefCell<RJiter>,
     baton_cell: &RefCell<T>,
     working_buffer: &mut U8Pool,
-    options: &Options,
+    options: &Options<'options>,
 ) -> ScanResult<()> {
     let context = working_buffer; // Alias for better readability in function body
 
@@ -528,8 +540,8 @@ pub fn scan<T: ?Sized>(
                 || position == StructurePosition::ArrayMiddle)
                 && context.len() == 2)
         {
-            for sse_token in &options.sse_tokens {
-                let found = rjiter.known_skip_token(sse_token.as_bytes());
+            for sse_token in options.sse_tokens {
+                let found = rjiter.known_skip_token(sse_token);
                 if found.is_ok() {
                     continue 'main_loop;
                 }

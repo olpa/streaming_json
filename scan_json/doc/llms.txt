@@ -71,10 +71,8 @@ The crate excels at processing LLM streaming responses, handling multiple JSON o
 ```rust
 use scan_json::{scan, Name, BoxedAction, BoxedEndAction, Trigger, Options};
 
-let options = Options {
-    sse_tokens: vec!["data:".to_string(), "DONE".to_string()],
-    stop_early: false,
-};
+let sse_tokens: &[&[u8]] = &[b"data:", b"DONE"];
+let options = Options::with_sse_tokens(sse_tokens);
 
 scan(&triggers, &end_triggers, &rjiter_cell, &baton_cell, &options)
 ```

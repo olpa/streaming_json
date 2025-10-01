@@ -209,10 +209,8 @@ fn test_skip_sse_tokens() {
     let mut scan_buffer = [0u8; 512];
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
-    let options = Options {
-        sse_tokens: vec!["data:".to_string(), "DONE".to_string()],
-        stop_early: false,
-    };
+    let sse_tokens: &[&[u8]] = &[b"data:", b"DONE"];
+    let options = Options::with_sse_tokens(sse_tokens);
 
     let find_action = |_structural_pseudoname: StructuralPseudoname,
                        _context: ContextIter|
@@ -1283,9 +1281,9 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
         &RefCell::new(rjiter),
         &writer_cell,
         &mut scan_stack,
-        &Options {
-            sse_tokens: vec!["data:".to_string(), "DONE".to_string()],
-            stop_early: false,
+        {
+            let sse_tokens: &[&[u8]] = &[b"data:", b"DONE"];
+            &Options::with_sse_tokens(sse_tokens)
         },
     )
     .unwrap();
@@ -1396,10 +1394,7 @@ fn stop_early() {
         &rjiter_cell,
         &RefCell::new(()),
         &mut scan_stack,
-        &Options {
-            sse_tokens: vec![],
-            stop_early: false, // `false`
-        },
+        &Options::new(),
     )
     .unwrap();
 
@@ -1421,7 +1416,7 @@ fn stop_early() {
             &RefCell::new(()),
             &mut scan_stack,
             &Options {
-                sse_tokens: vec![],
+                sse_tokens: &[],
                 stop_early: true, // `true`
             },
         )

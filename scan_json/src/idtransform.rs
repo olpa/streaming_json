@@ -340,7 +340,7 @@ pub fn idtransform(
         &idt_cell,
         working_buffer,
         &Options {
-            sse_tokens: vec![],
+            sse_tokens: &[],
             stop_early: true,
         },
     );
