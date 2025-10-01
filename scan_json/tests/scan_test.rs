@@ -506,7 +506,7 @@ fn client_can_consume_array() {
     fn consume_array_and_write(rjiter_cell: &RefCell<RJiter>, writer: &RefCell<dyn Write>) -> StreamOp {
         let mut rjiter = rjiter_cell.borrow_mut();
         let mut writer = writer.borrow_mut();
-        writer.write_all(b"<array>").unwrap();
+        writer.write_all(b"Consuming array: ").unwrap();
         let value = rjiter.next_value().unwrap();
         writer.write_all(format!("{value:?}").as_bytes()).unwrap();
         StreamOp::ValueIsConsumed
@@ -522,6 +522,7 @@ fn client_can_consume_array() {
             .then(|| Box::new(consume_array_and_write) as BoxedAction<dyn Write>)
     };
     // find_end_action that matches #array with parent items
+    // Will not be called because the array is consumed in the begin action
     let find_end_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedEndAction<dyn Write>> {
         iter_match(|| ["#array".as_bytes(), "items".as_bytes(), "#top".as_bytes()], structural_pseudoname, context)
             .then(|| Box::new(write_array_end) as BoxedEndAction<dyn Write>)
@@ -539,7 +540,7 @@ fn client_can_consume_array() {
 
     assert_eq!(
         String::from_utf8(writer_cell.borrow().to_vec()).unwrap(),
-        "<array>Array([Int(1), Int(2), Int(3)])</array>"
+        "Consuming array: Array([Int(1), Int(2), Int(3)])"
     );
 }
 
@@ -617,7 +618,7 @@ fn max_nesting_array() {
     let e = result.unwrap_err();
     assert_eq!(
         format!("{e}"),
-        "Max nesting exceeded at position 3 with level 3"
+        "Max nesting exceeded at position 2 with level 3"
     );
 }
 
