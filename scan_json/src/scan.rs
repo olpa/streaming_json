@@ -129,9 +129,9 @@ fn handle_object<T: ?Sized>(
     //
     let mut rjiter = rjiter_cell.borrow_mut();
     let keyr = if position == StructurePosition::ObjectBegin {
-        rjiter.next_object()
+        rjiter.next_object_bytes()
     } else {
-        rjiter.next_key()
+        rjiter.next_key_bytes()
     }?;
 
     match keyr {
@@ -160,7 +160,7 @@ fn handle_object<T: ?Sized>(
             // Remember the current key
             //
             context
-                .push_assoc(StructurePosition::ObjectMiddle, key.as_bytes())
+                .push_assoc(StructurePosition::ObjectMiddle, key)
                 .map_err(|e| match e {
                     U8PoolError::SliceLimitExceeded { max_slices } => {
                         ScanError::MaxNestingExceeded(rjiter.current_index(), max_slices)
