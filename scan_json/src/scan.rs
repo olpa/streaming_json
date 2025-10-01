@@ -7,7 +7,7 @@ use rjiter::jiter::Peek;
 use rjiter::RJiter;
 use std::cell::RefCell;
 use std::io;
-use u8pool::U8Pool;
+use u8pool::{U8Pool, U8PoolError};
 
 
 /// Options for configuring the scan behavior
@@ -145,10 +145,16 @@ fn handle_object<T: ?Sized>(
             // Remember the current key
             //
             context.push_assoc(StructurePosition::ObjectMiddle, key.as_bytes())
-                .map_err(|_| ScanError::InternalError(
-                    rjiter.current_index(),
-                    "Failed to push key to context pool".to_string()
-                ))?;
+                .map_err(|e| match e {
+                    U8PoolError::SliceLimitExceeded { max_slices } => ScanError::MaxNestingExceeded(
+                        rjiter.current_index(),
+                        max_slices
+                    ),
+                    _ => ScanError::InternalError(
+                        rjiter.current_index(),
+                        format!("Failed to push key to context pool: {}", e)
+                    ),
+                })?;
         }
     }
 
