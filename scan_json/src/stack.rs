@@ -17,6 +17,18 @@ impl<'a> ContextIter<'a> {
             inner: pool.iter_assoc_rev::<StructurePosition>(),
         }
     }
+
+    /// Returns the number of items in the context
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.inner.len()
+    }
+
+    /// Returns true if the context is empty
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 impl<'a> Iterator for ContextIter<'a> {

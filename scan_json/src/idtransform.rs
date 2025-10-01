@@ -172,32 +172,29 @@ fn create_idtransform_find_action<'a>(
     idt_cell: &'a RefCell<IdTransform<'a>>,
 ) -> impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<IdTransform<'a>>> + 'a {
     move |structural_pseudoname: StructuralPseudoname,
-          context: ContextIter|
+          mut context: ContextIter|
           -> Option<BoxedAction<IdTransform<'a>>> {
-        let context: Vec<&[u8]> = context.collect();
+        let context_count = context.len();
         match structural_pseudoname {
             StructuralPseudoname::Atom => {
                 // Handle context for is_top_level
                 let mut idt = idt_cell.borrow_mut();
-                let context_count = context.len();
                 idt.is_top_level = context_count < 2;
                 Some(Box::new(on_atom))
             }
             StructuralPseudoname::Object => {
                 let mut idt = idt_cell.borrow_mut();
-                let context_count = context.len();
                 idt.is_top_level = context_count < 2;
                 Some(Box::new(on_object))
             }
             StructuralPseudoname::Array => {
                 let mut idt = idt_cell.borrow_mut();
-                let context_count = context.len();
                 idt.is_top_level = context_count < 2;
                 Some(Box::new(on_array))
             }
             StructuralPseudoname::None => {
                 // Handle key matching - for object keys, the key name is in the context path
-                if let Some(key_bytes) = context.first() {
+                if let Some(key_bytes) = context.next() {
                     if key_bytes != b"#top" && key_bytes != b"#array" {
                         let mut idt = idt_cell.borrow_mut();
                         let name_str = String::from_utf8_lossy(key_bytes).to_string();
