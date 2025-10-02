@@ -326,8 +326,7 @@ pub fn idtransform(
     let find_action = create_idtransform_find_action(&idt_cell);
     let find_end_action = create_idtransform_find_end_action();
 
-    // Use an intermediate result to avoid: borrowed value does not live long enough
-    let result = scan(
+    scan(
         find_action,
         find_end_action,
         rjiter_cell,
@@ -337,7 +336,5 @@ pub fn idtransform(
             sse_tokens: &[],
             stop_early: true,
         },
-    );
-    #[allow(clippy::let_and_return)]
-    result
+    )
 }

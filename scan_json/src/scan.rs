@@ -21,7 +21,8 @@ pub struct Options<'options> {
 }
 
 impl<'options> Options<'options> {
-    #[allow(clippy::new_without_default, clippy::must_use_candidate)]
+    #[allow(clippy::new_without_default)]
+    #[must_use]
     /// Creates new default options with no SSE tokens
     pub fn new() -> Self {
         Self {
