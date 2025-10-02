@@ -36,22 +36,6 @@ use std::cell::RefCell;
 use std::io::Write;
 use u8pool::U8Pool;
 
-fn write_escaped_json_string(
-    writer: &mut dyn Write,
-    s: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
-    for byte in s.bytes() {
-        match byte {
-            b'"' => writer.write_all(b"\\\"")?,
-            b'\\' => writer.write_all(b"\\\\")?,
-            b'\n' => writer.write_all(b"\\n")?,
-            b'\r' => writer.write_all(b"\\r")?,
-            b'\t' => writer.write_all(b"\\t")?,
-            b => writer.write_all(&[b])?,
-        }
-    }
-    Ok(())
-}
 
 /// Copy a JSON atom (string, number, boolean, or null) from the input to the output.
 /// Advances the input iterator to the next token.
@@ -95,23 +79,23 @@ pub fn copy_atom(peeked: Peek, rjiter: &mut RJiter, writer: &mut dyn Write) -> S
 // ---------------- State
 
 #[derive(Debug)]
-enum IdtSequencePos {
+enum IdtSequencePos<'a> {
     AtBeginning,
     InMiddle,
-    AtBeginningKey(String),
-    InMiddleKey(String),
+    AtBeginningKey(&'a [u8]),
+    InMiddleKey(&'a [u8]),
     AfterKey,
 }
 
 // Main transformer structure that maintains the state of the transformation process.
-struct IdTransform<'a> {
+struct IdTransform<'a, 'workbuf> {
     writer: &'a mut dyn Write,
     // `seqpos`+`is_top_level` could be the own type `IdtFromMatcherToHandler`
-    seqpos: IdtSequencePos,
+    seqpos: IdtSequencePos<'workbuf>,
     is_top_level: bool,
 }
 
-impl<'a> IdTransform<'a> {
+impl<'a, 'workbuf> IdTransform<'a, 'workbuf> {
     fn new(writer: &'a mut dyn Write) -> Self {
         Self {
             writer,
@@ -142,14 +126,14 @@ impl<'a> IdTransform<'a> {
             }
             IdtSequencePos::AtBeginningKey(key) => {
                 self.writer.write_all(b"\"")?;
-                write_escaped_json_string(self.writer, key)?;
+                self.writer.write_all(key)?;
                 self.writer.write_all(b"\":")?;
                 self.seqpos = IdtSequencePos::InMiddle;
                 Ok(())
             }
             IdtSequencePos::InMiddleKey(key) => {
                 self.writer.write_all(b",\"")?;
-                write_escaped_json_string(self.writer, key)?;
+                self.writer.write_all(key)?;
                 self.writer.write_all(b"\":")?;
                 self.seqpos = IdtSequencePos::InMiddle;
                 Ok(())
@@ -168,12 +152,12 @@ impl<'a> IdTransform<'a> {
 ///
 /// # Returns
 /// `find_action` parameter for the `scan` function
-fn create_idtransform_find_action<'a>(
-    idt_cell: &'a RefCell<IdTransform<'a>>,
-) -> impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<IdTransform<'a>>> + 'a {
+fn create_idtransform_find_action<'a, 'workbuf>(
+    idt_cell: &'a RefCell<IdTransform<'a, 'workbuf>>,
+) -> impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<IdTransform<'a, 'workbuf>>> + 'a {
     move |structural_pseudoname: StructuralPseudoname,
           mut context: ContextIter|
-          -> Option<BoxedAction<IdTransform<'a>>> {
+          -> Option<BoxedAction<IdTransform<'a, 'workbuf>>> {
         let context_count = context.len();
         match structural_pseudoname {
             StructuralPseudoname::Atom => {
@@ -197,10 +181,12 @@ fn create_idtransform_find_action<'a>(
                 if let Some(key_bytes) = context.next() {
                     if key_bytes != b"#top" && key_bytes != b"#array" {
                         let mut idt = idt_cell.borrow_mut();
-                        let name_str = String::from_utf8_lossy(key_bytes).to_string();
+                        // Use unsafe to store the slice reference - we know it's safe because
+                        // the working buffer outlives the IdTransform
+                        let key_slice: &'static [u8] = unsafe { std::mem::transmute(key_bytes) };
                         idt.seqpos = match &idt.seqpos {
-                            IdtSequencePos::AtBeginning => IdtSequencePos::AtBeginningKey(name_str),
-                            _ => IdtSequencePos::InMiddleKey(name_str),
+                            IdtSequencePos::AtBeginning => IdtSequencePos::AtBeginningKey(key_slice),
+                            _ => IdtSequencePos::InMiddleKey(key_slice),
                         };
                         Some(Box::new(on_key))
                     } else {
@@ -218,11 +204,11 @@ fn create_idtransform_find_action<'a>(
 ///
 /// # Returns
 /// `find_end_action` parameter for the `scan` function
-fn create_idtransform_find_end_action<'a>(
-) -> impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedEndAction<IdTransform<'a>>> {
+fn create_idtransform_find_end_action<'a, 'workbuf>(
+) -> impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedEndAction<IdTransform<'a, 'workbuf>>> {
     |structural_pseudoname: StructuralPseudoname,
      _context: ContextIter|
-     -> Option<BoxedEndAction<IdTransform<'a>>> {
+     -> Option<BoxedEndAction<IdTransform<'a, 'workbuf>>> {
         match structural_pseudoname {
             StructuralPseudoname::Object => Some(Box::new(on_object_end)),
             StructuralPseudoname::Array => Some(Box::new(on_array_end)),
@@ -233,7 +219,7 @@ fn create_idtransform_find_end_action<'a>(
 
 // ---------------- Handlers
 
-fn on_key(_rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform>) -> StreamOp {
+fn on_key(_rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform<'_, '_>>) -> StreamOp {
     let mut idt = idt_cell.borrow_mut();
 
     if let Err(e) = idt.write_seqpos() {
@@ -244,7 +230,7 @@ fn on_key(_rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform>) -> St
     StreamOp::None
 }
 
-fn on_atom(rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform>) -> StreamOp {
+fn on_atom(rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform<'_, '_>>) -> StreamOp {
     let mut rjiter = rjiter_cell.borrow_mut();
     let mut idt = idt_cell.borrow_mut();
 
@@ -262,7 +248,7 @@ fn on_atom(rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform>) -> St
 }
 
 // "Struct" means "array" or "object"
-fn on_struct(bytes: &[u8], idt_cell: &RefCell<IdTransform>) -> StreamOp {
+fn on_struct(bytes: &[u8], idt_cell: &RefCell<IdTransform<'_, '_>>) -> StreamOp {
     let mut idt = idt_cell.borrow_mut();
 
     if let Err(e) = idt.write_seqpos() {
@@ -278,7 +264,7 @@ fn on_struct(bytes: &[u8], idt_cell: &RefCell<IdTransform>) -> StreamOp {
 
 fn on_struct_end(
     bytes: &[u8],
-    idt_cell: &RefCell<IdTransform>,
+    idt_cell: &RefCell<IdTransform<'_, '_>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut idt = idt_cell.borrow_mut();
     idt.seqpos = IdtSequencePos::InMiddle;
@@ -286,19 +272,19 @@ fn on_struct_end(
     Ok(())
 }
 
-fn on_array(_rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform>) -> StreamOp {
+fn on_array(_rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform<'_, '_>>) -> StreamOp {
     on_struct(b"[", idt_cell)
 }
 
-fn on_array_end(idt_cell: &RefCell<IdTransform>) -> Result<(), Box<dyn std::error::Error>> {
+fn on_array_end(idt_cell: &RefCell<IdTransform<'_, '_>>) -> Result<(), Box<dyn std::error::Error>> {
     on_struct_end(b"]", idt_cell)
 }
 
-fn on_object(_rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform>) -> StreamOp {
+fn on_object(_rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform<'_, '_>>) -> StreamOp {
     on_struct(b"{", idt_cell)
 }
 
-fn on_object_end(idt_cell: &RefCell<IdTransform>) -> Result<(), Box<dyn std::error::Error>> {
+fn on_object_end(idt_cell: &RefCell<IdTransform<'_, '_>>) -> Result<(), Box<dyn std::error::Error>> {
     on_struct_end(b"}", idt_cell)
 }
 
