@@ -95,8 +95,8 @@ fn handle_object<T: ?Sized>(
                     ))
                 }
                 StreamOp::ValueIsConsumed => {
-                    return Ok(*context
-                        .top_assoc_obj::<StructurePosition>()
+                    #[allow(unsafe_code)]
+                    return Ok(*unsafe { context.top_assoc_obj::<StructurePosition>() }
                         .ok_or_else(|| {
                             ScanError::InternalError(
                                 rjiter_cell.borrow().current_index(),
@@ -113,7 +113,8 @@ fn handle_object<T: ?Sized>(
     //
     if position != StructurePosition::ObjectBegin {
         let end_action = find_end_action(StructuralPseudoname::None, ContextIter::new(context));
-        let _ = context.pop_assoc::<StructurePosition>();
+        #[allow(unsafe_code)]
+        let _ = unsafe { context.pop_assoc::<StructurePosition>() };
         if let Some(end_action) = end_action {
             if let Err(e) = end_action(baton_cell) {
                 return Err(ScanError::ActionError(
@@ -146,14 +147,15 @@ fn handle_object<T: ?Sized>(
                     return Err(ScanError::ActionError(e, rjiter.current_index()));
                 }
             }
-            return Ok(*context
-                .top_assoc_obj::<StructurePosition>()
-                .ok_or_else(|| {
+            #[allow(unsafe_code)]
+            return Ok(
+                *unsafe { context.top_assoc_obj::<StructurePosition>() }.ok_or_else(|| {
                     ScanError::InternalError(
                         rjiter.current_index(),
                         "Context stack is empty when ending object".to_string(),
                     )
-                })?);
+                })?,
+            );
         }
         Some(key) => {
             //
@@ -232,15 +234,16 @@ fn handle_array<T: ?Sized>(
                 StreamOp::ValueIsConsumed => {
                     return Ok((
                         None,
-                        *context
-                            .top_assoc_obj::<StructurePosition>()
-                            .ok_or_else(|| {
+                        #[allow(unsafe_code)]
+                        *unsafe { context.top_assoc_obj::<StructurePosition>() }.ok_or_else(
+                            || {
                                 ScanError::InternalError(
                                     rjiter_cell.borrow().current_index(),
                                     "Context stack is empty when handling ValueIsConsumed in array"
                                         .to_string(),
                                 )
-                            })?,
+                            },
+                        )?,
                     ));
                 }
                 StreamOp::Error(e) => {
@@ -282,7 +285,8 @@ fn handle_array<T: ?Sized>(
         //
         // Pop the context before calling the end-trigger
         //
-        context.pop_assoc::<StructurePosition>().ok_or_else(|| {
+        #[allow(unsafe_code)]
+        unsafe { context.pop_assoc::<StructurePosition>() }.ok_or_else(|| {
             ScanError::InternalError(
                 rjiter_cell.borrow().current_index(),
                 "Context stack is empty when ending array".to_string(),
@@ -304,14 +308,13 @@ fn handle_array<T: ?Sized>(
         }
         return Ok((
             None,
-            *context
-                .top_assoc_obj::<StructurePosition>()
-                .ok_or_else(|| {
-                    ScanError::InternalError(
-                        rjiter_cell.borrow().current_index(),
-                        "Context stack is empty when ending array".to_string(),
-                    )
-                })?,
+            #[allow(unsafe_code)]
+            *unsafe { context.top_assoc_obj::<StructurePosition>() }.ok_or_else(|| {
+                ScanError::InternalError(
+                    rjiter_cell.borrow().current_index(),
+                    "Context stack is empty when ending array".to_string(),
+                )
+            })?,
         ));
     }
     Ok((peeked, StructurePosition::ArrayMiddle))

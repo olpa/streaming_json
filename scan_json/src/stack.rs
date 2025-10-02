@@ -14,7 +14,8 @@ impl<'a> ContextIter<'a> {
     #[must_use]
     pub fn new(pool: &'a U8Pool) -> Self {
         Self {
-            inner: pool.iter_assoc_rev::<StructurePosition>(),
+            #[allow(unsafe_code)]
+            inner: unsafe { pool.iter_assoc_rev::<StructurePosition>() },
         }
     }
 
