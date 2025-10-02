@@ -6,12 +6,18 @@ Start processing JSON before the entire JSON document is available.
 - [Documentation on docs.rs](https://docs.rs/scan_json/)
 - Entry point: [`crate::scan()`]
 
+The goal of `1.2.0` rewrite is to bring zero allocation and `no_std` compatibility. For `1.1.x` branch README, visit the [documentation on docs.rs](https://docs.rs/scan_json/).
+
 
 ## Concepts
 
-The library uses the streaming JSON parser [`RJiter`](https://crates.io/crates/rjiter).
+The library uses the streaming JSON parser [`RJiter`](https://crates.io/crates/rjiter). While parsing, it maintains the context, which is the path from the top to the current nesting level.
 
-The `scan` function checks for registered handlers (**actions**) at the begin and end of every JSON key. The check is performed by a **matcher**. Together, a matcher plus an action form a **trigger**.
+The workflow on each key:
+
+- First, `find_action` and execute if found
+- If the key value is an object or array, update the context and parse the next level
+- Afterwards, `find_end_action` and execute if found
 
 An action gets two `RefCell` references as arguments:
 
