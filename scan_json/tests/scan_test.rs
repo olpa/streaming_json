@@ -413,7 +413,7 @@ fn notify_for_top_level_object() {
         iter_match(
             || ["#object".as_bytes(), "#top".as_bytes()],
             structural_pseudoname,
-            context.clone(),
+            context,
         )
         .then(|| Box::new(set_begin_called) as BoxedAction<(bool, bool)>)
     };
@@ -424,7 +424,7 @@ fn notify_for_top_level_object() {
         iter_match(
             || ["#object".as_bytes(), "#top".as_bytes()],
             structural_pseudoname,
-            context.clone(),
+            context,
         )
         .then(|| Box::new(set_end_called) as BoxedEndAction<(bool, bool)>)
     };
@@ -1236,11 +1236,7 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
                     }
                 },
             ))
-        } else if iter_match(
-            || ["content".as_bytes()],
-            structural_pseudoname,
-            context.clone(),
-        ) {
+        } else if iter_match(|| ["content".as_bytes()], structural_pseudoname, context) {
             Some(Box::new(
                 |rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>| {
                     let mut rjiter = rjiter_cell.borrow_mut();
@@ -1261,11 +1257,7 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
     let find_end_action = |structural_pseudoname: StructuralPseudoname,
                            context: ContextIter|
      -> Option<BoxedEndAction<dyn Write>> {
-        if iter_match(
-            || ["message".as_bytes()],
-            structural_pseudoname,
-            context.clone(),
-        ) {
+        if iter_match(|| ["message".as_bytes()], structural_pseudoname, context) {
             Some(Box::new(|writer: &RefCell<dyn Write>| {
                 writer.borrow_mut().write_all(b"\n")?;
                 Ok(())

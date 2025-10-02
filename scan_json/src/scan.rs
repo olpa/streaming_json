@@ -12,7 +12,7 @@ use std::io;
 use u8pool::{U8Pool, U8PoolError};
 
 /// Options for configuring the scan behavior
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Options<'options> {
     /// Slice of SSE tokens to ignore at the top level
     pub sse_tokens: &'options [&'options [u8]],
