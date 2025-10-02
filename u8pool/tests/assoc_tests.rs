@@ -17,11 +17,11 @@ fn test_push_pop_assoc_basic() {
     pool.push_assoc(key, data).unwrap();
     assert_eq!(pool.len(), 1);
 
-    let (retrieved_key, retrieved_data) = pool.get_assoc::<Point>(0).unwrap();
+    let (retrieved_key, retrieved_data) = unsafe { pool.get_assoc::<Point>(0) }.unwrap();
     assert_eq!(*retrieved_key, Point { x: 42, y: 100 });
     assert_eq!(retrieved_data, b"hello");
 
-    let (popped_key, popped_data) = pool.pop_assoc::<Point>().unwrap();
+    let (popped_key, popped_data) = unsafe { pool.pop_assoc::<Point>() }.unwrap();
     assert_eq!(*popped_key, Point { x: 42, y: 100 });
     assert_eq!(popped_data, b"hello");
     assert_eq!(pool.len(), 0);
@@ -39,30 +39,30 @@ fn test_push_pop_assoc_multiple() {
 
     assert_eq!(pool.len(), 3);
 
-    let (key1, data1) = pool.get_assoc::<Point>(0).unwrap();
+    let (key1, data1) = unsafe { pool.get_assoc::<Point>(0) }.unwrap();
     assert_eq!(*key1, Point { x: 10, y: 20 });
     assert_eq!(data1, b"first");
 
-    let (key2, data2) = pool.get_assoc::<Point>(1).unwrap();
+    let (key2, data2) = unsafe { pool.get_assoc::<Point>(1) }.unwrap();
     assert_eq!(*key2, Point { x: 30, y: 40 });
     assert_eq!(data2, b"second");
 
-    let (key3, data3) = pool.get_assoc::<Point>(2).unwrap();
+    let (key3, data3) = unsafe { pool.get_assoc::<Point>(2) }.unwrap();
     assert_eq!(*key3, Point { x: 50, y: 60 });
     assert_eq!(data3, b"third");
 
     // Pop in LIFO order
-    let (key3, data3) = pool.pop_assoc::<Point>().unwrap();
+    let (key3, data3) = unsafe { pool.pop_assoc::<Point>() }.unwrap();
     assert_eq!(*key3, Point { x: 50, y: 60 });
     assert_eq!(data3, b"third");
     assert_eq!(pool.len(), 2);
 
-    let (key2, data2) = pool.pop_assoc::<Point>().unwrap();
+    let (key2, data2) = unsafe { pool.pop_assoc::<Point>() }.unwrap();
     assert_eq!(*key2, Point { x: 30, y: 40 });
     assert_eq!(data2, b"second");
     assert_eq!(pool.len(), 1);
 
-    let (key1, data1) = pool.pop_assoc::<Point>().unwrap();
+    let (key1, data1) = unsafe { pool.pop_assoc::<Point>() }.unwrap();
     assert_eq!(*key1, Point { x: 10, y: 20 });
     assert_eq!(data1, b"first");
     assert_eq!(pool.len(), 0);
@@ -79,7 +79,7 @@ fn test_push_assoc_zero_data() {
     pool.push_assoc(key, data).unwrap();
     assert_eq!(pool.len(), 1);
 
-    let (retrieved_key, retrieved_data) = pool.get_assoc::<Point>(0).unwrap();
+    let (retrieved_key, retrieved_data) = unsafe { pool.get_assoc::<Point>(0) }.unwrap();
     assert_eq!(*retrieved_key, Point { x: 123, y: 456 });
     assert_eq!(retrieved_data.len(), 0);
 }
@@ -101,7 +101,7 @@ fn test_pop_assoc_empty() {
     let mut buffer = [0u8; 64];
     let mut pool = U8Pool::new(&mut buffer, 4).unwrap();
 
-    let result = pool.pop_assoc::<Point>();
+    let result = unsafe { pool.pop_assoc::<Point>() };
     assert!(result.is_none());
 }
 
@@ -113,11 +113,11 @@ fn test_get_assoc_out_of_bounds() {
     pool.push_assoc(Point { x: 42, y: 84 }, b"data").unwrap();
 
     // Valid access
-    assert!(pool.get_assoc::<Point>(0).is_some());
+    assert!(unsafe { pool.get_assoc::<Point>(0) }.is_some());
 
     // Out of bounds access
-    assert!(pool.get_assoc::<Point>(1).is_none());
-    assert!(pool.get_assoc::<Point>(100).is_none());
+    assert!(unsafe { pool.get_assoc::<Point>(1) }.is_none());
+    assert!(unsafe { pool.get_assoc::<Point>(100) }.is_none());
 }
 
 #[test]
@@ -140,11 +140,11 @@ fn test_assoc_mixed_with_regular() {
     assert_eq!(pool.get(2).unwrap(), b"regular2");
 
     // Check associated slices (accessing as regular should work for data portion)
-    let (key1, data1) = pool.get_assoc::<Point>(1).unwrap();
+    let (key1, data1) = unsafe { pool.get_assoc::<Point>(1) }.unwrap();
     assert_eq!(*key1, Point { x: 100, y: 200 });
     assert_eq!(data1, b"assoc1");
 
-    let (key2, data2) = pool.get_assoc::<Point>(3).unwrap();
+    let (key2, data2) = unsafe { pool.get_assoc::<Point>(3) }.unwrap();
     assert_eq!(*key2, Point { x: 300, y: 400 });
     assert_eq!(data2, b"assoc2");
 }
@@ -159,7 +159,7 @@ fn test_assoc_iterator_forward() {
     pool.push_assoc(Point { x: 20, y: 25 }, b"bb").unwrap();
     pool.push_assoc(Point { x: 30, y: 35 }, b"ccc").unwrap();
 
-    let items: Vec<_> = pool.iter_assoc::<Point>().collect();
+    let items: Vec<_> = unsafe { pool.iter_assoc::<Point>() }.collect();
 
     assert_eq!(items.len(), 3);
     assert_eq!(*items[0].0, Point { x: 10, y: 15 });
@@ -180,7 +180,7 @@ fn test_assoc_iterator_reverse() {
     pool.push_assoc(Point { x: 20, y: 25 }, b"bb").unwrap();
     pool.push_assoc(Point { x: 30, y: 35 }, b"ccc").unwrap();
 
-    let items: Vec<_> = pool.iter_assoc_rev::<Point>().collect();
+    let items: Vec<_> = unsafe { pool.iter_assoc_rev::<Point>() }.collect();
 
     assert_eq!(items.len(), 3);
     assert_eq!(*items[0].0, Point { x: 30, y: 35 });
@@ -196,10 +196,10 @@ fn test_assoc_iterator_empty() {
     let mut buffer = [0u8; 64];
     let pool = U8Pool::new(&mut buffer, 4).unwrap();
 
-    let items: Vec<_> = pool.iter_assoc::<Point>().collect();
+    let items: Vec<_> = unsafe { pool.iter_assoc::<Point>() }.collect();
     assert_eq!(items.len(), 0);
 
-    let items_rev: Vec<_> = pool.iter_assoc_rev::<Point>().collect();
+    let items_rev: Vec<_> = unsafe { pool.iter_assoc_rev::<Point>() }.collect();
     assert_eq!(items_rev.len(), 0);
 }
 
@@ -211,10 +211,10 @@ fn test_assoc_size_hint() {
     pool.push_assoc(Point { x: 1, y: 2 }, b"a").unwrap();
     pool.push_assoc(Point { x: 3, y: 4 }, b"b").unwrap();
 
-    let iter = pool.iter_assoc::<Point>();
+    let iter = unsafe { pool.iter_assoc::<Point>() };
     assert_eq!(iter.size_hint(), (2, Some(2)));
 
-    let iter_rev = pool.iter_assoc_rev::<Point>();
+    let iter_rev = unsafe { pool.iter_assoc_rev::<Point>() };
     assert_eq!(iter_rev.size_hint(), (2, Some(2)));
 }
 
@@ -300,29 +300,29 @@ fn test_alignment_padding() {
     .unwrap();
 
     // Pop all and verify correctness
-    let (complex_val, complex_data) = pool.pop_assoc::<ComplexStruct>().unwrap();
+    let (complex_val, complex_data) = unsafe { pool.pop_assoc::<ComplexStruct>() }.unwrap();
     assert_eq!(complex_val.small, 0x12);
     assert_eq!(complex_val.big, 0xFEDCBA9876543210);
     assert_eq!(complex_val.medium, 0x87654321);
     assert_eq!(complex_data, b"complex");
 
-    let (single_y_val, single_y_data) = pool.pop_assoc::<SingleByte>().unwrap();
+    let (single_y_val, single_y_data) = unsafe { pool.pop_assoc::<SingleByte>() }.unwrap();
     assert_eq!(single_y_val.value, 0xFF);
     assert_eq!(single_y_data, b"y");
 
-    let (eight_val, eight_data) = pool.pop_assoc::<EightBytes>().unwrap();
+    let (eight_val, eight_data) = unsafe { pool.pop_assoc::<EightBytes>() }.unwrap();
     assert_eq!(eight_val.value, 0x123456789ABCDEF0);
     assert_eq!(eight_data, b"eight");
 
-    let (four_val, four_data) = pool.pop_assoc::<FourBytes>().unwrap();
+    let (four_val, four_data) = unsafe { pool.pop_assoc::<FourBytes>() }.unwrap();
     assert_eq!(four_val.value, 0x12345678);
     assert_eq!(four_data, b"four");
 
-    let (two_val, two_data) = pool.pop_assoc::<TwoBytes>().unwrap();
+    let (two_val, two_data) = unsafe { pool.pop_assoc::<TwoBytes>() }.unwrap();
     assert_eq!(two_val.value, 0x1234);
     assert_eq!(two_data, b"two");
 
-    let (single_val, single_data) = pool.pop_assoc::<SingleByte>().unwrap();
+    let (single_val, single_data) = unsafe { pool.pop_assoc::<SingleByte>() }.unwrap();
     assert_eq!(single_val.value, 0x42);
     assert_eq!(single_data, b"single");
 
@@ -457,7 +457,7 @@ fn test_push_assoc_returns_references_to_stored_values() {
     let stored_data_len = stored_data_ref.len();
     let _ = (stored_point_ref, stored_data_ref);
 
-    let (get_point_ref, get_data_ref) = pool.get_assoc::<Point>(0).unwrap();
+    let (get_point_ref, get_data_ref) = unsafe { pool.get_assoc::<Point>(0) }.unwrap();
     let get_point_ptr = get_point_ref as *const Point;
     let get_data_ptr = get_data_ref.as_ptr();
     let get_data_len = get_data_ref.len();
@@ -489,7 +489,7 @@ fn test_push_assoc_returns_independent_references() {
     let first_point_ptr = first_point as *const Point;
     let first_data_ptr = first_data.as_ptr();
 
-    let (get_p1, get_d1) = pool.get_assoc::<Point>(0).unwrap();
+    let (get_p1, get_d1) = unsafe { pool.get_assoc::<Point>(0) }.unwrap();
     assert_eq!(
         first_point_ptr, get_p1 as *const Point,
         "First push_assoc and get_assoc(0) should point to same Point memory"
@@ -506,7 +506,7 @@ fn test_push_assoc_returns_independent_references() {
     let second_point_ptr = second_point as *const Point;
     let second_data_ptr = second_data.as_ptr();
 
-    let (get_p2, get_d2) = pool.get_assoc::<Point>(1).unwrap();
+    let (get_p2, get_d2) = unsafe { pool.get_assoc::<Point>(1) }.unwrap();
     assert_eq!(
         second_point_ptr, get_p2 as *const Point,
         "Second push_assoc and get_assoc(1) should point to same Point memory"
@@ -523,7 +523,7 @@ fn test_push_assoc_returns_independent_references() {
     let third_point_ptr = third_point as *const Point;
     let third_data_ptr = third_data.as_ptr();
 
-    let (get_p3, get_d3) = pool.get_assoc::<Point>(2).unwrap();
+    let (get_p3, get_d3) = unsafe { pool.get_assoc::<Point>(2) }.unwrap();
     assert_eq!(
         third_point_ptr, get_p3 as *const Point,
         "Third push_assoc and get_assoc(2) should point to same Point memory"
@@ -562,7 +562,7 @@ fn test_push_assoc_return_value_with_empty_data() {
     let stored_data_len = stored_data.len();
     let _ = (stored_point, stored_data);
 
-    let (get_point, get_data) = pool.get_assoc::<Point>(0).unwrap();
+    let (get_point, get_data) = unsafe { pool.get_assoc::<Point>(0) }.unwrap();
     let get_point_ptr = get_point as *const Point;
     let get_data_ptr = get_data.as_ptr();
     let get_data_len = get_data.len();
@@ -616,8 +616,8 @@ fn test_push_assoc_pointer_equality_across_different_associated_types() {
     let big_data_ptr = big_data.as_ptr();
 
     // Verify pointer equality with get_assoc results for different types
-    let (get_simple, get_simple_data) = pool.get_assoc::<SimpleInt>(0).unwrap();
-    let (get_big, get_big_data) = pool.get_assoc::<BigStruct>(1).unwrap();
+    let (get_simple, get_simple_data) = unsafe { pool.get_assoc::<SimpleInt>(0) }.unwrap();
+    let (get_big, get_big_data) = unsafe { pool.get_assoc::<BigStruct>(1) }.unwrap();
 
     assert_eq!(
         simple_ptr, get_simple as *const SimpleInt,
@@ -677,9 +677,9 @@ fn test_push_assoc_pointer_equality_across_different_data_sizes() {
     let large_data_ptr = large_data_ref.as_ptr();
 
     // Verify pointer equality with get_assoc() for various data sizes
-    let (get_p1, get_d1) = pool.get_assoc::<Point>(0).unwrap();
-    let (get_p2, get_d2) = pool.get_assoc::<Point>(1).unwrap();
-    let (get_p3, get_d3) = pool.get_assoc::<Point>(2).unwrap();
+    let (get_p1, get_d1) = unsafe { pool.get_assoc::<Point>(0) }.unwrap();
+    let (get_p2, get_d2) = unsafe { pool.get_assoc::<Point>(1) }.unwrap();
+    let (get_p3, get_d3) = unsafe { pool.get_assoc::<Point>(2) }.unwrap();
 
     assert_eq!(
         small_point_ptr, get_p1 as *const Point,
@@ -763,8 +763,8 @@ fn test_push_assoc_return_value_with_alignment_requirements() {
     let stored_4_data_ptr = data_4.as_ptr();
 
     // Verify pointer equality with get_assoc() even with alignment requirements
-    let (get_8, get_data_8) = pool.get_assoc::<Aligned8>(1).unwrap();
-    let (get_4, get_data_4) = pool.get_assoc::<Aligned4>(2).unwrap();
+    let (get_8, get_data_8) = unsafe { pool.get_assoc::<Aligned8>(1) }.unwrap();
+    let (get_4, get_data_4) = unsafe { pool.get_assoc::<Aligned4>(2) }.unwrap();
 
     assert_eq!(
         stored_8_ptr, get_8 as *const Aligned8,
@@ -812,7 +812,7 @@ fn test_replace_top_assoc_bytes_basic() {
     assert_eq!(pool.len(), 1);
 
     // Verify the top item has the original key but new data
-    let (top_key, top_data) = pool.get_assoc::<Point>(0).unwrap();
+    let (top_key, top_data) = unsafe { pool.get_assoc::<Point>(0) }.unwrap();
     assert_eq!(*top_key, Point { x: 42, y: 100 }); // Key unchanged
     assert_eq!(top_data, b"replaced"); // Data changed
 }
@@ -844,7 +844,7 @@ fn test_replace_top_assoc_bytes_buffer_overflow() {
 
     // Original data should remain unchanged
     assert_eq!(pool.len(), 1);
-    let (key, data) = pool.get_assoc::<Point>(0).unwrap();
+    let (key, data) = unsafe { pool.get_assoc::<Point>(0) }.unwrap();
     assert_eq!(*key, Point { x: 1, y: 2 });
     assert_eq!(data, b"orig");
 }
@@ -861,16 +861,16 @@ fn test_top_assoc_basic() {
     pool.push_assoc(Point { x: 50, y: 60 }, b"third").unwrap();
 
     // Top should return the last pushed associated item
-    let (key, data) = pool.top_assoc::<Point>().unwrap();
+    let (key, data) = unsafe { pool.top_assoc::<Point>() }.unwrap();
     assert_eq!(*key, Point { x: 50, y: 60 });
     assert_eq!(data, b"third");
     assert_eq!(pool.len(), 3); // Stack should still have all items
 
     // Verify other elements are unchanged
-    let (k1, d1) = pool.get_assoc::<Point>(0).unwrap();
+    let (k1, d1) = unsafe { pool.get_assoc::<Point>(0) }.unwrap();
     assert_eq!(*k1, Point { x: 10, y: 20 });
     assert_eq!(d1, b"first");
-    let (k2, d2) = pool.get_assoc::<Point>(1).unwrap();
+    let (k2, d2) = unsafe { pool.get_assoc::<Point>(1) }.unwrap();
     assert_eq!(*k2, Point { x: 30, y: 40 });
     assert_eq!(d2, b"second");
 }
@@ -880,7 +880,7 @@ fn test_top_assoc_empty_pool() {
     let mut buffer = [0u8; 256];
     let pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
-    assert!(pool.top_assoc::<Point>().is_none());
+    assert!(unsafe { pool.top_assoc::<Point>() }.is_none());
 }
 
 #[test]
@@ -889,7 +889,7 @@ fn test_top_assoc_single_item() {
     let mut pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
     pool.push_assoc(Point { x: 100, y: 200 }, b"only").unwrap();
-    let (key, data) = pool.top_assoc::<Point>().unwrap();
+    let (key, data) = unsafe { pool.top_assoc::<Point>() }.unwrap();
     assert_eq!(*key, Point { x: 100, y: 200 });
     assert_eq!(data, b"only");
     assert_eq!(pool.len(), 1);
@@ -904,8 +904,8 @@ fn test_top_assoc_after_pop() {
     pool.push_assoc(Point { x: 30, y: 40 }, b"second").unwrap();
     pool.push_assoc(Point { x: 50, y: 60 }, b"third").unwrap();
 
-    pool.pop_assoc::<Point>().unwrap(); // Remove "third"
-    let (key, data) = pool.top_assoc::<Point>().unwrap();
+    unsafe { pool.pop_assoc::<Point>() }.unwrap(); // Remove "third"
+    let (key, data) = unsafe { pool.top_assoc::<Point>() }.unwrap();
     assert_eq!(*key, Point { x: 30, y: 40 }); // Now "second" is top
     assert_eq!(data, b"second");
     assert_eq!(pool.len(), 2);
@@ -923,7 +923,7 @@ fn test_top_assoc_obj_basic() {
     pool.push_assoc(Point { x: 50, y: 60 }, b"third").unwrap();
 
     // Top should return only the associated object of the last item
-    let key = pool.top_assoc_obj::<Point>().unwrap();
+    let key = unsafe { pool.top_assoc_obj::<Point>() }.unwrap();
     assert_eq!(*key, Point { x: 50, y: 60 });
     assert_eq!(pool.len(), 3); // Stack should still have all items
 }
@@ -933,7 +933,7 @@ fn test_top_assoc_obj_empty_pool() {
     let mut buffer = [0u8; 256];
     let pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
-    assert!(pool.top_assoc_obj::<Point>().is_none());
+    assert!(unsafe { pool.top_assoc_obj::<Point>() }.is_none());
 }
 
 #[test]
@@ -942,7 +942,7 @@ fn test_top_assoc_obj_single_item() {
     let mut pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
 
     pool.push_assoc(Point { x: 100, y: 200 }, b"only").unwrap();
-    let key = pool.top_assoc_obj::<Point>().unwrap();
+    let key = unsafe { pool.top_assoc_obj::<Point>() }.unwrap();
     assert_eq!(*key, Point { x: 100, y: 200 });
     assert_eq!(pool.len(), 1);
 }
@@ -956,8 +956,8 @@ fn test_top_assoc_obj_after_pop() {
     pool.push_assoc(Point { x: 30, y: 40 }, b"second").unwrap();
     pool.push_assoc(Point { x: 50, y: 60 }, b"third").unwrap();
 
-    pool.pop_assoc::<Point>().unwrap(); // Remove "third"
-    let key = pool.top_assoc_obj::<Point>().unwrap();
+    unsafe { pool.pop_assoc::<Point>() }.unwrap(); // Remove "third"
+    let key = unsafe { pool.top_assoc_obj::<Point>() }.unwrap();
     assert_eq!(*key, Point { x: 30, y: 40 }); // Now "second" is top
     assert_eq!(pool.len(), 2);
 }
@@ -1007,7 +1007,7 @@ fn test_top_assoc_bytes_after_pop() {
     pool.push_assoc(Point { x: 30, y: 40 }, b"second").unwrap();
     pool.push_assoc(Point { x: 50, y: 60 }, b"third").unwrap();
 
-    pool.pop_assoc::<Point>().unwrap(); // Remove "third"
+    unsafe { pool.pop_assoc::<Point>() }.unwrap(); // Remove "third"
     let data = pool.top_assoc_bytes::<Point>().unwrap();
     assert_eq!(data, b"second"); // Now "second" is top
     assert_eq!(pool.len(), 2);
@@ -1036,8 +1036,8 @@ fn test_top_pointer_equality() {
         .unwrap();
 
     // All top methods should return references pointing to the same memory
-    let (assoc_key, assoc_data) = pool.top_assoc::<Point>().unwrap();
-    let obj_key = pool.top_assoc_obj::<Point>().unwrap();
+    let (assoc_key, assoc_data) = unsafe { pool.top_assoc::<Point>() }.unwrap();
+    let obj_key = unsafe { pool.top_assoc_obj::<Point>() }.unwrap();
     let bytes_data = pool.top_assoc_bytes::<Point>().unwrap();
 
     // Pointers should be equal
@@ -1070,11 +1070,11 @@ fn test_top_methods_with_alignment() {
     pool.push_assoc(aligned_val, b"aligned data").unwrap();
 
     // Test all top methods work with aligned types
-    let (key, data) = pool.top_assoc::<Aligned8>().unwrap();
+    let (key, data) = unsafe { pool.top_assoc::<Aligned8>() }.unwrap();
     assert_eq!(key.value, 0x123456789ABCDEF0);
     assert_eq!(data, b"aligned data");
 
-    let obj = pool.top_assoc_obj::<Aligned8>().unwrap();
+    let obj = unsafe { pool.top_assoc_obj::<Aligned8>() }.unwrap();
     assert_eq!(obj.value, 0x123456789ABCDEF0);
 
     let bytes = pool.top_assoc_bytes::<Aligned8>().unwrap();
