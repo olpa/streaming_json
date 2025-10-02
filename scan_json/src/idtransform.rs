@@ -32,10 +32,10 @@ use crate::{
     rjiter::jiter::Peek, scan, BoxedAction, BoxedEndAction, Error as ScanError, Options, RJiter,
     Result as ScanResult,
 };
+use core::mem::transmute;
 use std::cell::RefCell;
 use std::io::Write;
 use u8pool::U8Pool;
-
 
 /// Copy a JSON atom (string, number, boolean, or null) from the input to the output.
 /// Advances the input iterator to the next token.
@@ -95,7 +95,7 @@ struct IdTransform<'a, 'workbuf> {
     is_top_level: bool,
 }
 
-impl<'a, 'workbuf> IdTransform<'a, 'workbuf> {
+impl<'a> IdTransform<'a, '_> {
     fn new(writer: &'a mut dyn Write) -> Self {
         Self {
             writer,
@@ -154,7 +154,8 @@ impl<'a, 'workbuf> IdTransform<'a, 'workbuf> {
 /// `find_action` parameter for the `scan` function
 fn create_idtransform_find_action<'a, 'workbuf>(
     idt_cell: &'a RefCell<IdTransform<'a, 'workbuf>>,
-) -> impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<IdTransform<'a, 'workbuf>>> + 'a {
+) -> impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<IdTransform<'a, 'workbuf>>> + 'a
+{
     move |structural_pseudoname: StructuralPseudoname,
           mut context: ContextIter|
           -> Option<BoxedAction<IdTransform<'a, 'workbuf>>> {
@@ -183,9 +184,13 @@ fn create_idtransform_find_action<'a, 'workbuf>(
                         let mut idt = idt_cell.borrow_mut();
                         // Use unsafe to store the slice reference - we know it's safe because
                         // the working buffer outlives the IdTransform
-                        let key_slice: &'static [u8] = unsafe { std::mem::transmute(key_bytes) };
+                        #[allow(unsafe_code)]
+                        let key_slice: &'static [u8] =
+                            unsafe { transmute::<&[u8], &'static [u8]>(key_bytes) };
                         idt.seqpos = match &idt.seqpos {
-                            IdtSequencePos::AtBeginning => IdtSequencePos::AtBeginningKey(key_slice),
+                            IdtSequencePos::AtBeginning => {
+                                IdtSequencePos::AtBeginningKey(key_slice)
+                            }
                             _ => IdtSequencePos::InMiddleKey(key_slice),
                         };
                         Some(Box::new(on_key))
@@ -205,7 +210,8 @@ fn create_idtransform_find_action<'a, 'workbuf>(
 /// # Returns
 /// `find_end_action` parameter for the `scan` function
 fn create_idtransform_find_end_action<'a, 'workbuf>(
-) -> impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedEndAction<IdTransform<'a, 'workbuf>>> {
+) -> impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedEndAction<IdTransform<'a, 'workbuf>>>
+{
     |structural_pseudoname: StructuralPseudoname,
      _context: ContextIter|
      -> Option<BoxedEndAction<IdTransform<'a, 'workbuf>>> {
@@ -284,7 +290,9 @@ fn on_object(_rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform<'_, 
     on_struct(b"{", idt_cell)
 }
 
-fn on_object_end(idt_cell: &RefCell<IdTransform<'_, '_>>) -> Result<(), Box<dyn std::error::Error>> {
+fn on_object_end(
+    idt_cell: &RefCell<IdTransform<'_, '_>>,
+) -> Result<(), Box<dyn std::error::Error>> {
     on_struct_end(b"}", idt_cell)
 }
 
