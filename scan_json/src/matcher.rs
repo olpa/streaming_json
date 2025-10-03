@@ -7,9 +7,9 @@ use std::cell::RefCell;
 /// Represents structural pseudo-names for JSON nodes
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StructuralPseudoname {
-    /// A begin or an end of an array element
+    /// The beginning or end of an array element
     Array,
-    /// A begin or an end of an object element
+    /// The beginning or end of an object element
     Object,
     /// Anything that is not an array or object (primitives like strings, numbers, booleans, null)
     Atom,
@@ -17,10 +17,10 @@ pub enum StructuralPseudoname {
     None,
 }
 
-/// Interact from a callback to the `scan` function.
+/// Return value from a callback to the `scan` function.
 #[derive(Debug)]
 pub enum StreamOp {
-    /// Indicates that the action did not advance the `RJiter` parser (except it peeked the next token without consuming it),
+    /// Indicates that the action did not advance the `RJiter` parser (it may have peeked at the next token without consuming it),
     /// therefore `scan` can work further as if the action was not called at all.
     None,
     /// Indicates that the action advanced the `RJiter` parser, therefore `scan` should update its state:
@@ -80,8 +80,8 @@ pub type BoxedEndAction<T> = Box<dyn Fn(&RefCell<T>) -> Result<(), Box<dyn std::
 ///
 /// To match a structural event, the name-iterator should start with a structural pseudo-name:
 ///
-/// - `#object` - Begin or end of an object, matches `StructuralPseudoname::Object`
-/// - `#array` - Begin or end of an array, matches `StructuralPseudoname::Array`
+/// - `#object` - Beginning or end of an object, matches `StructuralPseudoname::Object`
+/// - `#array` - Beginning or end of an array, matches `StructuralPseudoname::Array`
 /// - `#atom` - A primitive value in an array or at the top level, matches `StructuralPseudoname::Atom`
 ///
 /// # Returns
