@@ -1,30 +1,31 @@
 //! Copy JSON input to output, retaining the original structure and collapsing whitespace.
 //! The implementation of `idtransform` is an example of advanced use of the `scan` function.
-//!
-//! The code uses the `scan`'s parameter `baton_cell` of type `IdTransform` to:
-//! - maintain state to properly write JSON, adding or not adding a comma, `IdtSequencePos`
-//! - pass information from matchers to handlers, `IdtMatcherToHandler`
-//!
-//! Actually, there is no such thing as `IdtMatcherToHandler`, because doing "clean code"
-//! and "good design" complicated the code too much. In the final implementation,
-//! `IdTransform` took over the responsibility of the retired `IdtMatcherForKey`.
-//!
-//! Why pass the information at all? This is another trade-off.
-//! The code uses a match-any-key matcher. The matched key should be printed to the output.
-//! In the current implementation of `scan`:
-//! - The matcher is not allowed to print anything.
-//! - The handler doesn't know the key.
-//!
-//! How to print? The solution space is:
-//! - Allow matchers to print.
-//!   In this case, the return type of `scan` should be `Result`, not just `boolean`.
-//! - Pass the key to the handler.
-//!   In this case, the argument list of a handler should be extended, and `scan` should
-//!   pass the context which was passed to the matcher once again, now to the handler.
-//! - Pass the key from the matcher to the handler.
-//!   In this case: 1) the matcher produces a side effect, 2) the printing is postponed
-//!   to some unknown point in the future.
-//!
+
+///
+/// The code uses the `scan`'s parameter `baton_cell` of type `IdTransform` to:
+/// - maintain state to properly write JSON, adding or not adding a comma, `IdtSequencePos`
+/// - pass information from matchers to handlers, `IdtMatcherToHandler`
+//
+/// Actually, there is no such thing as `IdtMatcherToHandler`, because doing "clean code"
+/// and "good design" complicated the code too much. In the final implementation,
+/// `IdTransform` took over the responsibility of the retired `IdtMatcherForKey`.
+//
+/// Why pass the information at all? This is another trade-off.
+/// The code uses a match-any-key matcher. The matched key should be printed to the output.
+/// In the current implementation of `scan`:
+/// - The matcher is not allowed to print anything.
+/// - The handler doesn't know the key.
+//
+/// How to print? The solution space is:
+/// - Allow matchers to print.
+///   In this case, the return type of `scan` should be `Result`, not just `boolean`.
+/// - Pass the key to the handler.
+///   In this case, the argument list of a handler should be extended, and `scan` should
+///   pass the context which was passed to the matcher once again, now to the handler.
+/// - Pass the key from the matcher to the handler.
+///   In this case: 1) the matcher produces a side effect, 2) the printing is postponed
+///   to some unknown point in the future.
+///
 use crate::matcher::StructuralPseudoname;
 use crate::stack::ContextIter;
 use crate::StreamOp;
@@ -307,7 +308,7 @@ fn on_object_end(
 ///
 /// * `rjiter_cell` - Reference cell containing the JSON iterator
 /// * `writer` - Output writer for the transformed JSON
-/// * `working_buffer` - Working buffer for context stack (see [`crate::scan`] for details)
+/// * `working_buffer` - Working buffer for context stack (see [`crate::scan()`] for details)
 ///
 /// # Errors
 ///
