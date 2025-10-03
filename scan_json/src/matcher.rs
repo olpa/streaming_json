@@ -1,6 +1,8 @@
 //! This module contains functions for matching JSON nodes based on their name and context.
 
 use crate::stack::ContextIter;
+use rjiter::RJiter;
+use std::cell::RefCell;
 
 /// Represents structural pseudo-names for JSON nodes
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -11,37 +13,76 @@ pub enum StructuralPseudoname {
     Object,
     /// Anything that is not an array or object (primitives like strings, numbers, booleans, null)
     Atom,
-    /// An object key, with its name in `path` (see `iter_match` function)
+    /// An object key, with its name in `path` (see [`iter_match`] function)
     None,
 }
 
-/// Determines if a node matches against a sequence of names using an iterator-based approach.
+/// Interact from a callback to the `scan` function.
+#[derive(Debug)]
+pub enum StreamOp {
+    /// Indicates that the action did not advance the `RJiter` parser (except it peeked the next token without consuming it),
+    /// therefore `scan` can work further as if the action was not called at all.
+    None,
+    /// Indicates that the action advanced the `RJiter` parser, therefore `scan` should update its state:
+    /// - Inside an object, the action consumed the key value, therefore the next event should be a key or an end-object
+    /// - Inside an array, the action consumed the item, the next event should be a value or an end-array
+    /// - At the top level, the action consumed the item, the next event should be a value or end-of-input
+    ValueIsConsumed,
+    /// An error
+    Error(Box<dyn std::error::Error>),
+}
+
+impl<E: std::error::Error + 'static> From<E> for StreamOp {
+    fn from(error: E) -> Self {
+        StreamOp::Error(Box::new(error))
+    }
+}
+
+/// Type alias for boxed action functions that can be called during JSON scanning
+pub type BoxedAction<T> = Box<dyn Fn(&RefCell<RJiter>, &RefCell<T>) -> StreamOp>;
+
+/// Type alias for boxed end action functions that are called when a matched key ends
+pub type BoxedEndAction<T> = Box<dyn Fn(&RefCell<T>) -> Result<(), Box<dyn std::error::Error>>>;
+
+/// Match by name and ancestor names against the current JSON context.
 ///
-/// To return true (to match), the whole iterator should be consumed, and the names
-/// should match with the path elements. The first element from the iterator is compared
-/// with the most recent path element, the second element with the parent name,
-/// the third element with the grandparent name, and so on.
-///
-/// An empty iterator always returns true (matches everything).
-///
-/// As a performance optimization, the structural pseudo-names are passed not in `path`,
-/// but as a separate argument. Logically, they could be part of the iterator as well.
+/// Additionally, the structural events (begin/end of array/object, primitive values in array/on top)
+/// can be matched via structural pseudo-names.
 ///
 /// # Arguments
 ///
-/// * `iter_creator` - A function that creates an iterator over the expected sequence to match against
-/// * `structural_pseudoname` - The structural type of the current node
-/// * `path` - An iterator over references to u8 slices, where the first element is the most recent name,
-///   the second element is the parent name, etc.
+/// * `iter_creator` - A sequence of names to match, as a function that returns an iterator
+/// * `structural_pseudoname` - A structural event, a part of the json context
+/// * `path` - The json context
 ///
-/// Special names that can appear in `path`:
+/// # Details
+///
+/// In the name-iterator, the first name is the name to match, the second name is
+/// its expected parent name, the third name is the expected grandparent name, and so on.
+///
+/// In the context-iterator, the first element is the most recent name, the second element is
+/// the parent name, the third element is the grandparent name, and so on.
+///
+/// To return `true` (to match), the whole name-iterator should be consumed, and the names
+/// should match context names.
+///
+/// An empty name-iterator always returns true (matches everything).
+///
+/// # Pseudo names
+///
+/// There are pseudo names that can appear in `path`:
+///
 /// - `#top` - The top level context. Always present as the last element in `path`
-/// - `#array` - An array context
+/// - `#array`
 ///
-/// Structural names that can be matched via `iter_creator` iterator:
-/// - `#object` - Matches an object element (when `structural_pseudoname` is `Object`)
-/// - `#atom` - Matches a primitive value (when `structural_pseudoname` is `Atom`)
-/// - `#array` - Matches an array element (when `structural_pseudoname` is `Array`)
+/// As a performance optimization, the structural events are not included in `path`,
+/// and if there is a structural event, it is passed as a separate argument.
+///
+/// To match a structural event, the name-iterator should start with a structural pseudo-name:
+///
+/// - `#object` - Begin or end of an object, matches `StructuralPseudoname::Object`
+/// - `#array` - Begin or end of an array, matches `StructuralPseudoname::Array`
+/// - `#atom` - A primitive value in an array or at the top level, matches `StructuralPseudoname::Atom`
 ///
 /// # Returns
 ///
@@ -95,27 +136,4 @@ where
 
     // Extra path elements are allowed - no need to check for them
     true
-}
-
-/// Prints the structural pseudo-name and path of the node being matched and always returns false.
-///
-/// This function is useful for debugging to see what nodes are being processed.
-///
-/// # Arguments
-///
-/// Same as in `iter_match`.
-///
-/// # Returns
-///
-/// * Always returns `false`
-#[must_use]
-pub fn debug_print_no_match(
-    structural_pseudoname: StructuralPseudoname,
-    path: ContextIter,
-) -> bool {
-    println!("debug_print_no_match: structural_pseudoname: {structural_pseudoname:?}");
-    for (i, ctx) in path.enumerate() {
-        println!("  path[{i}]: {ctx:?}");
-    }
-    false
 }

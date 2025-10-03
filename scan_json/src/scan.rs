@@ -1,9 +1,8 @@
 //! Implementation of the `scan` function to scan a JSON stream.
 
-use crate::action::{BoxedAction, BoxedEndAction, StreamOp};
 use crate::error::Error as ScanError;
 use crate::error::Result as ScanResult;
-use crate::matcher::StructuralPseudoname;
+use crate::matcher::{BoxedAction, BoxedEndAction, StreamOp, StructuralPseudoname};
 use crate::stack::ContextIter;
 use rjiter::jiter::Peek;
 use rjiter::RJiter;

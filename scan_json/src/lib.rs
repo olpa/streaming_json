@@ -1,16 +1,14 @@
 #![doc = include_str!("../README.md")]
 
-pub mod action;
 pub mod error;
 pub mod idtransform;
 pub mod matcher;
 pub mod scan;
 pub mod stack;
 
-pub use action::{BoxedAction, BoxedEndAction, StreamOp};
 pub use error::{Error, Result};
 pub use idtransform::idtransform;
-pub use matcher::{debug_print_no_match, iter_match};
+pub use matcher::{iter_match, BoxedAction, BoxedEndAction, StreamOp};
 pub use scan::{scan, Options};
 
 pub use rjiter;

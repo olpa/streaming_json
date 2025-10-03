@@ -1,8 +1,9 @@
 use std::cell::RefCell;
 use std::io::Write;
 
-use ::scan_json::action::{BoxedAction, BoxedEndAction, StreamOp};
-use ::scan_json::matcher::{iter_match, StructuralPseudoname};
+use ::scan_json::matcher::{
+    iter_match, BoxedAction, BoxedEndAction, StreamOp, StructuralPseudoname,
+};
 use ::scan_json::stack::ContextIter;
 use ::scan_json::{scan, Options};
 use rjiter::{jiter::Peek, RJiter};

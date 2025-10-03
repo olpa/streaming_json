@@ -1,4 +1,4 @@
-use scan_json::matcher::{debug_print_no_match, iter_match, StructuralPseudoname};
+use scan_json::matcher::{iter_match, StructuralPseudoname};
 use scan_json::scan::StructurePosition;
 use scan_json::stack::ContextIter;
 use u8pool::U8Pool;
@@ -326,28 +326,6 @@ fn test_iter_match_deep_nesting() {
         StructuralPseudoname::None,
         path
     ));
-}
-
-#[test]
-fn test_debug_print_no_match_always_false() {
-    let mut buffer = [0u8; 1024];
-    let mut pool = U8Pool::with_default_max_slices(&mut buffer).unwrap();
-
-    // debug_print_no_match should always return false
-    let path = ContextIter::new(&pool);
-    assert!(!debug_print_no_match(StructuralPseudoname::None, path));
-
-    pool.push_assoc(S, b"parent").unwrap();
-    pool.push_assoc(S, b"name").unwrap();
-    let path = ContextIter::new(&pool);
-    assert!(!debug_print_no_match(StructuralPseudoname::None, path));
-
-    pool.clear();
-    pool.push_assoc(S, b"grandparent").unwrap();
-    pool.push_assoc(S, b"parent").unwrap();
-    pool.push_assoc(S, b"field").unwrap();
-    let path = ContextIter::new(&pool);
-    assert!(!debug_print_no_match(StructuralPseudoname::None, path));
 }
 
 #[test]
