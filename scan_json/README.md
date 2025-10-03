@@ -1,6 +1,6 @@
 # React to elements in a JSON stream
 
-Start processing JSON before the entire JSON document is available.
+Start processing JSON before the entire document is available.
 
 - [`scan_json` on crates.io](https://crates.io/crates/scan_json)
 - [Documentation on docs.rs](https://docs.rs/scan_json/)
@@ -11,25 +11,25 @@ The goal of `1.2.0` rewrite is to bring zero allocation and `no_std` compatibili
 
 ## Concepts
 
-The library uses the streaming JSON parser [`RJiter`](https://crates.io/crates/rjiter). While parsing, it maintains the context, which is the path from the top to the current nesting level.
+The library uses the streaming JSON parser [`RJiter`](https://crates.io/crates/rjiter). While parsing, it maintains context, which is the path of element names from the root to the current nesting level.
 
-The workflow on each key:
+The workflow for each key:
 
-- First, `find_action` and execute if found
+- First, call `find_action` and execute if found
 - If the key value is an object or array, update the context and parse the next level
-- Afterwards, `find_end_action` and execute if found
+- Afterwards, call `find_end_action` and execute if found
 
-An action gets two `RefCell` references as arguments:
+An action receives two `RefCell` references as arguments:
 
 - `baton_cell`: A black box for side effects by the action
-- `rjiter_cell`: `RJiter` parser object. An action can interfere with JSON parsing by consuming the value of the current key
+- `rjiter_cell`: `RJiter` parser object. An action can modify JSON parsing behavior by consuming the current key's value
 
 
 ## Example of an action
 
-`find_action` uses the library helper [`iter_match`] to detect the key `content` and return the `on_content` function.
+`find_action` uses the library helper [`iter_match`] to detect the `content` key and return the `on_content` function.
 
-The action peeks the value and writes it to the output. Because the value is consumed, the action returns `ValueIsConsumed` flag to `scan` so that it can update its internal state.
+The action peeks the value and writes it to the output. Because the value is consumed, the action returns the `ValueIsConsumed` flag to `scan` so it can update its internal state.
 
 ```rust
 use scan_json::{scan, iter_match, BoxedAction, StreamOp, Options};
@@ -78,12 +78,12 @@ Summary:
 
 - Initialize the parser
 - Create the black box with a `Vec`, which is used as `dyn Write` in actions
-- Create triggers for `message`, `content`, and a trigger for the end of `message`
+- Create handlers for `message`, `content`, and a handler for the end of `message`
 - Combine all together in the `scan` function
 
 The example demonstrates that `scan` can be used to handle LLM streaming output:
 
-- The input is several JSON objects on the top-level, without being wrapped in an array
+- The input consists of several top-level JSON objects not wrapped in an array
 - The server-side-events tokens are ignored
 
 ```rust
