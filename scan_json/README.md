@@ -25,15 +25,11 @@ An action gets two `RefCell` references as arguments:
 - `rjiter_cell`: `RJiter` parser object. An action can interfere with JSON parsing by consuming the value of the current key
 
 
-## Example of a trigger
+## Example of an action
 
-The trigger matches the key `content` and calls the `on_content` function.
+`find_action` uses the library helper [`iter_match`] to detect the key `content` and return the `on_content` function.
 
-The action's black box contains a `Write` trait object. The action writes the string value of the current JSON key `content` to this writer.
-
-Getting the value requires using the `RJiter` parser to consume the next token. The action returns `StreamOp::ValueIsConsumed` to inform the caller that it has consumed the value, so that the caller can update its internal state.
-
-The type annotation `Trigger<BoxedAction<dyn Write>>` is not needed in this code fragment, but it is often required when using closure handlers and several triggers.
+The action peeks the value and writes it to the output. Because the value is consumed, the action returns `ValueIsConsumed` flag to `scan` so that it can update its internal state.
 
 ```rust
 use scan_json::{scan, iter_match, BoxedAction, StreamOp, Options};
@@ -76,7 +72,7 @@ but also an example of advanced `scan` use. Read the source code for details.
 Additionally, the function [`crate::idtransform::copy_atom()`] can be useful.
 
 
-## Complete example: LLM output
+## Complete example: converting an LLM stream
 
 Summary:
 
@@ -168,7 +164,7 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
     writer_cell
 }
 
-// ---------------- Sample LLM output
+// ---------------- Sample LLM output as `scan_llm_output` input
 
 let json = r#"{
   "id": "chatcmpl-Ahpq4nZeP9mESaKsCVdmZdK96IrUH",
@@ -209,7 +205,7 @@ let writer_cell = scan_llm_output(json);
 let message = String::from_utf8(writer_cell.borrow().to_vec()).unwrap();
 assert_eq!(message, "(new message)\nHello! How can I assist you today?\n");
 
-// ---------------- Sample LLM output (streaming)
+// ---------------- Another sample of LLM output, the streaming version
 let json = r#"
 data: {"choices":[{"index":0,"delta":{"role":"assistant","content":"","refusal":null},"logprobs":null,"finish_reason":null}],"id":"chatcmpl-AgMB1khICnwswjgqIl2X2jr587Nep","object":"chat.completion.chunk","created":1734658387,"model":"gpt-4o-mini-2024-07-18","system_fingerprint":"fp_d02d531b47"}
 
