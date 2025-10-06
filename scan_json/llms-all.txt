@@ -4,7 +4,7 @@ Parse JSON and execute callbacks based on patterns, even before the entire docum
 
 For a fast start,
 
-- first look at the concepts and examples in this `README`,
+- first look at the concepts and examples in this document,
 - then learn about [`crate::scan()`], and
 - about the context stack and matching by [`crate::iter_match()`].
 
@@ -63,16 +63,6 @@ let find_action = |structural_pseudoname: StructuralPseudoname, context: Context
     }
 };
 ```
-
-## Complete example: Identity transformation
-
-The identity transformation copies JSON input to output, retaining the original structure.
-
-The function [`crate::idtransform::idtransform()`] is not just a library function,
-but also an example of advanced `scan` use. Read the source code for details.
-
-Additionally, the function [`crate::idtransform::copy_atom()`] can be useful.
-
 
 ## Complete example: converting an LLM stream
 
@@ -168,84 +158,21 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
 
 // ---------------- Sample LLM output as `scan_llm_output` input
 
-let json = r#"{
-  "id": "chatcmpl-Ahpq4nZeP9mESaKsCVdmZdK96IrUH",
-  "object": "chat.completion",
-  "created": 1735010736,
-  "model": "gpt-4o-mini-2024-07-18",
-  "choices": [
-    {
-      "index": 0,
-      "message": {
-        "role": "assistant",
-        "content": "Hello! How can I assist you today?",
-        "refusal": null
-      },
-      "logprobs": null,
-      "finish_reason": "stop"
-    }
-  ],
-  "usage": {
-    "prompt_tokens": 9,
-    "completion_tokens": 10,
-    "total_tokens": 19,
-    "prompt_tokens_details": {
-      "cached_tokens": 0,
-      "audio_tokens": 0
-    },
-    "completion_tokens_details": {
-      "reasoning_tokens": 0,
-      "audio_tokens": 0,
-      "accepted_prediction_tokens": 0,
-      "rejected_prediction_tokens": 0
-    }
-  },
-  "system_fingerprint": "fp_0aa8d3e20b"
-}"#;
+let json = r#"{"content":"test"}"#;
 
 let writer_cell = scan_llm_output(json);
 let message = String::from_utf8(writer_cell.borrow().to_vec()).unwrap();
 assert_eq!(message, "(new message)\nHello! How can I assist you today?\n");
 
 // ---------------- Another sample of LLM output, the streaming version
-let json = r#"
-data: {"choices":[{"index":0,"delta":{"role":"assistant","content":"","refusal":null},"logprobs":null,"finish_reason":null}],"id":"chatcmpl-AgMB1khICnwswjgqIl2X2jr587Nep","object":"chat.completion.chunk","created":1734658387,"model":"gpt-4o-mini-2024-07-18","system_fingerprint":"fp_d02d531b47"}
-
-data: {"choices":[{"index":0,"delta":{"content":"Hello"},"logprobs":null,"finish_reason":null}],"id":"chatcmpl-AgMB1khICnwswjgqIl2X2jr587Nep","object":"chat.completion.chunk","created":1734658387,"model":"gpt-4o-mini-2024-07-18","system_fingerprint":"fp_d02d531b47"}
-
-data: {"choices":[{"index":0,"delta":{"content":"!"},"logprobs":null,"finish_reason":null}],"id":"chatcmpl-AgMB1khICnwswjgqIl2X2jr587Nep","object":"chat.completion.chunk","created":1734658387,"model":"gpt-4o-mini-2024-07-18","system_fingerprint":"fp_d02d531b47"}
-
-data: {"choices":[{"index":0,"delta":{"content":" How"},"logprobs":null,"finish_reason":null}],"id":"chatcmpl-AgMB1khICnwswjgqIl2X2jr587Nep","object":"chat.completion.chunk","created":1734658387,"model":"gpt-4o-mini-2024-07-18","system_fingerprint":"fp_d02d531b47"}
-
-data: {"choices":[{"index":0,"delta":{"content":" can"},"logprobs":null,"finish_reason":null}],"id":"chatcmpl-AgMB1khICnwswjgqIl2X2jr587Nep","object":"chat.completion.chunk","created":1734658387,"model":"gpt-4o-mini-2024-07-18","system_fingerprint":"fp_d02d531b47"}
-
-data: {"choices":[{"index":0,"delta":{"content":" I"},"logprobs":null,"finish_reason":null}],"id":"chatcmpl-AgMB1khICnwswjgqIl2X2jr587Nep","object":"chat.completion.chunk","created":1734658387,"model":"gpt-4o-mini-2024-07-18","system_fingerprint":"fp_d02d531b47"}
-
-data: {"choices":[{"index":0,"delta":{"content":" assist"},"logprobs":null,"finish_reason":null}],"id":"chatcmpl-AgMB1khICnwswjgqIl2X2jr587Nep","object":"chat.completion.chunk","created":1734658387,"model":"gpt-4o-mini-2024-07-18","system_fingerprint":"fp_d02d531b47"}
-
-data: {"choices":[{"index":0,"delta":{"content":" you"},"logprobs":null,"finish_reason":null}],"id":"chatcmpl-AgMB1khICnwswjgqIl2X2jr587Nep","object":"chat.completion.chunk","created":1734658387,"model":"gpt-4o-mini-2024-07-18","system_fingerprint":"fp_d02d531b47"}
-
-data: {"choices":[{"index":0,"delta":{"content":" today"},"logprobs":null,"finish_reason":null}],"id":"chatcmpl-AgMB1khICnwswjgqIl2X2jr587Nep","object":"chat.completion.chunk","created":1734658387,"model":"gpt-4o-mini-2024-07-18","system_fingerprint":"fp_d02d531b47"}
-
-data: {"choices":[{"index":0,"delta":{"content":"?"},"logprobs":null,"finish_reason":null}],"id":"chatcmpl-AgMB1khICnwswjgqIl2X2jr587Nep","object":"chat.completion.chunk","created":1734658387,"model":"gpt-4o-mini-2024-07-18","system_fingerprint":"fp_d02d531b47"}
-
-data: {"choices":[{"index":0,"delta":{},"logprobs":null,"finish_reason":"stop"}],"id":"chatcmpl-AgMB1khICnwswjgqIl2X2jr587Nep","object":"chat.completion.chunk","created":1734658387,"model":"gpt-4o-mini-2024-07-18","system_fingerprint":"fp_d02d531b47"}
-
-data: [DONE]
-"#;
+let json = r#"data: {"content"}"#;
 
 let writer_cell = scan_llm_output(json);
 let message = String::from_utf8(writer_cell.borrow().to_vec()).unwrap();
 assert_eq!(message, "Hello! How can I assist you today?");
 ```
 
+# TODO
 
-# Colophon
-
-License: MIT
-
-Author: Oleg Parashchenko, olpa@ <https://uucode.com/>
-
-Contact: via email or [Ailets Discord](https://discord.gg/HEBE3gv2)
-
-`scan_json` is a part of the [ailets.org](https://ailets.org) project.
+- API docs from "cargo doc"
+- "scan" first, "iter_match" second, the rest afterwards

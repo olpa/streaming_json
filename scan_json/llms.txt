@@ -1,0 +1,1 @@
+`scan_json` is a Rust crate to parse JSON and execute callbacks based on patterns, even before the entire document is available. See "./llms-all.txt" for details.

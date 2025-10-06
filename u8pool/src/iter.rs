@@ -131,7 +131,10 @@ impl<'a, T: Sized + 'a> Iterator for U8PoolAssocIter<'a, T> {
     type Item = (&'a T, &'a [u8]);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let result = self.pool.get_assoc::<T>(self.current_index);
+        // Safe: The iterator was created via unsafe iter_assoc() call, which established
+        // that type T matches the stored associated type for all items in the pool
+        #[allow(unsafe_code)]
+        let result = unsafe { self.pool.get_assoc::<T>(self.current_index) };
         self.current_index += 1;
         result
     }
@@ -172,7 +175,12 @@ impl<'a, T: Sized + 'a> Iterator for U8PoolAssocRevIter<'a, T> {
             return None;
         }
         self.current_index -= 1;
-        self.pool.get_assoc::<T>(self.current_index)
+        // Safe: The iterator was created via unsafe iter_assoc_rev() call, which established
+        // that type T matches the stored associated type for all items in the pool
+        #[allow(unsafe_code)]
+        unsafe {
+            self.pool.get_assoc::<T>(self.current_index)
+        }
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {

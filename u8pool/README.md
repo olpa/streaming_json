@@ -85,7 +85,7 @@ assert_eq!(*stored_point, Point { x: 42, y: 100 });
 assert_eq!(stored_data, b"center point");
 
 // Retrieve both the Point and its data using get_assoc
-let (retrieved_point, data) = pool.get_assoc::<Point>(0).unwrap();
+let (retrieved_point, data) = unsafe { pool.get_assoc::<Point>(0) }.unwrap();
 assert_eq!(*retrieved_point, Point { x: 42, y: 100 });
 assert_eq!(data, b"center point");
 ```

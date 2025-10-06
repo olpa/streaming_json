@@ -1,116 +1,139 @@
-//! This module contains the `Matcher` trait and implementations for matching by name,
-//! matching by parent-name combination, and matching by grandparent-parent-name combination.
-//! There is also a debug-matcher to print the context and name of the node being matched.
+//! This module contains functions for matching JSON nodes based on their name and context.
 
-use crate::scan::ContextFrame;
+use crate::stack::ContextIter;
+use rjiter::RJiter;
+use std::cell::RefCell;
 
-/// Defines the interface for matching JSON nodes based on their name and context.
-pub trait Matcher: std::fmt::Debug {
-    /// Determines if a node matches specific criteria.
-    ///
-    /// # Arguments
-    ///
-    /// * `name` - The name of the current node being matched
-    /// * `context` - The stack of parent contexts. The oldest frame (the root) is the first element,
-    ///   the latest frame (the parent) is the last element.
-    ///
-    /// Special names:
-    /// - `#top` - The top level context
-    /// - `#array` - An array
-    /// - `#object` - An unnamed object inside an array or at the top level
-    /// - `#atom` - Anything what is not an object or array
-    ///
-    /// # Returns
-    ///
-    /// * `true` if the node matches the criteria
-    /// * `false` otherwise
-    fn matches(&self, name: &str, context: &[ContextFrame]) -> bool;
+/// Represents structural pseudo-names for JSON nodes
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StructuralPseudoname {
+    /// The beginning or end of an array element
+    Array,
+    /// The beginning or end of an object element
+    Object,
+    /// Anything that is not an array or object (primitives like strings, numbers, booleans, null)
+    Atom,
+    /// An object key, with its name in `path` (see [`iter_match`] function)
+    None,
 }
 
-/// A matcher that checks for exact name matches.
+/// Return value from a callback to the `scan` function.
 #[derive(Debug)]
-pub struct Name {
-    name: String,
+pub enum StreamOp {
+    /// Indicates that the action did not advance the `RJiter` parser (it may have peeked at the next token without consuming it),
+    /// therefore `scan` can work further as if the action was not called at all.
+    None,
+    /// Indicates that the action advanced the `RJiter` parser, therefore `scan` should update its state:
+    /// - Inside an object, the action consumed the key value, therefore the next event should be a key or an end-object
+    /// - Inside an array, the action consumed the item, the next event should be a value or an end-array
+    /// - At the top level, the action consumed the item, the next event should be a value or end-of-input
+    ValueIsConsumed,
+    /// An error
+    Error(Box<dyn std::error::Error>),
 }
 
-impl Name {
-    #[must_use]
-    /// Creates a new name matcher
-    pub fn new(name: String) -> Self {
-        Self { name }
+impl<E: std::error::Error + 'static> From<E> for StreamOp {
+    fn from(error: E) -> Self {
+        StreamOp::Error(Box::new(error))
     }
 }
 
-impl Matcher for Name {
-    fn matches(&self, name: &str, _context: &[ContextFrame]) -> bool {
-        self.name == name
+/// Type alias for boxed action functions that can be called during JSON scanning
+pub type BoxedAction<T> = Box<dyn Fn(&RefCell<RJiter>, &RefCell<T>) -> StreamOp>;
+
+/// Type alias for boxed end action functions that are called when a matched key ends
+pub type BoxedEndAction<T> = Box<dyn Fn(&RefCell<T>) -> Result<(), Box<dyn std::error::Error>>>;
+
+/// Match by name and ancestor names against the current JSON context.
+///
+/// Additionally, the structural events (begin/end of array/object, primitive values in array/on top)
+/// can be matched via structural pseudo-names.
+///
+/// # Arguments
+///
+/// * `iter_creator` - A sequence of names to match, as a function that returns an iterator
+/// * `structural_pseudoname` - A structural event, a part of the json context
+/// * `path` - The json context
+///
+/// # Details
+///
+/// In the name-iterator, the first name is the name to match, the second name is
+/// its expected parent name, the third name is the expected grandparent name, and so on.
+///
+/// In the context-iterator, the first element is the most recent name, the second element is
+/// the parent name, the third element is the grandparent name, and so on.
+///
+/// To return `true` (to match), the whole name-iterator should be consumed, and the names
+/// should match context names.
+///
+/// An empty name-iterator always returns true (matches everything).
+///
+/// # Pseudo names
+///
+/// There are pseudo names that can appear in `path`:
+///
+/// - `#top` - The top level context. Always present as the last element in `path`
+/// - `#array`
+///
+/// As a performance optimization, the structural events are not included in `path`,
+/// and if there is a structural event, it is passed as a separate argument.
+///
+/// To match a structural event, the name-iterator should start with a structural pseudo-name:
+///
+/// - `#object` - Beginning or end of an object, matches `StructuralPseudoname::Object`
+/// - `#array` - Beginning or end of an array, matches `StructuralPseudoname::Array`
+/// - `#atom` - A primitive value in an array or at the top level, matches `StructuralPseudoname::Atom`
+///
+/// # Returns
+///
+/// * `true` if the node matches the criteria
+/// * `false` otherwise
+pub fn iter_match<F, T, Item>(
+    iter_creator: F,
+    structural_pseudoname: StructuralPseudoname,
+    mut path: ContextIter,
+) -> bool
+where
+    F: Fn() -> T,
+    T: IntoIterator<Item = Item>,
+    Item: AsRef<[u8]>,
+{
+    let mut expected = iter_creator().into_iter();
+
+    // Handle structural pseudo-names
+    match structural_pseudoname {
+        StructuralPseudoname::Array => {
+            match expected.next() {
+                Some(expected_name) if expected_name.as_ref() == b"#array" => {}
+                Some(_) => return false,
+                None => return true, // Empty match-iterator always returns true
+            }
+        }
+        StructuralPseudoname::Object => {
+            match expected.next() {
+                Some(expected_name) if expected_name.as_ref() == b"#object" => {}
+                Some(_) => return false,
+                None => return true, // Empty match-iterator always returns true
+            }
+        }
+        StructuralPseudoname::Atom => {
+            match expected.next() {
+                Some(expected_name) if expected_name.as_ref() == b"#atom" => {}
+                Some(_) => return false,
+                None => return true, // Empty match-iterator always returns true
+            }
+        }
+        StructuralPseudoname::None => {}
     }
-}
 
-/// A matcher that checks for both parent and name matches.
-#[derive(Debug)]
-pub struct ParentAndName {
-    parent: String,
-    name: String,
-}
-
-impl ParentAndName {
-    #[must_use]
-    /// Creates a new parent-and-name matcher
-    pub fn new(parent: String, name: String) -> Self {
-        Self { parent, name }
-    }
-}
-
-impl Matcher for ParentAndName {
-    fn matches(&self, name: &str, context: &[ContextFrame]) -> bool {
-        context
-            .last()
-            .is_some_and(|parent| self.name == name && parent.current_key == self.parent)
-    }
-}
-/// A matcher that checks for grandparent, parent and name matches.
-#[derive(Debug)]
-pub struct ParentParentAndName {
-    grandparent: String,
-    parent: String,
-    name: String,
-}
-
-impl ParentParentAndName {
-    #[must_use]
-    /// Creates a new grandparent-parent-and-name matcher
-    pub fn new(grandparent: String, parent: String, name: String) -> Self {
-        Self {
-            grandparent,
-            parent,
-            name,
+    // Compare each path element with expected elements
+    for expected_context in expected {
+        match path.next() {
+            Some(actual_context) if expected_context.as_ref() == actual_context => {}
+            _ => return false,
         }
     }
-}
 
-impl Matcher for ParentParentAndName {
-    fn matches(&self, name: &str, context: &[ContextFrame]) -> bool {
-        if context.len() < 2 {
-            return false;
-        }
-        #[allow(clippy::indexing_slicing)]
-        let parent = &context[context.len() - 1];
-        #[allow(clippy::indexing_slicing)]
-        let grandparent = &context[context.len() - 2];
-        self.name == name
-            && parent.current_key == self.parent
-            && grandparent.current_key == self.grandparent
-    }
-}
-
-/// A matcher that prints the context and name of the node being matched.
-#[derive(Debug)]
-pub struct DebugPrinter;
-
-impl Matcher for DebugPrinter {
-    fn matches(&self, name: &str, context: &[ContextFrame]) -> bool {
-        println!("DebugPrinter::matches: name: {name:?} context: {context:?}");
-        false
-    }
+    // Extra path elements are allowed - no need to check for them
+    true
 }

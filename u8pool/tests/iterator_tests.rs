@@ -255,7 +255,7 @@ fn test_assoc_iterator_clone() {
         .push_assoc(Point { x: 30, y: 40 }, b"second")
         .unwrap();
 
-    let mut iter1 = u8pool.iter_assoc::<Point>();
+    let mut iter1 = unsafe { u8pool.iter_assoc::<Point>() };
     let iter2 = iter1.clone();
 
     // Both iterators should start at the same position
@@ -292,7 +292,7 @@ fn test_assoc_reverse_iterator_clone() {
         .push_assoc(Point { x: 30, y: 40 }, b"second")
         .unwrap();
 
-    let mut iter1 = u8pool.iter_assoc_rev::<Point>();
+    let mut iter1 = unsafe { u8pool.iter_assoc_rev::<Point>() };
     let iter2 = iter1.clone();
 
     // Both iterators should start at the same position

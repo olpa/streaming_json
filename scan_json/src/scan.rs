@@ -1,152 +1,252 @@
 //! Implementation of the `scan` function to scan a JSON stream.
 
-use crate::action::{find_action, BoxedAction, BoxedEndAction, StreamOp, Trigger};
 use crate::error::Error as ScanError;
 use crate::error::Result as ScanResult;
+use crate::matcher::{BoxedAction, BoxedEndAction, StreamOp, StructuralPseudoname};
+use crate::stack::ContextIter;
 use rjiter::jiter::Peek;
 use rjiter::RJiter;
 use std::cell::RefCell;
 use std::io;
-use u8pool::U8Pool;
+use u8pool::{U8Pool, U8PoolError};
 
 /// Options for configuring the scan behavior
-#[derive(Debug, Clone, Default)]
-pub struct Options {
-    /// List of SSE tokens to ignore at the top level
-    pub sse_tokens: Vec<String>,
+#[derive(Debug)]
+pub struct Options<'options> {
+    /// Slice of SSE tokens to ignore at the top level
+    pub sse_tokens: &'options [&'options [u8]],
     /// Whether to stop scanning as soon as possible, or scan the complete JSON stream
     pub stop_early: bool,
 }
 
-impl Options {
-    #[allow(clippy::must_use_candidate)]
-    /// Creates new default options
+impl<'options> Options<'options> {
+    #[allow(clippy::new_without_default)]
+    #[must_use]
+    /// Creates new default options with no SSE tokens
     pub fn new() -> Self {
-        Self::default()
-    }
-}
-
-/// Metadata associated with each context frame in the `U8Pool` stack
-#[derive(Debug, Clone, Copy)]
-struct StateFrame {
-    is_in_object: bool,
-    is_in_array: bool,
-    is_elem_begin: bool,
-}
-
-/// Represents the current parsing context within the JSON structure
-#[derive(Debug)]
-pub struct ContextFrame {
-    /// The current key being processed in the JSON structure
-    pub current_key: String,
-    is_in_object: bool,
-    is_in_array: bool,
-    is_elem_begin: bool,
-}
-
-/// Create a new `ContextFrame` for testing purposes
-#[allow(clippy::must_use_candidate)]
-pub fn mk_context_frame_for_test(current_key: String) -> ContextFrame {
-    ContextFrame {
-        current_key,
-        is_in_object: false,
-        is_in_array: false,
-        is_elem_begin: false,
-    }
-}
-
-/// Helper function to convert `U8Pool` context to legacy `ContextFrame` format
-fn build_context_vec(pool: &U8Pool) -> Vec<ContextFrame> {
-    let mut context = Vec::new();
-    for i in 0..pool.len() {
-        if let Some((frame, key_slice)) = pool.get_assoc::<StateFrame>(i) {
-            let current_key = String::from_utf8_lossy(key_slice).to_string();
-            context.push(ContextFrame {
-                current_key,
-                is_in_object: frame.is_in_object,
-                is_in_array: frame.is_in_array,
-                is_elem_begin: frame.is_elem_begin,
-            });
+        Self {
+            sse_tokens: &[],
+            stop_early: false,
         }
     }
-    context
-}
 
-/// Helper function to convert `ContextFrame` to `StateFrame` and key
-fn context_frame_to_parts(frame: &ContextFrame) -> (StateFrame, &str) {
-    let state_frame = StateFrame {
-        is_in_object: frame.is_in_object,
-        is_in_array: frame.is_in_array,
-        is_elem_begin: frame.is_elem_begin,
-    };
-    (state_frame, &frame.current_key)
-}
-
-/// Helper function to convert `StateFrame` and key back to `ContextFrame`
-fn parts_to_context_frame(state_frame: StateFrame, key: String) -> ContextFrame {
-    ContextFrame {
-        current_key: key,
-        is_in_object: state_frame.is_in_object,
-        is_in_array: state_frame.is_in_array,
-        is_elem_begin: state_frame.is_elem_begin,
+    #[must_use]
+    /// Creates options with specified SSE tokens
+    pub fn with_sse_tokens(tokens: &'options [&'options [u8]]) -> Self {
+        Self {
+            sse_tokens: tokens,
+            stop_early: false,
+        }
     }
+}
+
+/// Position in the JSON structure during scanning
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StructurePosition {
+    /// At the top level of the JSON document
+    Top,
+    /// At the beginning of an object (just opened)
+    ObjectBegin,
+    /// In the middle of an object
+    ObjectMiddle,
+    /// Between key and value in an object
+    ObjectBetweenKV,
+    /// At the beginning of an array (just opened)
+    ArrayBegin,
+    /// In the middle of an array
+    ArrayMiddle,
 }
 
 // Handle a JSON object key
 //
-// - Call the end-trigger for the previous key
-// - Call the action for the current key
-// - Pop the context stack if the object is ended
-// - Push the current key onto the context stack
+// - Call the begin-action for the object
+// - Call the end-action for the previous key
+// - Find the next key in the object or the end of the object
+// - Push the current key onto the context stack, or call the end-action for the object
+// - Call the begin-action for the current key
+//
+// Stack:
+// - On the first key, push it
+// - On subsequent keys, pop the previous key, push the current key
+// - On end of object, pop the last key
+// - Contract: The stack state after the end of the object is the same as before the begin of the object.
+//   The returned StructurePosition after the end is one from the top of the stack before the begin of the object.
 fn handle_object<T: ?Sized>(
     rjiter_cell: &RefCell<RJiter>,
     baton_cell: &RefCell<T>,
-    triggers: &[Trigger<BoxedAction<T>>],
-    triggers_end: &[Trigger<BoxedEndAction<T>>],
-    cur_level_frame: StateFrame,
-    cur_level_key: &str,
+    find_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<T>>,
+    find_end_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedEndAction<T>>,
+    position: StructurePosition,
     context: &mut U8Pool,
-) -> ScanResult<(StreamOp, StateFrame, String)> {
-    let mut cur_level = ContextFrame {
-        current_key: cur_level_key.to_string(),
-        is_in_object: cur_level_frame.is_in_object,
-        is_in_array: cur_level_frame.is_in_array,
-        is_elem_begin: cur_level_frame.is_elem_begin,
-    };
-    {
-        //
-        // Call the begin-trigger for the object
-        //
-        if cur_level.is_elem_begin {
-            let context_vec = build_context_vec(context);
-            if let Some(begin_action) = find_action(triggers, "#object", &context_vec) {
-                match begin_action(rjiter_cell, baton_cell) {
-                    StreamOp::None => (),
-                    StreamOp::Error(e) => {
-                        return Err(ScanError::ActionError(
-                            e,
-                            rjiter_cell.borrow().current_index(),
-                        ))
-                    }
-                    StreamOp::ValueIsConsumed => {
-                        return Err(ScanError::ActionError(
-                            "ValueIsConsumed is not supported for #top actions".into(),
-                            rjiter_cell.borrow().current_index(),
-                        ));
-                    }
+) -> ScanResult<StructurePosition> {
+    //
+    // Call the begin-trigger for the object
+    //
+    if position == StructurePosition::ObjectBegin {
+        if let Some(begin_action) =
+            find_action(StructuralPseudoname::Object, ContextIter::new(context))
+        {
+            match begin_action(rjiter_cell, baton_cell) {
+                StreamOp::None => (),
+                StreamOp::Error(e) => {
+                    return Err(ScanError::ActionError(
+                        e,
+                        rjiter_cell.borrow().current_index(),
+                    ))
+                }
+                StreamOp::ValueIsConsumed => {
+                    #[allow(unsafe_code)]
+                    return Ok(*unsafe { context.top_assoc_obj::<StructurePosition>() }
+                        .ok_or_else(|| {
+                            ScanError::InternalError(
+                                rjiter_cell.borrow().current_index(),
+                                "Context stack is empty when handling ValueIsConsumed".to_string(),
+                            )
+                        })?);
                 }
             }
         }
+    }
 
-        //
-        // Call the end-trigger for the previous key
-        //
-        if !cur_level.is_elem_begin {
-            let context_vec = build_context_vec(context);
+    //
+    // Call the end-trigger for the previous key
+    //
+    if position != StructurePosition::ObjectBegin {
+        let end_action = find_end_action(StructuralPseudoname::None, ContextIter::new(context));
+        #[allow(unsafe_code)]
+        let _ = unsafe { context.pop_assoc::<StructurePosition>() };
+        if let Some(end_action) = end_action {
+            if let Err(e) = end_action(baton_cell) {
+                return Err(ScanError::ActionError(
+                    e,
+                    rjiter_cell.borrow().current_index(),
+                ));
+            }
+        }
+    }
+
+    //
+    // Find the next key in the object or the end of the object
+    //
+    let mut rjiter = rjiter_cell.borrow_mut();
+    let keyr = if position == StructurePosition::ObjectBegin {
+        rjiter.next_object_bytes()
+    } else {
+        rjiter.next_key_bytes()
+    }?;
+
+    match keyr {
+        None => {
+            //
+            // Call the end-trigger for the object
+            //
             if let Some(end_action) =
-                find_action(triggers_end, &cur_level.current_key, &context_vec)
+                find_end_action(StructuralPseudoname::Object, ContextIter::new(context))
             {
                 if let Err(e) = end_action(baton_cell) {
+                    return Err(ScanError::ActionError(e, rjiter.current_index()));
+                }
+            }
+            #[allow(unsafe_code)]
+            return Ok(
+                *unsafe { context.top_assoc_obj::<StructurePosition>() }.ok_or_else(|| {
+                    ScanError::InternalError(
+                        rjiter.current_index(),
+                        "Context stack is empty when ending object".to_string(),
+                    )
+                })?,
+            );
+        }
+        Some(key) => {
+            //
+            // Remember the current key
+            //
+            context
+                .push_assoc(StructurePosition::ObjectMiddle, key)
+                .map_err(|e| match e {
+                    U8PoolError::SliceLimitExceeded { max_slices } => {
+                        ScanError::MaxNestingExceeded(rjiter.current_index(), max_slices)
+                    }
+                    _ => ScanError::InternalError(
+                        rjiter.current_index(),
+                        format!("Failed to push key to context pool: {e}"),
+                    ),
+                })?;
+        }
+    }
+
+    //
+    // Execute the action for the current key
+    //
+    if let Some(action) = find_action(StructuralPseudoname::None, ContextIter::new(context)) {
+        drop(rjiter);
+        match action(rjiter_cell, baton_cell) {
+            StreamOp::Error(e) => {
+                return Err(ScanError::ActionError(
+                    e,
+                    rjiter_cell.borrow().current_index(),
+                ));
+            }
+            StreamOp::ValueIsConsumed => {
+                return Ok(StructurePosition::ObjectMiddle);
+            }
+            StreamOp::None => (),
+        }
+    }
+
+    Ok(StructurePosition::ObjectBetweenKV)
+}
+
+// Handle a JSON array item.
+//
+// - If at the beginning of the array
+//   - Call the begin-trigger
+//   - Push "#array" to the context stack
+// - Return the next item in the array
+// - If at the end of the array
+//   - Pop the "#array" from the context stack
+//   - Call the end-trigger
+//
+// Stack:
+// - On the first item, push "#array"
+// - On subsequent items, do nothing
+// - On end of array, pop "#array"
+// - Contract: The stack state after the end of the array is the same as before the begin of the array.
+//   The returned StructurePosition after the end is one from the top of the stack before the begin of the array.
+//
+fn handle_array<T: ?Sized>(
+    rjiter_cell: &RefCell<RJiter>,
+    baton_cell: &RefCell<T>,
+    find_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<T>>,
+    find_end_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedEndAction<T>>,
+    position: StructurePosition,
+    context: &mut U8Pool,
+) -> ScanResult<(Option<Peek>, StructurePosition)> {
+    //
+    // Call the begin-trigger at the beginning of the array
+    //
+    if position == StructurePosition::ArrayBegin {
+        if let Some(begin_action) =
+            find_action(StructuralPseudoname::Array, ContextIter::new(context))
+        {
+            match begin_action(rjiter_cell, baton_cell) {
+                StreamOp::None => (),
+                StreamOp::ValueIsConsumed => {
+                    return Ok((
+                        None,
+                        #[allow(unsafe_code)]
+                        *unsafe { context.top_assoc_obj::<StructurePosition>() }.ok_or_else(
+                            || {
+                                ScanError::InternalError(
+                                    rjiter_cell.borrow().current_index(),
+                                    "Context stack is empty when handling ValueIsConsumed in array"
+                                        .to_string(),
+                                )
+                            },
+                        )?,
+                    ));
+                }
+                StreamOp::Error(e) => {
                     return Err(ScanError::ActionError(
                         e,
                         rjiter_cell.borrow().current_index(),
@@ -155,136 +255,74 @@ fn handle_object<T: ?Sized>(
             }
         }
 
-        //
-        // Find the next key in the object or the end of the object
-        //
-        let mut rjiter = rjiter_cell.borrow_mut();
-        let keyr = if cur_level.is_elem_begin {
-            rjiter.next_object()
-        } else {
-            rjiter.next_key()
-        };
-        cur_level.is_elem_begin = false;
-
-        //
-        // If there is a next key, update the current key and continue
-        //
-        if let Some(key) = keyr? {
-            let key_str = key.to_string();
-            cur_level.current_key = key_str;
-        } else {
-            //
-            // Call the end-trigger for the object
-            //
-            let context_vec = build_context_vec(context);
-            if let Some(end_action) = find_action(triggers_end, "#object", &context_vec) {
-                if let Err(e) = end_action(baton_cell) {
-                    return Err(ScanError::ActionError(e, rjiter.current_index()));
-                }
-            }
-            //
-            // End of the object: mutate the context and end the function
-            //
-            return match context.pop_assoc::<StateFrame>() {
-                Some((frame, key_slice)) => {
-                    let current_key = String::from_utf8_lossy(key_slice).to_string();
-                    Ok((StreamOp::ValueIsConsumed, *frame, current_key))
-                }
-                None => Err(ScanError::UnbalancedJson(rjiter.current_index())),
-            };
-        }
-    }
-
-    //
-    // Execute the action for the current key
-    //
-    let context_vec = build_context_vec(context);
-    if let Some(action) = find_action(triggers, &cur_level.current_key, &context_vec) {
-        let action_result = action(rjiter_cell, baton_cell);
-        return match action_result {
-            StreamOp::Error(e) => Err(ScanError::ActionError(
-                e,
+        // Push to context with position "middle in array" and name "#array"
+        if context
+            .push_assoc(StructurePosition::ArrayMiddle, b"#array")
+            .is_err()
+        {
+            return Err(ScanError::MaxNestingExceeded(
                 rjiter_cell.borrow().current_index(),
-            )),
-            StreamOp::None | StreamOp::ValueIsConsumed => {
-                let result_frame = StateFrame {
-                    is_in_object: cur_level.is_in_object,
-                    is_in_array: cur_level.is_in_array,
-                    is_elem_begin: cur_level.is_elem_begin,
-                };
-                Ok((action_result, result_frame, cur_level.current_key))
-            }
-        };
-    }
-    let result_frame = StateFrame {
-        is_in_object: cur_level.is_in_object,
-        is_in_array: cur_level.is_in_array,
-        is_elem_begin: cur_level.is_elem_begin,
-    };
-    Ok((StreamOp::None, result_frame, cur_level.current_key))
-}
-
-// Handle a JSON array item.
-// Pop the context stack if the array is ended.
-fn handle_array<T: ?Sized>(
-    rjiter_cell: &RefCell<RJiter>,
-    baton_cell: &RefCell<T>,
-    triggers: &[Trigger<BoxedAction<T>>],
-    triggers_end: &[Trigger<BoxedEndAction<T>>],
-    cur_level_frame: StateFrame,
-    cur_level_key: &str,
-    context: &mut U8Pool,
-) -> ScanResult<(Option<Peek>, StateFrame, String)> {
-    // Call the begin-trigger at the beginning of the array
-    let mut is_array_consumed = false;
-    if cur_level_frame.is_elem_begin {
-        let context_vec = build_context_vec(context);
-        if let Some(begin_action) = find_action(triggers, "#array", &context_vec) {
-            match begin_action(rjiter_cell, baton_cell) {
-                StreamOp::None => (),
-                StreamOp::ValueIsConsumed => is_array_consumed = true,
-                StreamOp::Error(e) => {
-                    let rjiter = rjiter_cell.borrow();
-                    return Err(ScanError::ActionError(e, rjiter.current_index()));
-                }
-            }
+                context.len(),
+            ));
         }
     }
 
+    //
     // Get the next item in the array
-    let apickedr = if is_array_consumed {
-        Ok(None)
-    } else if cur_level_frame.is_elem_begin {
+    //
+    let peeked = if position == StructurePosition::ArrayBegin {
         let mut rjiter = rjiter_cell.borrow_mut();
         rjiter.known_array()
     } else {
         let mut rjiter = rjiter_cell.borrow_mut();
         rjiter.array_step()
-    };
-    let mut new_frame = cur_level_frame;
-    new_frame.is_elem_begin = false;
+    }?;
 
-    // Call the end-trigger at the end of the array
-    let peeked = apickedr?;
+    //
+    // If at the end of the array
+    //
     if peeked.is_none() {
-        let context_vec = build_context_vec(context);
-        if let Some(end_action) = find_action(triggers_end, "#array", &context_vec) {
+        //
+        // Pop the context before calling the end-trigger
+        //
+        #[allow(unsafe_code)]
+        unsafe { context.pop_assoc::<StructurePosition>() }.ok_or_else(|| {
+            ScanError::InternalError(
+                rjiter_cell.borrow().current_index(),
+                "Context stack is empty when ending array".to_string(),
+            )
+        })?;
+
+        //
+        // Call the end-trigger
+        //
+        if let Some(end_action) =
+            find_end_action(StructuralPseudoname::Array, ContextIter::new(context))
+        {
             if let Err(e) = end_action(baton_cell) {
-                let rjiter = rjiter_cell.borrow();
-                return Err(ScanError::ActionError(e, rjiter.current_index()));
+                return Err(ScanError::ActionError(
+                    e,
+                    rjiter_cell.borrow().current_index(),
+                ));
             }
         }
-        if let Some((frame, key_slice)) = context.pop_assoc::<StateFrame>() {
-            let current_key = String::from_utf8_lossy(key_slice).to_string();
-            return Ok((None, *frame, current_key));
-        }
-        let rjiter = rjiter_cell.borrow();
-        return Err(ScanError::UnbalancedJson(rjiter.current_index()));
+        return Ok((
+            None,
+            #[allow(unsafe_code)]
+            *unsafe { context.top_assoc_obj::<StructurePosition>() }.ok_or_else(|| {
+                ScanError::InternalError(
+                    rjiter_cell.borrow().current_index(),
+                    "Context stack is empty when ending array".to_string(),
+                )
+            })?,
+        ));
     }
-    Ok((peeked, new_frame, cur_level_key.to_string()))
+    Ok((peeked, StructurePosition::ArrayMiddle))
 }
 
+///
 /// Skips over basic JSON values (null, true, false, numbers, strings)
+///
 fn skip_basic_values(peeked: Peek, rjiter: &mut RJiter) -> ScanResult<()> {
     if peeked == Peek::String {
         rjiter.write_long_bytes(&mut io::sink())?;
@@ -309,123 +347,144 @@ fn skip_basic_values(peeked: Peek, rjiter: &mut RJiter) -> ScanResult<()> {
     Err(ScanError::UnhandledPeek(peeked, rjiter.current_index()))
 }
 
-/// Pushes a new context frame onto the context stack
-fn push_context(context: &mut U8Pool, cur_level: &ContextFrame, rjiter: &RJiter) -> ScanResult<()> {
-    let metadata = StateFrame {
-        is_in_object: cur_level.is_in_object,
-        is_in_array: cur_level.is_in_array,
-        is_elem_begin: cur_level.is_elem_begin,
-    };
-    context
-        .push_assoc(metadata, cur_level.current_key.as_bytes())
-        .map_err(|_e| ScanError::MaxNestingExceeded(rjiter.current_index(), context.len()))?;
-    Ok(())
-}
-
-/// Scan a JSON stream, executing actions based on matched triggers and
-/// handling nested structures. The caller provides a working buffer for
-/// tracking the parsing context stack.
-/// It also ignores SSE tokens at the top level.
 ///
-/// See the documentation in `README.md` for an example of how to use this function.
-///
-/// # Working Buffer Size
-///
-/// The working buffer should be sized based on the expected nesting depth and
-/// average key length of your JSON. A reasonable estimate:
-/// - Average JSON key: 16 bytes
-/// - Context metadata: 8 bytes per frame
-/// - For 20 nesting levels: ~512 bytes working buffer
-///
-/// Use `U8Pool::with_default_max_slices(buffer)` for up to 32 nesting levels,
-/// or `U8Pool::new(buffer, max_slices)` for custom limits.
+/// Parses JSON and executes callbacks based on patterns.
+/// See `README.md` for examples of how to use this function.
 ///
 /// # Arguments
 ///
-/// * `triggers` - List of action triggers to execute on matching keys
-/// * `triggers_end` - List of end action triggers to execute when a key is ended
+/// * `find_action` - A matcher function that returns a callback for begin events
+/// * `find_end_action` - A matcher function that returns a callback for end events
 /// * `rjiter_cell` - Reference cell containing the JSON iterator
 /// * `baton_cell` - Reference cell containing the caller's state
-/// * `working_buffer` - Working buffer for context stack (`U8Pool`)
-/// * `options` - Configuration options for the scan behavior
+/// * `working_buffer` - Working buffer for the context stack
+/// * `options` - Configuration options for scan behavior
+///
+/// # Matching and Actions
+///
+/// While parsing, `scan` maintains a context stack containing the path of element names
+/// from the root to the current nesting level. See [`crate::iter_match()`] for details
+/// about context and matching.
+///
+/// The workflow for each structural element:
+///
+/// 1. Call `find_action` and execute the returned callback if found
+/// 2. If the element is an object or array, update the context and parse the next level
+/// 3. Call `find_end_action` and execute the returned callback if found
+///
+/// If in step 1 an action returns `StreamOp::ValueIsConsumed`, the `scan` function
+/// skips the remaining steps, assuming the action correctly advanced the parser.
+///
+/// # Side Effects
+///
+/// Actions receive two `RefCell` references as arguments:
+///
+/// - `baton_cell`: User-defined state for side effects
+/// - `rjiter_cell`: `RJiter` parser object that actions can use to consume JSON values
+///
+/// # Working Buffer Sizing
+///
+/// The working buffer should be sized based on expected nesting depth, average key
+/// length, and 8 bytes per context frame. A reasonable default for most applications:
+///
+/// - 512 bytes and 20 nesting levels with 16-byte average key names
+///
+/// # Options
+///
+/// - `sse_tokens`: Tokens to ignore at the top level, useful for server-side
+///   events tokens like `data:` or `[DONE]`
+/// - `stop_early`: By default, `scan` processes multiple JSON objects (like JSONL format).
+///   Set to `true` to stop after the first complete element
 ///
 /// # Errors
 ///
-/// * `ScanError` - A wrapper over `Rjiter` errors, over an error from a trigger actions, or over wrong JSON structure
-/// * `MaxNestingExceeded` - When the JSON nesting depth exceeds the working buffer capacity
-#[allow(clippy::too_many_lines)]
-pub fn scan<T: ?Sized>(
-    triggers: &[Trigger<BoxedAction<T>>],
-    triggers_end: &[Trigger<BoxedEndAction<T>>],
+/// Returns any error from [`crate::error::Error`].
+///
+#[allow(clippy::too_many_lines, clippy::elidable_lifetime_names)]
+pub fn scan<'options, T: ?Sized>(
+    find_action: impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<T>>,
+    find_end_action: impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedEndAction<T>>,
     rjiter_cell: &RefCell<RJiter>,
     baton_cell: &RefCell<T>,
     working_buffer: &mut U8Pool,
-    options: &Options,
+    options: &Options<'options>,
 ) -> ScanResult<()> {
     let context = working_buffer; // Alias for better readability in function body
-    let mut cur_level = ContextFrame {
-        current_key: "#top".to_string(),
-        is_elem_begin: false,
-        is_in_object: false,
-        is_in_array: false,
-    };
+
+    let mut position = StructurePosition::Top;
+    context
+        .push_assoc(position, b"#top")
+        .map_err(|_e| ScanError::MaxNestingExceeded(rjiter_cell.borrow().current_index(), 0))?;
 
     let mut is_progressed = false;
 
     'main_loop: loop {
-        if is_progressed && options.stop_early && context.is_empty() {
+        if is_progressed && options.stop_early && position == StructurePosition::Top {
             break;
         }
         is_progressed = true;
 
         let mut peeked = None;
 
-        if cur_level.is_in_object {
-            let (state_frame, key) = context_frame_to_parts(&cur_level);
-            let (action_result, new_state_frame, new_key) = handle_object(
+        //
+        // Handle object states
+        //
+        if position == StructurePosition::ObjectBegin || position == StructurePosition::ObjectMiddle
+        {
+            match handle_object(
                 rjiter_cell,
                 baton_cell,
-                triggers,
-                triggers_end,
-                state_frame,
-                key,
+                &find_action,
+                &find_end_action,
+                position,
                 context,
-            )?;
-            cur_level = parts_to_context_frame(new_state_frame, new_key);
-
-            match action_result {
-                StreamOp::ValueIsConsumed => continue,
-                StreamOp::Error(e) => {
-                    return Err(ScanError::ActionError(
-                        e,
-                        rjiter_cell.borrow().current_index(),
-                    ))
+            ) {
+                Ok(new_position) => {
+                    position = new_position;
+                    continue 'main_loop;
                 }
-                StreamOp::None => (),
+                Err(e) => return Err(e),
             }
         }
 
-        if cur_level.is_in_array {
-            let (state_frame, key) = context_frame_to_parts(&cur_level);
-            let (arr_peeked, new_state_frame, new_key) = handle_array(
+        //
+        // Handle array states
+        //
+        if position == StructurePosition::ArrayBegin || position == StructurePosition::ArrayMiddle {
+            match handle_array(
                 rjiter_cell,
                 baton_cell,
-                triggers,
-                triggers_end,
-                state_frame,
-                key,
+                &find_action,
+                &find_end_action,
+                position,
                 context,
-            )?;
-            cur_level = parts_to_context_frame(new_state_frame, new_key);
-
-            if arr_peeked.is_none() {
-                continue;
+            ) {
+                Ok((Some(arr_peeked), StructurePosition::ArrayMiddle)) => {
+                    position = StructurePosition::ArrayMiddle;
+                    peeked = Some(arr_peeked);
+                    // Continue inside the loop to process the array item
+                }
+                Ok((None, new_position)) => {
+                    // handle_array returned the position from the stack
+                    position = new_position;
+                    continue 'main_loop;
+                }
+                Ok((peeked_val, unexpected)) => {
+                    return Err(ScanError::InternalError(
+                        rjiter_cell.borrow().current_index(),
+                        format!("Unexpected position from handle_array: {unexpected:?} with peeked: {peeked_val:?}"),
+                    ));
+                }
+                Err(e) => return Err(e),
             }
-            peeked = arr_peeked;
         }
 
         let mut rjiter = rjiter_cell.borrow_mut();
 
+        //
+        // Peek the next JSON value, handling end of the input
+        // The only case we have a value already is when we are continuing from the `handle_array` block
+        //
         if peeked.is_none() {
             let peekedr = rjiter.peek();
             if let Err(rjiter::Error {
@@ -436,7 +495,7 @@ pub fn scan<T: ?Sized>(
                 ..
             }) = peekedr
             {
-                if !context.is_empty() {
+                if position != StructurePosition::Top {
                     return Err(ScanError::UnbalancedJson(rjiter.current_index()));
                 }
                 if rjiter.finish().is_err() {
@@ -455,53 +514,29 @@ pub fn scan<T: ?Sized>(
             rjiter.current_index(),
             "peeked is none when it should not be".to_string(),
         ))?;
+        if position == StructurePosition::ObjectBetweenKV {
+            position = StructurePosition::ObjectMiddle;
+        }
 
+        //
+        // Branch based on the type of the peeked value
+        //
         if peeked == Peek::Array {
-            push_context(context, &cur_level, &rjiter)?;
-            cur_level = ContextFrame {
-                current_key: "#array".to_string(),
-                is_in_array: true,
-                is_in_object: false,
-                is_elem_begin: true,
-            };
-            continue;
+            position = StructurePosition::ArrayBegin;
+            continue 'main_loop;
         }
-
         if peeked == Peek::Object {
-            push_context(context, &cur_level, &rjiter)?;
-            cur_level = ContextFrame {
-                current_key: "#object".to_string(),
-                is_in_array: false,
-                is_in_object: true,
-                is_elem_begin: true,
-            };
-            continue;
+            position = StructurePosition::ObjectBegin;
+            continue 'main_loop;
         }
 
-        // Handle basic (aka atomic) values
-        push_context(context, &cur_level, &rjiter)?;
-        let context_vec = build_context_vec(context);
-        let action = find_action(triggers, "#atom", &context_vec);
-        cur_level = match context.pop_assoc::<StateFrame>() {
-            Some((frame, key_slice)) => {
-                let current_key = String::from_utf8_lossy(key_slice).to_string();
-                ContextFrame {
-                    current_key,
-                    is_in_object: frame.is_in_object,
-                    is_in_array: frame.is_in_array,
-                    is_elem_begin: frame.is_elem_begin,
-                }
-            }
-            None => {
-                return Err(ScanError::InternalError(
-                    rjiter.current_index(),
-                    "Context stack is empty when it should not be".to_string(),
-                ))
-            }
-        };
-
-        // Call the action for the atom, then return (error) or continue (value is consumed)
-        // or pass through to the default handler
+        //
+        // Call the action for the atom, then
+        // - return if an error
+        // - continue to the main loop if value is consumed, or
+        // - pass through to the default handler
+        //
+        let action = find_action(StructuralPseudoname::Atom, ContextIter::new(context));
         if let Some(action) = action {
             drop(rjiter);
             let action_result = action(rjiter_cell, baton_cell);
@@ -511,7 +546,7 @@ pub fn scan<T: ?Sized>(
                 StreamOp::Error(e) => {
                     return Err(ScanError::ActionError(e, rjiter.current_index()))
                 }
-                StreamOp::ValueIsConsumed => continue,
+                StreamOp::ValueIsConsumed => continue 'main_loop,
                 StreamOp::None => (),
             }
         }
@@ -520,12 +555,18 @@ pub fn scan<T: ?Sized>(
             continue;
         }
 
+        //
         // If we are at the top level, we need to drop the SSE tokens
         // The array condition is to handle the token "[DONE]", which is
         // parsed as an array with one element, the string "DONE".
-        if context.is_empty() || (cur_level.is_in_array && context.len() == 1) {
-            for sse_token in &options.sse_tokens {
-                let found = rjiter.known_skip_token(sse_token.as_bytes());
+        //
+        if (position == StructurePosition::Top)
+            || ((position == StructurePosition::ArrayBegin
+                || position == StructurePosition::ArrayMiddle)
+                && context.len() == 2)
+        {
+            for sse_token in options.sse_tokens {
+                let found = rjiter.known_skip_token(sse_token);
                 if found.is_ok() {
                     continue 'main_loop;
                 }

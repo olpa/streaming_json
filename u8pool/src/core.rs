@@ -388,7 +388,8 @@ impl<'a> U8Pool<'a> {
     /// The caller must ensure that the item at the specified index was pushed with `push_assoc`
     /// and that the type `T` matches the original associated type.
     #[must_use]
-    pub fn get_assoc<T: Sized>(&self, index: usize) -> Option<(&T, &[u8])> {
+    #[allow(unsafe_code)]
+    pub unsafe fn get_assoc<T: Sized>(&self, index: usize) -> Option<(&T, &[u8])> {
         let (start, assoc_end, data_end) = self.get_validated_assoc_positions::<T>(index)?;
 
         // Safe: get_validated_assoc_positions() guarantees all contracts for extract_assoc_ref()
@@ -406,7 +407,8 @@ impl<'a> U8Pool<'a> {
     ///
     /// The caller must ensure that the last pushed item was indeed pushed with `push_assoc`
     /// and that the type `T` matches the original associated type.
-    pub fn pop_assoc<T: Sized>(&mut self) -> Option<(&T, &[u8])> {
+    #[allow(unsafe_code)]
+    pub unsafe fn pop_assoc<T: Sized>(&mut self) -> Option<(&T, &[u8])> {
         if self.count == 0 {
             return None;
         }
@@ -432,7 +434,8 @@ impl<'a> U8Pool<'a> {
     /// The caller must ensure that the last pushed item was indeed pushed with `push_assoc`
     /// and that the type `T` matches the original associated type.
     #[must_use]
-    pub fn top_assoc<T: Sized>(&self) -> Option<(&T, &[u8])> {
+    #[allow(unsafe_code)]
+    pub unsafe fn top_assoc<T: Sized>(&self) -> Option<(&T, &[u8])> {
         if self.count == 0 {
             return None;
         }
@@ -448,7 +451,8 @@ impl<'a> U8Pool<'a> {
     /// The caller must ensure that the last pushed item was indeed pushed with `push_assoc`
     /// and that the type `T` matches the original associated type.
     #[must_use]
-    pub fn top_assoc_obj<'b, T: Sized + 'b>(&'b self) -> Option<&'b T> {
+    #[allow(unsafe_code)]
+    pub unsafe fn top_assoc_obj<'b, T: Sized + 'b>(&'b self) -> Option<&'b T> {
         if self.count == 0 {
             return None;
         }
@@ -579,7 +583,8 @@ impl<'a> U8Pool<'a> {
     /// The caller must ensure that all items in the pool were pushed with `push_assoc`
     /// and that the type `T` matches the original associated type for all items.
     #[must_use]
-    pub fn iter_assoc<T: Sized>(&self) -> U8PoolAssocIter<'_, T> {
+    #[allow(unsafe_code)]
+    pub unsafe fn iter_assoc<T: Sized>(&self) -> U8PoolAssocIter<'_, T> {
         U8PoolAssocIter::new(self)
     }
 
@@ -590,7 +595,8 @@ impl<'a> U8Pool<'a> {
     /// The caller must ensure that all items in the pool were pushed with `push_assoc`
     /// and that the type `T` matches the original associated type for all items.
     #[must_use]
-    pub fn iter_assoc_rev<T: Sized>(&self) -> U8PoolAssocRevIter<'_, T> {
+    #[allow(unsafe_code)]
+    pub unsafe fn iter_assoc_rev<T: Sized>(&self) -> U8PoolAssocRevIter<'_, T> {
         U8PoolAssocRevIter::new(self)
     }
 
