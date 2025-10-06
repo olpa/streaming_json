@@ -1,10 +1,12 @@
 # React to elements in a JSON stream
 
-Start processing JSON before the entire document is available.
+Parse JSON and execute callbacks based on patterns, even before the entire document is available.
 
-- [`scan_json` on crates.io](https://crates.io/crates/scan_json)
-- [Documentation on docs.rs](https://docs.rs/scan_json/)
-- Entry point: [`crate::scan()`]
+For a fast start,
+
+- first look at the concepts and examples in this `README`,
+- then learn about [`crate::scan()`], and
+- about the context stack and matching by [`crate::iter_match()`].
 
 The goal of `1.2.0` rewrite is to bring zero allocation and `no_std` compatibility. For `1.1.x` branch README, visit the [documentation on docs.rs](https://docs.rs/scan_json/).
 
