@@ -347,37 +347,59 @@ fn skip_basic_values(peeked: Peek, rjiter: &mut RJiter) -> ScanResult<()> {
     Err(ScanError::UnhandledPeek(peeked, rjiter.current_index()))
 }
 
-/// Scan a JSON stream, executing actions based on matched triggers and
-/// handling nested structures. The caller provides a working buffer for
-/// tracking the parsing context stack.
-/// It also ignores SSE tokens at the top level.
 ///
-/// See the documentation in `README.md` for an example of how to use this function.
-///
-/// # Working Buffer Size
-///
-/// The working buffer should be sized based on the expected nesting depth and
-/// average key length of your JSON. A reasonable estimate:
-/// - Average JSON key: 16 bytes
-/// - Context metadata: 8 bytes per frame
-/// - For 20 nesting levels: ~512 bytes working buffer
-///
-/// Use `U8Pool::with_default_max_slices(buffer)` for up to 32 nesting levels,
-/// or `U8Pool::new(buffer, max_slices)` for custom limits.
+/// Parses JSON and executes callbacks based on patterns.
+/// See `README.md` for examples of how to use this function.
 ///
 /// # Arguments
 ///
-/// * `triggers` - List of action triggers to execute on matching keys
-/// * `triggers_end` - List of end action triggers to execute when a key is ended
+/// * `find_action` - A matcher function that returns a callback for begin events
+/// * `find_end_action` - A matcher function that returns a callback for end events
 /// * `rjiter_cell` - Reference cell containing the JSON iterator
 /// * `baton_cell` - Reference cell containing the caller's state
-/// * `working_buffer` - Working buffer for context stack (`U8Pool`)
-/// * `options` - Configuration options for the scan behavior
+/// * `working_buffer` - Working buffer for the context stack
+/// * `options` - Configuration options for scan behavior
+///
+/// # Matching and Actions
+///
+/// While parsing, `scan` maintains a context stack containing the path of element names
+/// from the root to the current nesting level. See [`crate::iter_match()`] for details
+/// about context and matching.
+///
+/// The workflow for each structural element:
+///
+/// 1. Call `find_action` and execute the returned callback if found
+/// 2. If the element is an object or array, update the context and parse the next level
+/// 3. Call `find_end_action` and execute the returned callback if found
+///
+/// If in step 1 an action returns `StreamOp::ValueIsConsumed`, the `scan` function
+/// skips the remaining steps, assuming the action correctly advanced the parser.
+///
+/// # Side Effects
+///
+/// Actions receive two `RefCell` references as arguments:
+///
+/// - `baton_cell`: User-defined state for side effects
+/// - `rjiter_cell`: `RJiter` parser object that actions can use to consume JSON values
+///
+/// # Working Buffer Sizing
+///
+/// The working buffer should be sized based on expected nesting depth, average key
+/// length, and 8 bytes per context frame. A reasonable default for most applications:
+///
+/// - 512 bytes and 20 nesting levels with 16-byte average key names
+///
+/// # Options
+///
+/// - `sse_tokens`: Tokens to ignore at the top level, useful for server-side
+///   events tokens like `data:` or `[DONE]`
+/// - `stop_early`: By default, `scan` processes multiple JSON objects (like JSONL format).
+///   Set to `true` to stop after the first complete element
 ///
 /// # Errors
 ///
-/// * `ScanError` - A wrapper over `Rjiter` errors, over an error from a trigger actions, or over wrong JSON structure
-/// * `MaxNestingExceeded` - When the JSON nesting depth exceeds the working buffer capacity
+/// Returns any error from [`crate::error::Error`].
+///
 #[allow(clippy::too_many_lines, clippy::elidable_lifetime_names)]
 pub fn scan<'options, T: ?Sized>(
     find_action: impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<T>>,
