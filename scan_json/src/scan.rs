@@ -106,19 +106,19 @@ fn handle_object<T: ?Sized, R: Read>(
             match begin_action(rjiter_cell, baton_cell) {
                 StreamOp::None => (),
                 StreamOp::Error(e) => {
-                    return Err(ScanError::ActionError(
-                        e,
-                        rjiter_cell.borrow().current_index(),
-                    ))
+                    return Err(ScanError::ActionError {
+                        source: e,
+                        position: rjiter_cell.borrow().current_index(),
+                    })
                 }
                 StreamOp::ValueIsConsumed => {
                     #[allow(unsafe_code)]
                     return Ok(*unsafe { context.top_assoc_obj::<StructurePosition>() }
                         .ok_or_else(|| {
-                            ScanError::InternalError(
-                                rjiter_cell.borrow().current_index(),
-                                "Context stack is empty when handling ValueIsConsumed".to_string(),
-                            )
+                            ScanError::InternalError {
+                                position: rjiter_cell.borrow().current_index(),
+                                message: "Context stack is empty when handling ValueIsConsumed".to_string(),
+                            }
                         })?);
                 }
             }
@@ -134,10 +134,10 @@ fn handle_object<T: ?Sized, R: Read>(
         let _ = unsafe { context.pop_assoc::<StructurePosition>() };
         if let Some(end_action) = end_action {
             if let Err(e) = end_action(baton_cell) {
-                return Err(ScanError::ActionError(
-                    e,
-                    rjiter_cell.borrow().current_index(),
-                ));
+                return Err(ScanError::ActionError {
+                    source: e,
+                    position: rjiter_cell.borrow().current_index(),
+                });
             }
         }
     }
@@ -161,16 +161,19 @@ fn handle_object<T: ?Sized, R: Read>(
                 find_end_action(StructuralPseudoname::Object, ContextIter::new(context))
             {
                 if let Err(e) = end_action(baton_cell) {
-                    return Err(ScanError::ActionError(e, rjiter.current_index()));
+                    return Err(ScanError::ActionError {
+                        source: e,
+                        position: rjiter.current_index(),
+                    });
                 }
             }
             #[allow(unsafe_code)]
             return Ok(
                 *unsafe { context.top_assoc_obj::<StructurePosition>() }.ok_or_else(|| {
-                    ScanError::InternalError(
-                        rjiter.current_index(),
-                        "Context stack is empty when ending object".to_string(),
-                    )
+                    ScanError::InternalError {
+                        position: rjiter.current_index(),
+                        message: "Context stack is empty when ending object".to_string(),
+                    }
                 })?,
             );
         }
@@ -182,12 +185,15 @@ fn handle_object<T: ?Sized, R: Read>(
                 .push_assoc(StructurePosition::ObjectMiddle, key)
                 .map_err(|e| match e {
                     U8PoolError::SliceLimitExceeded { max_slices } => {
-                        ScanError::MaxNestingExceeded(rjiter.current_index(), max_slices)
+                        ScanError::MaxNestingExceeded {
+                            position: rjiter.current_index(),
+                            level: max_slices,
+                        }
                     }
-                    _ => ScanError::InternalError(
-                        rjiter.current_index(),
-                        format!("Failed to push key to context pool: {e}"),
-                    ),
+                    _ => ScanError::InternalError {
+                        position: rjiter.current_index(),
+                        message: format!("Failed to push key to context pool: {e}"),
+                    },
                 })?;
         }
     }
@@ -199,10 +205,10 @@ fn handle_object<T: ?Sized, R: Read>(
         drop(rjiter);
         match action(rjiter_cell, baton_cell) {
             StreamOp::Error(e) => {
-                return Err(ScanError::ActionError(
-                    e,
-                    rjiter_cell.borrow().current_index(),
-                ));
+                return Err(ScanError::ActionError {
+                    source: e,
+                    position: rjiter_cell.borrow().current_index(),
+                });
             }
             StreamOp::ValueIsConsumed => {
                 return Ok(StructurePosition::ObjectMiddle);
@@ -254,20 +260,20 @@ fn handle_array<T: ?Sized, R: Read>(
                         #[allow(unsafe_code)]
                         *unsafe { context.top_assoc_obj::<StructurePosition>() }.ok_or_else(
                             || {
-                                ScanError::InternalError(
-                                    rjiter_cell.borrow().current_index(),
-                                    "Context stack is empty when handling ValueIsConsumed in array"
+                                ScanError::InternalError {
+                                    position: rjiter_cell.borrow().current_index(),
+                                    message: "Context stack is empty when handling ValueIsConsumed in array"
                                         .to_string(),
-                                )
+                                }
                             },
                         )?,
                     ));
                 }
                 StreamOp::Error(e) => {
-                    return Err(ScanError::ActionError(
-                        e,
-                        rjiter_cell.borrow().current_index(),
-                    ));
+                    return Err(ScanError::ActionError {
+                        source: e,
+                        position: rjiter_cell.borrow().current_index(),
+                    });
                 }
             }
         }
@@ -277,10 +283,10 @@ fn handle_array<T: ?Sized, R: Read>(
             .push_assoc(StructurePosition::ArrayMiddle, b"#array")
             .is_err()
         {
-            return Err(ScanError::MaxNestingExceeded(
-                rjiter_cell.borrow().current_index(),
-                context.len(),
-            ));
+            return Err(ScanError::MaxNestingExceeded {
+                position: rjiter_cell.borrow().current_index(),
+                level: context.len(),
+            });
         }
     }
 
@@ -304,10 +310,10 @@ fn handle_array<T: ?Sized, R: Read>(
         //
         #[allow(unsafe_code)]
         unsafe { context.pop_assoc::<StructurePosition>() }.ok_or_else(|| {
-            ScanError::InternalError(
-                rjiter_cell.borrow().current_index(),
-                "Context stack is empty when ending array".to_string(),
-            )
+            ScanError::InternalError {
+                position: rjiter_cell.borrow().current_index(),
+                message: "Context stack is empty when ending array".to_string(),
+            }
         })?;
 
         //
@@ -317,20 +323,20 @@ fn handle_array<T: ?Sized, R: Read>(
             find_end_action(StructuralPseudoname::Array, ContextIter::new(context))
         {
             if let Err(e) = end_action(baton_cell) {
-                return Err(ScanError::ActionError(
-                    e,
-                    rjiter_cell.borrow().current_index(),
-                ));
+                return Err(ScanError::ActionError {
+                    source: e,
+                    position: rjiter_cell.borrow().current_index(),
+                });
             }
         }
         return Ok((
             None,
             #[allow(unsafe_code)]
             *unsafe { context.top_assoc_obj::<StructurePosition>() }.ok_or_else(|| {
-                ScanError::InternalError(
-                    rjiter_cell.borrow().current_index(),
-                    "Context stack is empty when ending array".to_string(),
-                )
+                ScanError::InternalError {
+                    position: rjiter_cell.borrow().current_index(),
+                    message: "Context stack is empty when ending array".to_string(),
+                }
             })?,
         ));
     }
@@ -361,7 +367,10 @@ fn skip_basic_values<R: Read>(peeked: Peek, rjiter: &mut RJiter<R>) -> ScanResul
     if maybe_number.is_ok() {
         return Ok(());
     }
-    Err(ScanError::UnhandledPeek(peeked, rjiter.current_index()))
+    Err(ScanError::UnhandledPeek {
+        peek: peeked,
+        position: rjiter.current_index(),
+    })
 }
 
 ///
@@ -431,7 +440,10 @@ pub fn scan<'options, T: ?Sized, R: Read>(
     let mut position = StructurePosition::Top;
     context
         .push_assoc(position, b"#top")
-        .map_err(|_e| ScanError::MaxNestingExceeded(rjiter_cell.borrow().current_index(), 0))?;
+        .map_err(|_e| ScanError::MaxNestingExceeded {
+            position: rjiter_cell.borrow().current_index(),
+            level: 0,
+        })?;
 
     let mut is_progressed = false;
 
@@ -487,10 +499,10 @@ pub fn scan<'options, T: ?Sized, R: Read>(
                     continue 'main_loop;
                 }
                 Ok((peeked_val, unexpected)) => {
-                    return Err(ScanError::InternalError(
-                        rjiter_cell.borrow().current_index(),
-                        format!("Unexpected position from handle_array: {unexpected:?} with peeked: {peeked_val:?}"),
-                    ));
+                    return Err(ScanError::InternalError {
+                        position: rjiter_cell.borrow().current_index(),
+                        message: format!("Unexpected position from handle_array: {unexpected:?} with peeked: {peeked_val:?}"),
+                    });
                 }
                 Err(e) => return Err(e),
             }
@@ -516,10 +528,10 @@ pub fn scan<'options, T: ?Sized, R: Read>(
                     return Err(ScanError::UnbalancedJson(rjiter.current_index()));
                 }
                 if rjiter.finish().is_err() {
-                    return Err(ScanError::InternalError(
-                        rjiter.current_index(),
-                        "not eof when should be eof".to_string(),
-                    ));
+                    return Err(ScanError::InternalError {
+                        position: rjiter.current_index(),
+                        message: "not eof when should be eof".to_string(),
+                    });
                 }
                 break;
             }
@@ -527,10 +539,10 @@ pub fn scan<'options, T: ?Sized, R: Read>(
             peeked = Some(peekedr?);
         }
 
-        let peeked = peeked.ok_or(ScanError::InternalError(
-            rjiter.current_index(),
-            "peeked is none when it should not be".to_string(),
-        ))?;
+        let peeked = peeked.ok_or(ScanError::InternalError {
+            position: rjiter.current_index(),
+            message: "peeked is none when it should not be".to_string(),
+        })?;
         if position == StructurePosition::ObjectBetweenKV {
             position = StructurePosition::ObjectMiddle;
         }
@@ -561,7 +573,10 @@ pub fn scan<'options, T: ?Sized, R: Read>(
 
             match action_result {
                 StreamOp::Error(e) => {
-                    return Err(ScanError::ActionError(e, rjiter.current_index()))
+                    return Err(ScanError::ActionError {
+                        source: e,
+                        position: rjiter.current_index(),
+                    })
                 }
                 StreamOp::ValueIsConsumed => continue 'main_loop,
                 StreamOp::None => (),
@@ -590,7 +605,10 @@ pub fn scan<'options, T: ?Sized, R: Read>(
             }
         }
 
-        return Err(ScanError::UnhandledPeek(peeked, rjiter.current_index()));
+        return Err(ScanError::UnhandledPeek {
+        peek: peeked,
+        position: rjiter.current_index(),
+    });
     }
 
     Ok(())

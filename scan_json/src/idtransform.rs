@@ -91,7 +91,10 @@ pub fn copy_atom<R: Read, W: Write>(
             .map_err(|e| ScanError::IOError(e.kind()))?;
         return Ok(());
     }
-    Err(ScanError::UnhandledPeek(peeked, rjiter.current_index()))
+    Err(ScanError::UnhandledPeek {
+        peek: peeked,
+        position: rjiter.current_index(),
+    })
 }
 
 // ---------------- State
