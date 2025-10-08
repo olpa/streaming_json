@@ -11,7 +11,9 @@ pub enum Error {
     /// Unhandled peek token encountered at position
     #[error("UnhandledPeek: {peek:?} at position {position}")]
     UnhandledPeek {
+        /// The unexpected peek token encountered
         peek: rjiter::jiter::Peek,
+        /// The byte position where the error occurred
         position: usize,
     },
     /// JSON structure is unbalanced at position
@@ -19,15 +21,26 @@ pub enum Error {
     UnbalancedJson(usize),
     /// Internal error with position and description
     #[error("Internal error at position {position}: {message}")]
-    InternalError { position: usize, message: String },
+    InternalError {
+        /// The byte position where the error occurred
+        position: usize,
+        /// Description of the internal error
+        message: String,
+    },
     /// Maximum nesting depth exceeded (current, max)
     #[error("Max nesting exceeded at position {position} with level {level}")]
-    MaxNestingExceeded { position: usize, level: usize },
+    MaxNestingExceeded {
+        /// The byte position where the error occurred
+        position: usize,
+        /// The nesting level that exceeded the maximum
+        level: usize,
+    },
     /// Error from user action at position
-    #[error("Action error: {source} at position {position}")]
+    #[error("Action error: {message} at position {position}")]
     ActionError {
-        #[source]
-        source: Box<dyn std::error::Error>,
+        /// The error message from the user action
+        message: String,
+        /// The byte position where the error occurred
         position: usize,
     },
     /// IO error during processing

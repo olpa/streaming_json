@@ -29,12 +29,12 @@ pub enum StreamOp {
     /// - At the top level, the action consumed the item, the next event should be a value or end-of-input
     ValueIsConsumed,
     /// An error
-    Error(Box<dyn std::error::Error>),
+    Error(String),
 }
 
-impl<E: std::error::Error + 'static> From<E> for StreamOp {
+impl<E: core::fmt::Display> From<E> for StreamOp {
     fn from(error: E) -> Self {
-        StreamOp::Error(Box::new(error))
+        StreamOp::Error(error.to_string())
     }
 }
 
@@ -42,7 +42,7 @@ impl<E: std::error::Error + 'static> From<E> for StreamOp {
 pub type BoxedAction<T, R> = Box<dyn Fn(&RefCell<RJiter<R>>, &RefCell<T>) -> StreamOp>;
 
 /// Type alias for boxed end action functions that are called when a matched key ends
-pub type BoxedEndAction<T> = Box<dyn Fn(&RefCell<T>) -> Result<(), Box<dyn std::error::Error>>>;
+pub type BoxedEndAction<T> = Box<dyn Fn(&RefCell<T>) -> Result<(), String>>;
 
 /// Match by name and ancestor names against the current JSON context.
 ///

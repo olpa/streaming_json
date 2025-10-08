@@ -107,18 +107,17 @@ fn handle_object<T: ?Sized, R: Read>(
                 StreamOp::None => (),
                 StreamOp::Error(e) => {
                     return Err(ScanError::ActionError {
-                        source: e,
+                        message: e,
                         position: rjiter_cell.borrow().current_index(),
                     })
                 }
                 StreamOp::ValueIsConsumed => {
                     #[allow(unsafe_code)]
                     return Ok(*unsafe { context.top_assoc_obj::<StructurePosition>() }
-                        .ok_or_else(|| {
-                            ScanError::InternalError {
-                                position: rjiter_cell.borrow().current_index(),
-                                message: "Context stack is empty when handling ValueIsConsumed".to_string(),
-                            }
+                        .ok_or_else(|| ScanError::InternalError {
+                            position: rjiter_cell.borrow().current_index(),
+                            message: "Context stack is empty when handling ValueIsConsumed"
+                                .to_string(),
                         })?);
                 }
             }
@@ -135,7 +134,7 @@ fn handle_object<T: ?Sized, R: Read>(
         if let Some(end_action) = end_action {
             if let Err(e) = end_action(baton_cell) {
                 return Err(ScanError::ActionError {
-                    source: e,
+                    message: e,
                     position: rjiter_cell.borrow().current_index(),
                 });
             }
@@ -162,7 +161,7 @@ fn handle_object<T: ?Sized, R: Read>(
             {
                 if let Err(e) = end_action(baton_cell) {
                     return Err(ScanError::ActionError {
-                        source: e,
+                        message: e,
                         position: rjiter.current_index(),
                     });
                 }
@@ -206,7 +205,7 @@ fn handle_object<T: ?Sized, R: Read>(
         match action(rjiter_cell, baton_cell) {
             StreamOp::Error(e) => {
                 return Err(ScanError::ActionError {
-                    source: e,
+                    message: e,
                     position: rjiter_cell.borrow().current_index(),
                 });
             }
@@ -259,19 +258,18 @@ fn handle_array<T: ?Sized, R: Read>(
                         None,
                         #[allow(unsafe_code)]
                         *unsafe { context.top_assoc_obj::<StructurePosition>() }.ok_or_else(
-                            || {
-                                ScanError::InternalError {
-                                    position: rjiter_cell.borrow().current_index(),
-                                    message: "Context stack is empty when handling ValueIsConsumed in array"
+                            || ScanError::InternalError {
+                                position: rjiter_cell.borrow().current_index(),
+                                message:
+                                    "Context stack is empty when handling ValueIsConsumed in array"
                                         .to_string(),
-                                }
                             },
                         )?,
                     ));
                 }
                 StreamOp::Error(e) => {
                     return Err(ScanError::ActionError {
-                        source: e,
+                        message: e,
                         position: rjiter_cell.borrow().current_index(),
                     });
                 }
@@ -324,7 +322,7 @@ fn handle_array<T: ?Sized, R: Read>(
         {
             if let Err(e) = end_action(baton_cell) {
                 return Err(ScanError::ActionError {
-                    source: e,
+                    message: e,
                     position: rjiter_cell.borrow().current_index(),
                 });
             }
@@ -574,7 +572,7 @@ pub fn scan<'options, T: ?Sized, R: Read>(
             match action_result {
                 StreamOp::Error(e) => {
                     return Err(ScanError::ActionError {
-                        source: e,
+                        message: e,
                         position: rjiter.current_index(),
                     })
                 }
@@ -606,9 +604,9 @@ pub fn scan<'options, T: ?Sized, R: Read>(
         }
 
         return Err(ScanError::UnhandledPeek {
-        peek: peeked,
-        position: rjiter.current_index(),
-    });
+            peek: peeked,
+            position: rjiter.current_index(),
+        });
     }
 
     Ok(())

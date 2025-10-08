@@ -5,7 +5,7 @@ use ::scan_json::matcher::{
     iter_match, BoxedAction, BoxedEndAction, StreamOp, StructuralPseudoname,
 };
 use ::scan_json::stack::ContextIter;
-use ::scan_json::{scan, Error, Options};
+use ::scan_json::{scan, Options};
 use rjiter::{jiter::Peek, RJiter};
 use u8pool::U8Pool;
 
@@ -348,7 +348,7 @@ fn test_call_end() {
     let state = RefCell::new(0);
 
     // End action function for when "foo" ends
-    fn increment_counter(state: &RefCell<i32>) -> Result<(), Box<dyn std::error::Error>> {
+    fn increment_counter(state: &RefCell<i32>) -> Result<(), String> {
         *state.borrow_mut() += 1;
         Ok(())
     }
@@ -405,7 +405,7 @@ fn notify_for_top_level_object() {
         state.borrow_mut().0 = true;
         StreamOp::None
     }
-    fn set_end_called(state: &RefCell<(bool, bool)>) -> Result<(), Box<dyn std::error::Error>> {
+    fn set_end_called(state: &RefCell<(bool, bool)>) -> Result<(), String> {
         state.borrow_mut().1 = true;
         Ok(())
     }
@@ -466,7 +466,7 @@ fn notify_for_object_in_array() {
         state.borrow_mut().0 += 1;
         StreamOp::None
     }
-    fn increment_end_count(state: &RefCell<(i32, i32)>) -> Result<(), Box<dyn std::error::Error>> {
+    fn increment_end_count(state: &RefCell<(i32, i32)>) -> Result<(), String> {
         state.borrow_mut().1 += 1;
         Ok(())
     }
@@ -533,9 +533,7 @@ fn notify_for_array() {
         state.borrow_mut().0 = true;
         StreamOp::None
     }
-    fn set_array_end_called(
-        state: &RefCell<(bool, bool)>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn set_array_end_called(state: &RefCell<(bool, bool)>) -> Result<(), String> {
         state.borrow_mut().1 = true;
         Ok(())
     }
@@ -600,7 +598,7 @@ fn client_can_consume_array() {
         writer.write_all(format!("{value:?}").as_bytes()).unwrap();
         StreamOp::ValueIsConsumed
     }
-    fn write_array_end(writer: &RefCell<Vec<u8>>) -> Result<(), Box<dyn std::error::Error>> {
+    fn write_array_end(writer: &RefCell<Vec<u8>>) -> Result<(), String> {
         writer.borrow_mut().write_all(b"</array>").unwrap();
         Ok(())
     }
@@ -961,7 +959,7 @@ fn match_in_array_context() {
                         .and_then(|_| rjiter.write_long_bytes(&mut *writer));
                     match result {
                         Ok(_) => StreamOp::ValueIsConsumed,
-                        Err(e) => StreamOp::Error(Box::new(Error::RJiterError(e))),
+                        Err(e) => StreamOp::Error(format!("RJiter error: {:?}", e)),
                     }
                 },
             );
@@ -1254,7 +1252,7 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
                         .and_then(|_| rjiter.write_long_bytes(&mut *writer));
                     match result {
                         Ok(_) => StreamOp::ValueIsConsumed,
-                        Err(e) => StreamOp::Error(Box::new(Error::RJiterError(e))),
+                        Err(e) => StreamOp::Error(format!("RJiter error: {:?}", e)),
                     }
                 },
             ))
@@ -1267,7 +1265,7 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
      -> Option<BoxedEndAction<Vec<u8>>> {
         if iter_match(|| ["message".as_bytes()], structural_pseudoname, context) {
             Some(Box::new(|writer: &RefCell<Vec<u8>>| {
-                writer.borrow_mut().write_all(b"\n")?;
+                writer.borrow_mut().write_all(b"\n").unwrap();
                 Ok(())
             }))
         } else {

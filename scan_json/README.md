@@ -50,7 +50,7 @@ fn on_content(rjiter_cell: &RefCell<RJiter<&[u8]>>, writer_cell: &RefCell<Vec<u8
         .and_then(|_| rjiter.write_long_bytes(&mut *writer));
     match result {
         Ok(_) => StreamOp::ValueIsConsumed,
-        Err(e) => StreamOp::Error(Box::new(scan_json::Error::RJiterError(e))),
+        Err(e) => StreamOp::Error(format!("RJiter error: {:?}", e)),
     }
 }
 
@@ -110,11 +110,11 @@ fn on_content(rjiter_cell: &RefCell<RJiter<&[u8]>>, writer_cell: &RefCell<Vec<u8
         .and_then(|_| rjiter.write_long_bytes(&mut *writer));
     match result {
         Ok(_) => StreamOp::ValueIsConsumed,
-        Err(e) => StreamOp::Error(Box::new(scan_json::Error::RJiterError(e))),
+        Err(e) => StreamOp::Error(format!("RJiter error: {:?}", e)),
     }
 }
 
-fn on_end_message(writer: &RefCell<Vec<u8>>) -> Result<(), Box<dyn std::error::Error>> {
+fn on_end_message(writer: &RefCell<Vec<u8>>) -> Result<(), String> {
     writer.borrow_mut().write_all(b"\n").unwrap();
     Ok(())
 }
