@@ -361,8 +361,7 @@ fn skip_basic_values<R: Read>(peeked: Peek, rjiter: &mut RJiter<R>) -> ScanResul
         rjiter.known_bool(peeked)?;
         return Ok(());
     }
-    let maybe_number = rjiter.next_number_bytes();
-    if maybe_number.is_ok() {
+    if rjiter.next_number_bytes().is_ok() {
         return Ok(());
     }
     Err(ScanError::UnhandledPeek {
@@ -525,12 +524,7 @@ pub fn scan<'options, T: ?Sized, R: Read>(
                 if position != StructurePosition::Top {
                     return Err(ScanError::UnbalancedJson(rjiter.current_index()));
                 }
-                if rjiter.finish().is_err() {
-                    return Err(ScanError::InternalError {
-                        position: rjiter.current_index(),
-                        message: "not eof when should be eof".to_string(),
-                    });
-                }
+                rjiter.finish()?;
                 break;
             }
 
@@ -596,8 +590,7 @@ pub fn scan<'options, T: ?Sized, R: Read>(
                 && context.len() == 2)
         {
             for sse_token in options.sse_tokens {
-                let found = rjiter.known_skip_token(sse_token);
-                if found.is_ok() {
+                if rjiter.known_skip_token(sse_token).is_ok() {
                     continue 'main_loop;
                 }
             }
