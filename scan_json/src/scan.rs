@@ -4,11 +4,10 @@ use crate::error::Error as ScanError;
 use crate::error::Result as ScanResult;
 use crate::matcher::{BoxedAction, BoxedEndAction, StreamOp, StructuralPseudoname};
 use crate::stack::ContextIter;
+use embedded_io::{Read, Write};
 use rjiter::jiter::Peek;
 use rjiter::RJiter;
 use std::cell::RefCell;
-use embedded_io::{Read, Write};
-
 
 /// A sink writer that discards all written data
 struct Sink;

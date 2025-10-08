@@ -34,8 +34,8 @@ use crate::{
     Result as ScanResult,
 };
 use core::mem::transmute;
+use embedded_io::{Error as EmbeddedError, Read, Write};
 use std::cell::RefCell;
-use embedded_io::{Read, Write};
 
 use u8pool::U8Pool;
 
@@ -48,31 +48,47 @@ use u8pool::U8Pool;
 /// * The input JSON is malformed
 /// * An IO error occurs while writing to the output
 /// * An unexpected token type is encountered
-pub fn copy_atom<R: Read, W: Write>(peeked: Peek, rjiter: &mut RJiter<R>, writer: &mut W) -> ScanResult<()> {
+pub fn copy_atom<R: Read, W: Write>(
+    peeked: Peek,
+    rjiter: &mut RJiter<R>,
+    writer: &mut W,
+) -> ScanResult<()> {
     if peeked == Peek::String {
-        writer.write_all(b"\"")?;
+        writer
+            .write_all(b"\"")
+            .map_err(|e| ScanError::IOError(e.kind()))?;
         rjiter.write_long_bytes(writer)?;
-        writer.write_all(b"\"")?;
+        writer
+            .write_all(b"\"")
+            .map_err(|e| ScanError::IOError(e.kind()))?;
         return Ok(());
     }
     if peeked == Peek::Null {
         rjiter.known_null()?;
-        writer.write_all(b"null")?;
+        writer
+            .write_all(b"null")
+            .map_err(|e| ScanError::IOError(e.kind()))?;
         return Ok(());
     }
     if peeked == Peek::True {
         rjiter.known_bool(peeked)?;
-        writer.write_all(b"true")?;
+        writer
+            .write_all(b"true")
+            .map_err(|e| ScanError::IOError(e.kind()))?;
         return Ok(());
     }
     if peeked == Peek::False {
         rjiter.known_bool(peeked)?;
-        writer.write_all(b"false")?;
+        writer
+            .write_all(b"false")
+            .map_err(|e| ScanError::IOError(e.kind()))?;
         return Ok(());
     }
     let maybe_number = rjiter.next_number_bytes();
     if let Ok(number) = maybe_number {
-        writer.write_all(number)?;
+        writer
+            .write_all(number)
+            .map_err(|e| ScanError::IOError(e.kind()))?;
         return Ok(());
     }
     Err(ScanError::UnhandledPeek(peeked, rjiter.current_index()))
@@ -97,6 +113,7 @@ struct IdTransform<'a, 'workbuf, W: Write> {
     is_top_level: bool,
 }
 
+#[allow(clippy::elidable_lifetime_names)]
 impl<'a, 'workbuf, W: Write> IdTransform<'a, 'workbuf, W> {
     fn new(writer: &'a mut W) -> Self {
         Self {
@@ -122,21 +139,35 @@ impl<'a, 'workbuf, W: Write> IdTransform<'a, 'workbuf, W> {
             }
             IdtSequencePos::InMiddle => {
                 let seqpos = if self.is_top_level() { b" " } else { b"," };
-                self.writer.write_all(seqpos)?;
+                self.writer.write_all(seqpos).map_err(|e| {
+                    Box::new(ScanError::IOError(e.kind())) as Box<dyn std::error::Error>
+                })?;
                 self.seqpos = IdtSequencePos::InMiddle;
                 Ok(())
             }
             IdtSequencePos::AtBeginningKey(key) => {
-                self.writer.write_all(b"\"")?;
-                self.writer.write_all(key)?;
-                self.writer.write_all(b"\":")?;
+                self.writer.write_all(b"\"").map_err(|e| {
+                    Box::new(ScanError::IOError(e.kind())) as Box<dyn std::error::Error>
+                })?;
+                self.writer.write_all(key).map_err(|e| {
+                    Box::new(ScanError::IOError(e.kind())) as Box<dyn std::error::Error>
+                })?;
+                self.writer.write_all(b"\":").map_err(|e| {
+                    Box::new(ScanError::IOError(e.kind())) as Box<dyn std::error::Error>
+                })?;
                 self.seqpos = IdtSequencePos::InMiddle;
                 Ok(())
             }
             IdtSequencePos::InMiddleKey(key) => {
-                self.writer.write_all(b",\"")?;
-                self.writer.write_all(key)?;
-                self.writer.write_all(b"\":")?;
+                self.writer.write_all(b",\"").map_err(|e| {
+                    Box::new(ScanError::IOError(e.kind())) as Box<dyn std::error::Error>
+                })?;
+                self.writer.write_all(key).map_err(|e| {
+                    Box::new(ScanError::IOError(e.kind())) as Box<dyn std::error::Error>
+                })?;
+                self.writer.write_all(b"\":").map_err(|e| {
+                    Box::new(ScanError::IOError(e.kind())) as Box<dyn std::error::Error>
+                })?;
                 self.seqpos = IdtSequencePos::InMiddle;
                 Ok(())
             }
@@ -154,10 +185,10 @@ impl<'a, 'workbuf, W: Write> IdTransform<'a, 'workbuf, W> {
 ///
 /// # Returns
 /// `find_action` parameter for the `scan` function
-fn create_idtransform_find_action<'a, 'workbuf, R: Read, W: Write>(
+fn create_idtransform_find_action<'a, 'workbuf, R: Read + 'static, W: Write + 'static>(
     idt_cell: &'a RefCell<IdTransform<'a, 'workbuf, W>>,
-) -> impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<IdTransform<'a, 'workbuf, W>, R>> + 'a
-{
+) -> impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<IdTransform<'a, 'workbuf, W>, R>>
+       + 'a {
     move |structural_pseudoname: StructuralPseudoname,
           mut context: ContextIter|
           -> Option<BoxedAction<IdTransform<'a, 'workbuf, W>, R>> {
@@ -211,7 +242,7 @@ fn create_idtransform_find_action<'a, 'workbuf, R: Read, W: Write>(
 ///
 /// # Returns
 /// `find_end_action` parameter for the `scan` function
-fn create_idtransform_find_end_action<'a, 'workbuf, W: Write>(
+fn create_idtransform_find_end_action<'a, 'workbuf, W: Write + 'static>(
 ) -> impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedEndAction<IdTransform<'a, 'workbuf, W>>>
 {
     |structural_pseudoname: StructuralPseudoname,
@@ -227,7 +258,10 @@ fn create_idtransform_find_end_action<'a, 'workbuf, W: Write>(
 
 // ---------------- Handlers
 
-fn on_key<R: Read, W: Write>(_rjiter_cell: &RefCell<RJiter<R>>, idt_cell: &RefCell<IdTransform<'_, '_, W>>) -> StreamOp {
+fn on_key<R: Read, W: Write>(
+    _rjiter_cell: &RefCell<RJiter<R>>,
+    idt_cell: &RefCell<IdTransform<'_, '_, W>>,
+) -> StreamOp {
     let mut idt = idt_cell.borrow_mut();
 
     if let Err(e) = idt.write_seqpos() {
@@ -238,7 +272,10 @@ fn on_key<R: Read, W: Write>(_rjiter_cell: &RefCell<RJiter<R>>, idt_cell: &RefCe
     StreamOp::None
 }
 
-fn on_atom<R: Read, W: Write>(rjiter_cell: &RefCell<RJiter<R>>, idt_cell: &RefCell<IdTransform<'_, '_, W>>) -> StreamOp {
+fn on_atom<R: Read, W: Write>(
+    rjiter_cell: &RefCell<RJiter<R>>,
+    idt_cell: &RefCell<IdTransform<'_, '_, W>>,
+) -> StreamOp {
     let mut rjiter = rjiter_cell.borrow_mut();
     let mut idt = idt_cell.borrow_mut();
 
@@ -251,7 +288,7 @@ fn on_atom<R: Read, W: Write>(rjiter_cell: &RefCell<RJiter<R>>, idt_cell: &RefCe
             Ok(()) => StreamOp::ValueIsConsumed,
             Err(e) => StreamOp::Error(Box::new(e)),
         },
-        Err(e) => StreamOp::Error(Box::new(e)),
+        Err(e) => StreamOp::Error(Box::new(ScanError::RJiterError(e))),
     }
 }
 
@@ -264,7 +301,7 @@ fn on_struct<W: Write>(bytes: &[u8], idt_cell: &RefCell<IdTransform<'_, '_, W>>)
     }
 
     if let Err(e) = idt.writer.write_all(bytes) {
-        return StreamOp::Error(Box::new(e));
+        return StreamOp::Error(Box::new(ScanError::IOError(e.kind())));
     }
     idt.seqpos = IdtSequencePos::AtBeginning;
     StreamOp::None
@@ -276,19 +313,29 @@ fn on_struct_end<W: Write>(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut idt = idt_cell.borrow_mut();
     idt.seqpos = IdtSequencePos::InMiddle;
-    idt.writer.write_all(bytes)?;
+    idt.writer
+        .write_all(bytes)
+        .map_err(|e| Box::new(ScanError::IOError(e.kind())) as Box<dyn std::error::Error>)?;
     Ok(())
 }
 
-fn on_array<R: Read, W: Write>(_rjiter_cell: &RefCell<RJiter<R>>, idt_cell: &RefCell<IdTransform<'_, '_, W>>) -> StreamOp {
+fn on_array<R: Read, W: Write>(
+    _rjiter_cell: &RefCell<RJiter<R>>,
+    idt_cell: &RefCell<IdTransform<'_, '_, W>>,
+) -> StreamOp {
     on_struct(b"[", idt_cell)
 }
 
-fn on_array_end<W: Write>(idt_cell: &RefCell<IdTransform<'_, '_, W>>) -> Result<(), Box<dyn std::error::Error>> {
+fn on_array_end<W: Write>(
+    idt_cell: &RefCell<IdTransform<'_, '_, W>>,
+) -> Result<(), Box<dyn std::error::Error>> {
     on_struct_end(b"]", idt_cell)
 }
 
-fn on_object<R: Read, W: Write>(_rjiter_cell: &RefCell<RJiter<R>>, idt_cell: &RefCell<IdTransform<'_, '_, W>>) -> StreamOp {
+fn on_object<R: Read, W: Write>(
+    _rjiter_cell: &RefCell<RJiter<R>>,
+    idt_cell: &RefCell<IdTransform<'_, '_, W>>,
+) -> StreamOp {
     on_struct(b"{", idt_cell)
 }
 
@@ -316,7 +363,7 @@ fn on_object_end<W: Write>(
 /// If `scan` fails (malformed json, nesting too deep, etc), return `scan`'s error.
 /// Also, if an IO error occurs while writing to the output, return it.
 ///
-pub fn idtransform<R: Read, W: Write>(
+pub fn idtransform<R: Read + 'static, W: Write + 'static>(
     rjiter_cell: &RefCell<RJiter<R>>,
     writer: &mut W,
     working_buffer: &mut U8Pool,

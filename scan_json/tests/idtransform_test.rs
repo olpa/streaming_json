@@ -1,7 +1,7 @@
+use embedded_io::Write;
 use rjiter::RJiter;
 use scan_json::idtransform::idtransform;
 use std::cell::RefCell;
-use std::io::Write;
 use u8pool::U8Pool;
 
 #[test]

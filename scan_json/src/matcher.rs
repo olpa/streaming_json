@@ -3,7 +3,6 @@
 use crate::stack::ContextIter;
 use rjiter::RJiter;
 use std::cell::RefCell;
-use embedded_io::Read;
 
 /// Represents structural pseudo-names for JSON nodes
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
