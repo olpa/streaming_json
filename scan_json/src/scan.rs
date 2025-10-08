@@ -7,7 +7,25 @@ use crate::stack::ContextIter;
 use rjiter::jiter::Peek;
 use rjiter::RJiter;
 use std::cell::RefCell;
-use std::io;
+use embedded_io::{Read, Write};
+
+
+/// A sink writer that discards all written data
+struct Sink;
+
+impl embedded_io::ErrorType for Sink {
+    type Error = embedded_io::ErrorKind;
+}
+
+impl Write for Sink {
+    fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> Result<(), Self::Error> {
+        Ok(())
+    }
+}
 use u8pool::{U8Pool, U8PoolError};
 
 /// Options for configuring the scan behavior
@@ -71,10 +89,10 @@ pub enum StructurePosition {
 // - On end of object, pop the last key
 // - Contract: The stack state after the end of the object is the same as before the begin of the object.
 //   The returned StructurePosition after the end is one from the top of the stack before the begin of the object.
-fn handle_object<T: ?Sized>(
-    rjiter_cell: &RefCell<RJiter>,
+fn handle_object<T: ?Sized, R: Read>(
+    rjiter_cell: &RefCell<RJiter<R>>,
     baton_cell: &RefCell<T>,
-    find_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<T>>,
+    find_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<T, R>>,
     find_end_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedEndAction<T>>,
     position: StructurePosition,
     context: &mut U8Pool,
@@ -214,10 +232,10 @@ fn handle_object<T: ?Sized>(
 // - Contract: The stack state after the end of the array is the same as before the begin of the array.
 //   The returned StructurePosition after the end is one from the top of the stack before the begin of the array.
 //
-fn handle_array<T: ?Sized>(
-    rjiter_cell: &RefCell<RJiter>,
+fn handle_array<T: ?Sized, R: Read>(
+    rjiter_cell: &RefCell<RJiter<R>>,
     baton_cell: &RefCell<T>,
-    find_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<T>>,
+    find_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<T, R>>,
     find_end_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedEndAction<T>>,
     position: StructurePosition,
     context: &mut U8Pool,
@@ -323,9 +341,9 @@ fn handle_array<T: ?Sized>(
 ///
 /// Skips over basic JSON values (null, true, false, numbers, strings)
 ///
-fn skip_basic_values(peeked: Peek, rjiter: &mut RJiter) -> ScanResult<()> {
+fn skip_basic_values<R: Read>(peeked: Peek, rjiter: &mut RJiter<R>) -> ScanResult<()> {
     if peeked == Peek::String {
-        rjiter.write_long_bytes(&mut io::sink())?;
+        rjiter.write_long_bytes(&mut Sink)?;
         return Ok(());
     }
     if peeked == Peek::Null {
@@ -401,10 +419,10 @@ fn skip_basic_values(peeked: Peek, rjiter: &mut RJiter) -> ScanResult<()> {
 /// Returns any error from [`crate::error::Error`].
 ///
 #[allow(clippy::too_many_lines, clippy::elidable_lifetime_names)]
-pub fn scan<'options, T: ?Sized>(
-    find_action: impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<T>>,
+pub fn scan<'options, T: ?Sized, R: Read>(
+    find_action: impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<T, R>>,
     find_end_action: impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedEndAction<T>>,
-    rjiter_cell: &RefCell<RJiter>,
+    rjiter_cell: &RefCell<RJiter<R>>,
     baton_cell: &RefCell<T>,
     working_buffer: &mut U8Pool,
     options: &Options<'options>,

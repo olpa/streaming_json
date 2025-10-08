@@ -3,6 +3,7 @@
 use crate::stack::ContextIter;
 use rjiter::RJiter;
 use std::cell::RefCell;
+use embedded_io::Read;
 
 /// Represents structural pseudo-names for JSON nodes
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -39,7 +40,7 @@ impl<E: std::error::Error + 'static> From<E> for StreamOp {
 }
 
 /// Type alias for boxed action functions that can be called during JSON scanning
-pub type BoxedAction<T> = Box<dyn Fn(&RefCell<RJiter>, &RefCell<T>) -> StreamOp>;
+pub type BoxedAction<T, R> = Box<dyn Fn(&RefCell<RJiter<R>>, &RefCell<T>) -> StreamOp>;
 
 /// Type alias for boxed end action functions that are called when a matched key ends
 pub type BoxedEndAction<T> = Box<dyn Fn(&RefCell<T>) -> Result<(), Box<dyn std::error::Error>>>;

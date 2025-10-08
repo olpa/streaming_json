@@ -24,7 +24,7 @@ pub enum Error {
     /// Error from user action at position
     ActionError(Box<dyn std::error::Error>, usize),
     /// IO error during processing
-    IOError(std::io::Error),
+    IOError(embedded_io::ErrorKind),
 }
 
 impl std::error::Error for Error {}
@@ -32,7 +32,7 @@ impl std::error::Error for Error {}
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::RJiterError(e) => write!(f, "RJiter error: {e}"), // position is inside `e`
+            Error::RJiterError(e) => write!(f, "RJiter error: {e:?}"), // position is inside `e`
             Error::ActionError(e, pos) => write!(f, "Action error: {e} at position {pos}"),
             Error::UnhandledPeek(p, pos) => write!(f, "UnhandledPeek: {p:?} at position {pos}"),
             Error::UnbalancedJson(pos) => write!(f, "Unbalanced JSON at position {pos}"),
@@ -41,7 +41,7 @@ impl std::fmt::Display for Error {
                 f,
                 "Max nesting exceeded at position {pos} with level {level}"
             ),
-            Error::IOError(e) => write!(f, "IO error: {e}"),
+            Error::IOError(e) => write!(f, "IO error: {e:?}"),
         }
     }
 }
@@ -52,8 +52,8 @@ impl From<rjiter::Error> for Error {
     }
 }
 
-impl From<std::io::Error> for Error {
-    fn from(error: std::io::Error) -> Self {
+impl From<embedded_io::ErrorKind> for Error {
+    fn from(error: embedded_io::ErrorKind) -> Self {
         Error::IOError(error)
     }
 }

@@ -35,7 +35,8 @@ use crate::{
 };
 use core::mem::transmute;
 use std::cell::RefCell;
-use std::io::Write;
+use embedded_io::{Read, Write};
+
 use u8pool::U8Pool;
 
 /// Copy a JSON atom (string, number, boolean, or null) from the input to the output.
@@ -47,7 +48,7 @@ use u8pool::U8Pool;
 /// * The input JSON is malformed
 /// * An IO error occurs while writing to the output
 /// * An unexpected token type is encountered
-pub fn copy_atom(peeked: Peek, rjiter: &mut RJiter, writer: &mut dyn Write) -> ScanResult<()> {
+pub fn copy_atom<R: Read, W: Write>(peeked: Peek, rjiter: &mut RJiter<R>, writer: &mut W) -> ScanResult<()> {
     if peeked == Peek::String {
         writer.write_all(b"\"")?;
         rjiter.write_long_bytes(writer)?;
@@ -89,15 +90,15 @@ enum IdtSequencePos<'a> {
 }
 
 // Main transformer structure that maintains the state of the transformation process.
-struct IdTransform<'a, 'workbuf> {
-    writer: &'a mut dyn Write,
+struct IdTransform<'a, 'workbuf, W: Write> {
+    writer: &'a mut W,
     // `seqpos`+`is_top_level` could be the own type `IdtFromMatcherToHandler`
     seqpos: IdtSequencePos<'workbuf>,
     is_top_level: bool,
 }
 
-impl<'a> IdTransform<'a, '_> {
-    fn new(writer: &'a mut dyn Write) -> Self {
+impl<'a, 'workbuf, W: Write> IdTransform<'a, 'workbuf, W> {
+    fn new(writer: &'a mut W) -> Self {
         Self {
             writer,
             seqpos: IdtSequencePos::AtBeginning,
@@ -105,7 +106,7 @@ impl<'a> IdTransform<'a, '_> {
         }
     }
 
-    fn get_writer_mut(&mut self) -> &mut dyn Write {
+    fn get_writer_mut(&mut self) -> &mut W {
         self.writer
     }
 
@@ -153,13 +154,13 @@ impl<'a> IdTransform<'a, '_> {
 ///
 /// # Returns
 /// `find_action` parameter for the `scan` function
-fn create_idtransform_find_action<'a, 'workbuf>(
-    idt_cell: &'a RefCell<IdTransform<'a, 'workbuf>>,
-) -> impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<IdTransform<'a, 'workbuf>>> + 'a
+fn create_idtransform_find_action<'a, 'workbuf, R: Read, W: Write>(
+    idt_cell: &'a RefCell<IdTransform<'a, 'workbuf, W>>,
+) -> impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<IdTransform<'a, 'workbuf, W>, R>> + 'a
 {
     move |structural_pseudoname: StructuralPseudoname,
           mut context: ContextIter|
-          -> Option<BoxedAction<IdTransform<'a, 'workbuf>>> {
+          -> Option<BoxedAction<IdTransform<'a, 'workbuf, W>, R>> {
         let context_count = context.len();
         match structural_pseudoname {
             StructuralPseudoname::Atom => {
@@ -210,12 +211,12 @@ fn create_idtransform_find_action<'a, 'workbuf>(
 ///
 /// # Returns
 /// `find_end_action` parameter for the `scan` function
-fn create_idtransform_find_end_action<'a, 'workbuf>(
-) -> impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedEndAction<IdTransform<'a, 'workbuf>>>
+fn create_idtransform_find_end_action<'a, 'workbuf, W: Write>(
+) -> impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedEndAction<IdTransform<'a, 'workbuf, W>>>
 {
     |structural_pseudoname: StructuralPseudoname,
      _context: ContextIter|
-     -> Option<BoxedEndAction<IdTransform<'a, 'workbuf>>> {
+     -> Option<BoxedEndAction<IdTransform<'a, 'workbuf, W>>> {
         match structural_pseudoname {
             StructuralPseudoname::Object => Some(Box::new(on_object_end)),
             StructuralPseudoname::Array => Some(Box::new(on_array_end)),
@@ -226,7 +227,7 @@ fn create_idtransform_find_end_action<'a, 'workbuf>(
 
 // ---------------- Handlers
 
-fn on_key(_rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform<'_, '_>>) -> StreamOp {
+fn on_key<R: Read, W: Write>(_rjiter_cell: &RefCell<RJiter<R>>, idt_cell: &RefCell<IdTransform<'_, '_, W>>) -> StreamOp {
     let mut idt = idt_cell.borrow_mut();
 
     if let Err(e) = idt.write_seqpos() {
@@ -237,7 +238,7 @@ fn on_key(_rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform<'_, '_>
     StreamOp::None
 }
 
-fn on_atom(rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform<'_, '_>>) -> StreamOp {
+fn on_atom<R: Read, W: Write>(rjiter_cell: &RefCell<RJiter<R>>, idt_cell: &RefCell<IdTransform<'_, '_, W>>) -> StreamOp {
     let mut rjiter = rjiter_cell.borrow_mut();
     let mut idt = idt_cell.borrow_mut();
 
@@ -255,7 +256,7 @@ fn on_atom(rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform<'_, '_>
 }
 
 // "Struct" means "array" or "object"
-fn on_struct(bytes: &[u8], idt_cell: &RefCell<IdTransform<'_, '_>>) -> StreamOp {
+fn on_struct<W: Write>(bytes: &[u8], idt_cell: &RefCell<IdTransform<'_, '_, W>>) -> StreamOp {
     let mut idt = idt_cell.borrow_mut();
 
     if let Err(e) = idt.write_seqpos() {
@@ -269,9 +270,9 @@ fn on_struct(bytes: &[u8], idt_cell: &RefCell<IdTransform<'_, '_>>) -> StreamOp 
     StreamOp::None
 }
 
-fn on_struct_end(
+fn on_struct_end<W: Write>(
     bytes: &[u8],
-    idt_cell: &RefCell<IdTransform<'_, '_>>,
+    idt_cell: &RefCell<IdTransform<'_, '_, W>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut idt = idt_cell.borrow_mut();
     idt.seqpos = IdtSequencePos::InMiddle;
@@ -279,20 +280,20 @@ fn on_struct_end(
     Ok(())
 }
 
-fn on_array(_rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform<'_, '_>>) -> StreamOp {
+fn on_array<R: Read, W: Write>(_rjiter_cell: &RefCell<RJiter<R>>, idt_cell: &RefCell<IdTransform<'_, '_, W>>) -> StreamOp {
     on_struct(b"[", idt_cell)
 }
 
-fn on_array_end(idt_cell: &RefCell<IdTransform<'_, '_>>) -> Result<(), Box<dyn std::error::Error>> {
+fn on_array_end<W: Write>(idt_cell: &RefCell<IdTransform<'_, '_, W>>) -> Result<(), Box<dyn std::error::Error>> {
     on_struct_end(b"]", idt_cell)
 }
 
-fn on_object(_rjiter_cell: &RefCell<RJiter>, idt_cell: &RefCell<IdTransform<'_, '_>>) -> StreamOp {
+fn on_object<R: Read, W: Write>(_rjiter_cell: &RefCell<RJiter<R>>, idt_cell: &RefCell<IdTransform<'_, '_, W>>) -> StreamOp {
     on_struct(b"{", idt_cell)
 }
 
-fn on_object_end(
-    idt_cell: &RefCell<IdTransform<'_, '_>>,
+fn on_object_end<W: Write>(
+    idt_cell: &RefCell<IdTransform<'_, '_, W>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     on_struct_end(b"}", idt_cell)
 }
@@ -315,9 +316,9 @@ fn on_object_end(
 /// If `scan` fails (malformed json, nesting too deep, etc), return `scan`'s error.
 /// Also, if an IO error occurs while writing to the output, return it.
 ///
-pub fn idtransform(
-    rjiter_cell: &RefCell<RJiter>,
-    writer: &mut dyn Write,
+pub fn idtransform<R: Read, W: Write>(
+    rjiter_cell: &RefCell<RJiter<R>>,
+    writer: &mut W,
     working_buffer: &mut U8Pool,
 ) -> ScanResult<()> {
     let idt = IdTransform::new(writer);
