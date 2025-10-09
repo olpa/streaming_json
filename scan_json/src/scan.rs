@@ -7,7 +7,6 @@ use crate::stack::ContextIter;
 use embedded_io::{Read, Write};
 use rjiter::jiter::Peek;
 use rjiter::RJiter;
-use std::cell::RefCell;
 
 /// A sink writer that discards all written data
 struct Sink;
@@ -88,9 +87,9 @@ pub enum StructurePosition {
 // - On end of object, pop the last key
 // - Contract: The stack state after the end of the object is the same as before the begin of the object.
 //   The returned StructurePosition after the end is one from the top of the stack before the begin of the object.
-fn handle_object<T: ?Sized, R: Read>(
+fn handle_object<T: Copy, R: Read>(
     rjiter: &mut RJiter<R>,
-    baton_cell: &RefCell<T>,
+    baton_cell: T,
     find_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<T, R>>,
     find_end_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedEndAction<T>>,
     position: StructurePosition,
@@ -234,9 +233,9 @@ fn handle_object<T: ?Sized, R: Read>(
 // - Contract: The stack state after the end of the array is the same as before the begin of the array.
 //   The returned StructurePosition after the end is one from the top of the stack before the begin of the array.
 //
-fn handle_array<T: ?Sized, R: Read>(
+fn handle_array<T: Copy, R: Read>(
     rjiter: &mut RJiter<R>,
-    baton_cell: &RefCell<T>,
+    baton_cell: T,
     find_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<T, R>>,
     find_end_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedEndAction<T>>,
     position: StructurePosition,
@@ -420,11 +419,11 @@ fn skip_basic_values<R: Read>(peeked: Peek, rjiter: &mut RJiter<R>) -> ScanResul
 /// Returns any error from [`crate::error::Error`].
 ///
 #[allow(clippy::too_many_lines, clippy::elidable_lifetime_names)]
-pub fn scan<'options, T: ?Sized, R: Read>(
+pub fn scan<'options, T: Copy, R: Read>(
     find_action: impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<T, R>>,
     find_end_action: impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedEndAction<T>>,
     rjiter: &mut RJiter<R>,
-    baton_cell: &RefCell<T>,
+    baton_cell: T,
     working_buffer: &mut U8Pool,
     options: &Options<'options>,
 ) -> ScanResult<()> {

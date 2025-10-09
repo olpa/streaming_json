@@ -190,28 +190,33 @@ impl<'a, 'workbuf, W: Write> IdTransform<'a, 'workbuf, W> {
 /// `find_action` parameter for the `scan` function
 fn create_idtransform_find_action<'a, 'workbuf, R: Read + 'static, W: Write + 'static>(
     idt_cell: &'a RefCell<IdTransform<'a, 'workbuf, W>>,
-) -> impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<IdTransform<'a, 'workbuf, W>, R>>
+) -> impl Fn(
+    StructuralPseudoname,
+    ContextIter,
+) -> Option<BoxedAction<&'a RefCell<IdTransform<'a, 'workbuf, W>>, R>>
        + 'a {
     move |structural_pseudoname: StructuralPseudoname,
           mut context: ContextIter|
-          -> Option<BoxedAction<IdTransform<'a, 'workbuf, W>, R>> {
+          -> Option<BoxedAction<&'a RefCell<IdTransform<'a, 'workbuf, W>>, R>> {
         let context_count = context.len();
         match structural_pseudoname {
             StructuralPseudoname::Atom => {
                 // Handle context for is_top_level
                 let mut idt = idt_cell.borrow_mut();
                 idt.is_top_level = context_count < 2;
-                Some(Box::new(on_atom))
+                Some(Box::new(move |rjiter, idt_cell| on_atom(rjiter, idt_cell)))
             }
             StructuralPseudoname::Object => {
                 let mut idt = idt_cell.borrow_mut();
                 idt.is_top_level = context_count < 2;
-                Some(Box::new(on_object))
+                Some(Box::new(move |rjiter, idt_cell| {
+                    on_object(rjiter, idt_cell)
+                }))
             }
             StructuralPseudoname::Array => {
                 let mut idt = idt_cell.borrow_mut();
                 idt.is_top_level = context_count < 2;
-                Some(Box::new(on_array))
+                Some(Box::new(move |rjiter, idt_cell| on_array(rjiter, idt_cell)))
             }
             StructuralPseudoname::None => {
                 // Handle key matching - for object keys, the key name is in the context path
@@ -229,7 +234,7 @@ fn create_idtransform_find_action<'a, 'workbuf, R: Read + 'static, W: Write + 's
                             }
                             _ => IdtSequencePos::InMiddleKey(key_slice),
                         };
-                        Some(Box::new(on_key))
+                        Some(Box::new(move |rjiter, idt_cell| on_key(rjiter, idt_cell)))
                     } else {
                         None
                     }
@@ -245,15 +250,18 @@ fn create_idtransform_find_action<'a, 'workbuf, R: Read + 'static, W: Write + 's
 ///
 /// # Returns
 /// `find_end_action` parameter for the `scan` function
-fn create_idtransform_find_end_action<'a, 'workbuf, W: Write + 'static>(
-) -> impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedEndAction<IdTransform<'a, 'workbuf, W>>>
-{
+fn create_idtransform_find_end_action<'a, 'workbuf, W: Write + 'static>() -> impl Fn(
+    StructuralPseudoname,
+    ContextIter,
+) -> Option<
+    BoxedEndAction<&'a RefCell<IdTransform<'a, 'workbuf, W>>>,
+> {
     |structural_pseudoname: StructuralPseudoname,
      _context: ContextIter|
-     -> Option<BoxedEndAction<IdTransform<'a, 'workbuf, W>>> {
+     -> Option<BoxedEndAction<&'a RefCell<IdTransform<'a, 'workbuf, W>>>> {
         match structural_pseudoname {
-            StructuralPseudoname::Object => Some(Box::new(on_object_end)),
-            StructuralPseudoname::Array => Some(Box::new(on_array_end)),
+            StructuralPseudoname::Object => Some(Box::new(move |idt_cell| on_object_end(idt_cell))),
+            StructuralPseudoname::Array => Some(Box::new(move |idt_cell| on_array_end(idt_cell))),
             StructuralPseudoname::Atom | StructuralPseudoname::None => None,
         }
     }
