@@ -13,7 +13,7 @@ use u8pool::U8Pool;
 fn test_scan_json_empty_input() {
     let mut reader: &[u8] = &[];
     let mut buffer = vec![0u8; 16];
-    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
     let mut scan_buffer = [0u8; 512];
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
@@ -29,7 +29,7 @@ fn test_scan_json_empty_input() {
     scan(
         find_action,
         find_end_action,
-        &RefCell::new(rjiter),
+        &mut rjiter,
         &RefCell::new(()),
         &mut scan_stack,
         &Options::new(),
@@ -42,7 +42,7 @@ fn test_scan_json_top_level_types() {
     let json = r#"null true false 42 3.14 "hello" [] {}"#;
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
-    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
     let mut scan_buffer = [0u8; 512];
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
@@ -58,7 +58,7 @@ fn test_scan_json_top_level_types() {
     scan(
         find_action,
         find_end_action,
-        &RefCell::new(rjiter),
+        &mut rjiter,
         &RefCell::new(()),
         &mut scan_stack,
         &Options::new(),
@@ -71,7 +71,7 @@ fn test_scan_json_simple_object() {
     let json = r#"{"null": null, "bool": true, "num": 42, "float": 3.14, "str": "hello"}"#;
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
-    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
     let mut scan_buffer = [0u8; 512];
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
@@ -87,7 +87,7 @@ fn test_scan_json_simple_object() {
     scan(
         find_action,
         find_end_action,
-        &RefCell::new(rjiter),
+        &mut rjiter,
         &RefCell::new(()),
         &mut scan_stack,
         &Options::new(),
@@ -100,7 +100,7 @@ fn test_scan_json_simple_array() {
     let json = r#"[null, true, false, 42, 3.14, "hello"]"#;
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
-    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
     let mut scan_buffer = [0u8; 512];
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
@@ -116,7 +116,7 @@ fn test_scan_json_simple_array() {
     scan(
         find_action,
         find_end_action,
-        &RefCell::new(rjiter),
+        &mut rjiter,
         &RefCell::new(()),
         &mut scan_stack,
         &Options::new(),
@@ -150,7 +150,7 @@ fn test_scan_json_nested_complex() {
     }"#;
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 64];
-    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
     let mut scan_buffer = [0u8; 512];
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
@@ -166,7 +166,7 @@ fn test_scan_json_nested_complex() {
     scan(
         find_action,
         find_end_action,
-        &RefCell::new(rjiter),
+        &mut rjiter,
         &RefCell::new(()),
         &mut scan_stack,
         &Options::new(),
@@ -179,7 +179,7 @@ fn skip_long_string() {
     let json = format!(r#"{{"foo": "{}", "bar": "baz"}}"#, "a".repeat(100));
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 8];
-    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
     let mut scan_buffer = [0u8; 512];
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
@@ -193,7 +193,7 @@ fn skip_long_string() {
     scan(
         find_action,
         find_end_action,
-        &RefCell::new(rjiter),
+        &mut rjiter,
         &RefCell::new(()),
         &mut scan_stack,
         &Options::new(),
@@ -206,7 +206,7 @@ fn test_skip_sse_tokens() {
     let json = r#"data: {"foo": "bar"} [DONE] "#;
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
-    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
     let mut scan_buffer = [0u8; 512];
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
@@ -223,7 +223,7 @@ fn test_skip_sse_tokens() {
     scan(
         find_action,
         find_end_action,
-        &RefCell::new(rjiter),
+        &mut rjiter,
         &RefCell::new(()),
         &mut scan_stack,
         &options,
@@ -236,7 +236,7 @@ fn test_call_begin_dont_touch_value() {
     let json = r#"{"foo": "bar", "baz": "qux"}"#;
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
-    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
     let mut scan_buffer = [0u8; 512];
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
@@ -269,7 +269,7 @@ fn test_call_begin_dont_touch_value() {
     scan(
         find_action,
         find_end_action,
-        &RefCell::new(rjiter),
+        &mut rjiter,
         &state,
         &mut scan_stack,
         &Options::new(),
@@ -283,7 +283,7 @@ fn test_call_begin_consume_value() {
     let json = r#"{"foo": "bar", "baz": "qux"}"#;
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
-    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
     let mut scan_buffer = [0u8; 512];
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
@@ -319,7 +319,7 @@ fn test_call_begin_consume_value() {
     scan(
         find_action,
         find_end_action,
-        &RefCell::new(rjiter),
+        &mut rjiter,
         &state,
         &mut scan_stack,
         &Options::new(),
@@ -340,7 +340,7 @@ fn test_call_end() {
     }"#;
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 32];
-    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
     let mut scan_buffer = [0u8; 512];
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
@@ -373,7 +373,7 @@ fn test_call_end() {
     scan(
         find_action,
         find_end_action,
-        &RefCell::new(rjiter),
+        &mut rjiter,
         &state,
         &mut scan_stack,
         &Options::new(),
@@ -391,7 +391,7 @@ fn notify_for_top_level_object() {
     let json = r#"{}"#;
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
-    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
     let mut scan_buffer = [0u8; 512];
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let state = RefCell::new((false, false)); // (begin_called, end_called)
@@ -432,7 +432,7 @@ fn notify_for_top_level_object() {
     scan(
         find_action,
         find_end_action,
-        &RefCell::new(rjiter),
+        &mut rjiter,
         &state,
         &mut scan_stack,
         &Options::new(),
@@ -449,7 +449,7 @@ fn notify_for_object_in_array() {
     let json = r#"[{}, {}, {}]"#;
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
-    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
     let mut scan_buffer = [0u8; 512];
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let state = RefCell::new((0, 0)); // (begin_called, end_called)
@@ -490,7 +490,7 @@ fn notify_for_object_in_array() {
     scan(
         find_action,
         find_end_action,
-        &RefCell::new(rjiter),
+        &mut rjiter,
         &state,
         &mut scan_stack,
         &Options::new(),
@@ -513,7 +513,7 @@ fn notify_for_array() {
     let json = r#"{"items": [1, 2, 3]}"#;
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
-    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
     let mut scan_buffer = [0u8; 512];
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let state = RefCell::new((false, false)); // (begin_called, end_called)
@@ -557,7 +557,7 @@ fn notify_for_array() {
     scan(
         find_action,
         find_end_action,
-        &RefCell::new(rjiter),
+        &mut rjiter,
         &state,
         &mut scan_stack,
         &Options::new(),
@@ -574,7 +574,7 @@ fn client_can_consume_array() {
     let json = r#"{"items": [1, 2, 3]}"#;
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
-    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
     let mut scan_buffer = [0u8; 512];
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let writer_cell = RefCell::new(Vec::new());
@@ -619,7 +619,7 @@ fn client_can_consume_array() {
     scan(
         find_action,
         find_end_action,
-        &RefCell::new(rjiter),
+        &mut rjiter,
         &writer_cell,
         &mut scan_stack,
         &Options::new(),
@@ -637,7 +637,7 @@ fn several_arrays_top_level() {
     let json = r#"[1,2,3]  [4,5,6]  [7,8,9]"#;
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
-    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
     let mut scan_buffer = [0u8; 512];
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let writer_cell = RefCell::new(Vec::new());
@@ -683,7 +683,7 @@ fn several_arrays_top_level() {
     scan(
         find_action,
         find_end_action,
-        &RefCell::new(rjiter),
+        &mut rjiter,
         &writer_cell,
         &mut scan_stack,
         &Options::new(),
@@ -701,7 +701,7 @@ fn max_nesting_array() {
     let json = "[".repeat(10); // Smaller depth for the test
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
-    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
     let mut scan_buffer = [0u8; 64];
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 3).unwrap();
 
@@ -715,7 +715,7 @@ fn max_nesting_array() {
     let result = scan(
         find_action,
         find_end_action,
-        &RefCell::new(rjiter),
+        &mut rjiter,
         &RefCell::new(()),
         &mut scan_stack,
         &Options::new(),
@@ -732,7 +732,7 @@ fn max_nesting_object() {
     let json = "{\"a\":".repeat(10);
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
-    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
     let mut scan_buffer = [0u8; 64];
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 3).unwrap();
 
@@ -746,7 +746,7 @@ fn max_nesting_object() {
     let result = scan(
         find_action,
         find_end_action,
-        &RefCell::new(rjiter),
+        &mut rjiter,
         &RefCell::new(()),
         &mut scan_stack,
         &Options::new(),
@@ -763,7 +763,7 @@ fn error_in_begin_action() {
     let json = r#"{"foo": 123}"#;
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
-    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
     let mut scan_buffer = [0u8; 64];
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 3).unwrap();
 
@@ -793,7 +793,7 @@ fn error_in_begin_action() {
     let result = scan(
         find_action,
         find_end_action,
-        &RefCell::new(rjiter),
+        &mut rjiter,
         &RefCell::new(()),
         &mut scan_stack,
         &Options::new(),
@@ -811,7 +811,7 @@ fn error_in_end_action() {
     let json = r#"{"foo": 123}"#;
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
-    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
     let mut scan_buffer = [0u8; 512];
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
@@ -839,7 +839,7 @@ fn error_in_end_action() {
     let result = scan(
         find_action,
         find_end_action,
-        &RefCell::new(rjiter),
+        &mut rjiter,
         &RefCell::new(()),
         &mut scan_stack,
         &Options::new(),
@@ -857,7 +857,7 @@ fn several_objects_top_level() {
     let json = r#"{"foo":1}  {"foo":2}  {"foo":3}"#;
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
-    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
     let mut scan_buffer = [0u8; 512];
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let writer_cell = RefCell::new(Vec::new());
@@ -903,7 +903,7 @@ fn several_objects_top_level() {
     scan(
         find_action,
         find_end_action,
-        &RefCell::new(rjiter),
+        &mut rjiter,
         &writer_cell,
         &mut scan_stack,
         &Options::new(),
@@ -918,7 +918,7 @@ fn match_in_array_context() {
     let json = r#"{"items": [{"name": "first"}, {"name": "second"}]}"#;
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
-    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
     let mut scan_buffer = [0u8; 512];
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let writer_cell = RefCell::new(Vec::new());
@@ -963,7 +963,7 @@ fn match_in_array_context() {
     scan(
         find_action,
         find_end_action,
-        &RefCell::new(rjiter),
+        &mut rjiter,
         &writer_cell,
         &mut scan_stack,
         &Options::new(),
@@ -978,7 +978,7 @@ fn atoms_on_top_level() {
     let json = r#"null true false 42 3.14 "hello""#;
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
-    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
     let mut scan_buffer = [0u8; 512];
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let writer_cell = RefCell::new(Vec::new());
@@ -1013,7 +1013,7 @@ fn atoms_on_top_level() {
     let result = scan(
         find_action,
         find_end_action,
-        &RefCell::new(rjiter),
+        &mut rjiter,
         &writer_cell,
         &mut scan_stack,
         &Options::new(),
@@ -1032,7 +1032,7 @@ fn atoms_in_array() {
     let json = r#"[null, true, false, 42, 3.14, "hello"]"#;
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
-    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
     let mut scan_buffer = [0u8; 512];
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let writer_cell = RefCell::new(Vec::new());
@@ -1064,7 +1064,7 @@ fn atoms_in_array() {
     let result = scan(
         find_action,
         find_end_action,
-        &RefCell::new(rjiter),
+        &mut rjiter,
         &writer_cell,
         &mut scan_stack,
         &Options::new(),
@@ -1083,7 +1083,7 @@ fn atoms_in_object() {
     let json = r#"{"a": null, "b": true, "c": false, "d": 42, "e": 3.14, "f": "hello"}"#;
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
-    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
     let mut scan_buffer = [0u8; 512];
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let writer_cell = RefCell::new(Vec::new());
@@ -1118,7 +1118,7 @@ fn atoms_in_object() {
     let result = scan(
         find_action,
         find_end_action,
-        &RefCell::new(rjiter),
+        &mut rjiter,
         &writer_cell,
         &mut scan_stack,
         &Options::new(),
@@ -1137,8 +1137,7 @@ fn atoms_stream_op_return_values() {
     let json = r#"true false 42 777"#;
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
-    let rjiter = RJiter::new(&mut reader, &mut buffer);
-    let rjiter_cell = RefCell::new(rjiter);
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
     let mut scan_buffer = [0u8; 512];
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let writer_cell = RefCell::new(Vec::new());
@@ -1184,7 +1183,7 @@ fn atoms_stream_op_return_values() {
     let result = scan(
         find_action,
         find_end_action,
-        &rjiter_cell,
+        &mut rjiter,
         &writer_cell,
         &mut scan_stack,
         &Options::new(),
@@ -1196,14 +1195,14 @@ fn atoms_stream_op_return_values() {
     assert!(result.is_err());
 
     // Check that the next value is still 42
-    let num = rjiter_cell.borrow_mut().next_int().unwrap();
+    let num = rjiter.next_int().unwrap();
     assert!(matches!(num, rjiter::jiter::NumberInt::Int(42)));
 }
 
 fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 32];
-    let rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
     let mut scan_buffer = [0u8; 512];
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let writer_cell = RefCell::new(Vec::new());
@@ -1255,7 +1254,7 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
     scan(
         find_action,
         find_end_action,
-        &RefCell::new(rjiter),
+        &mut rjiter,
         &writer_cell,
         &mut scan_stack,
         {
@@ -1351,8 +1350,7 @@ fn stop_early() {
     let mut buffer = vec![0u8; 16];
 
     // Part 1: Process all items when stop_early is false
-    let rjiter = RJiter::new(&mut reader, &mut buffer);
-    let rjiter_cell = RefCell::new(rjiter);
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
     let mut scan_buffer = [0u8; 512];
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
@@ -1368,7 +1366,7 @@ fn stop_early() {
     scan(
         find_action,
         find_end_action,
-        &rjiter_cell,
+        &mut rjiter,
         &RefCell::new(()),
         &mut scan_stack,
         &Options::new(),
@@ -1376,12 +1374,11 @@ fn stop_early() {
     .unwrap();
 
     // Verify everything was processed
-    rjiter_cell.borrow_mut().finish().unwrap();
+    rjiter.finish().unwrap();
 
     // Part 2: Process only first item when stop_early is true
     let mut reader = input.as_bytes();
-    let rjiter = RJiter::new(&mut reader, &mut buffer);
-    let rjiter_cell = RefCell::new(rjiter);
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
     let mut scan_buffer = [0u8; 512];
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
@@ -1389,7 +1386,7 @@ fn stop_early() {
         scan(
             find_action,
             find_end_action,
-            &rjiter_cell,
+            &mut rjiter,
             &RefCell::new(()),
             &mut scan_stack,
             &Options {
@@ -1401,7 +1398,6 @@ fn stop_early() {
     }
 
     // Verify we can still read the next item, which is 777
-    let mut rjiter = rjiter_cell.borrow_mut();
     assert_eq!(
         rjiter.next_int().unwrap(),
         rjiter::jiter::NumberInt::Int(777)

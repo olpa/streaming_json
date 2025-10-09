@@ -120,7 +120,7 @@ fn on_end_message(writer: &RefCell<Vec<u8>>) -> Result<(), String> {
 fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 32];
-    let rjiter_cell = RefCell::new(RJiter::new(&mut reader, &mut buffer));
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
     let writer_cell = RefCell::new(Vec::new());
 
     let find_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedAction<Vec<u8>, &[u8]>> {
@@ -148,7 +148,7 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
     scan(
         find_action,
         find_end_action,
-        &rjiter_cell,
+        &mut rjiter,
         &writer_cell,
         &mut context,
         {
