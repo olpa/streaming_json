@@ -89,7 +89,7 @@ pub enum StructurePosition {
 // - Contract: The stack state after the end of the object is the same as before the begin of the object.
 //   The returned StructurePosition after the end is one from the top of the stack before the begin of the object.
 fn handle_object<T: ?Sized, R: Read>(
-    rjiter_cell: &RefCell<RJiter<R>>,
+    rjiter: &mut RJiter<R>,
     baton_cell: &RefCell<T>,
     find_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<T, R>>,
     find_end_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedEndAction<T>>,
@@ -103,8 +103,7 @@ fn handle_object<T: ?Sized, R: Read>(
         if let Some(begin_action) =
             find_action(StructuralPseudoname::Object, ContextIter::new(context))
         {
-            let mut rjiter = rjiter_cell.borrow_mut();
-            match begin_action(&mut *rjiter, baton_cell) {
+            match begin_action(rjiter, baton_cell) {
                 StreamOp::None => (),
                 StreamOp::Error(e) => {
                     return Err(ScanError::ActionError {
@@ -136,7 +135,7 @@ fn handle_object<T: ?Sized, R: Read>(
             if let Err(e) = end_action(baton_cell) {
                 return Err(ScanError::ActionError {
                     message: e,
-                    position: rjiter_cell.borrow().current_index(),
+                    position: rjiter.current_index(),
                 });
             }
         }
@@ -145,7 +144,6 @@ fn handle_object<T: ?Sized, R: Read>(
     //
     // Find the next key in the object or the end of the object
     //
-    let mut rjiter = rjiter_cell.borrow_mut();
     let keyr = if position == StructurePosition::ObjectBegin {
         rjiter.next_object_bytes()
     } else {
@@ -202,9 +200,7 @@ fn handle_object<T: ?Sized, R: Read>(
     // Execute the action for the current key
     //
     if let Some(action) = find_action(StructuralPseudoname::None, ContextIter::new(context)) {
-        drop(rjiter);
-        let mut rjiter = rjiter_cell.borrow_mut();
-        match action(&mut *rjiter, baton_cell) {
+        match action(rjiter, baton_cell) {
             StreamOp::Error(e) => {
                 return Err(ScanError::ActionError {
                     message: e,
@@ -239,7 +235,7 @@ fn handle_object<T: ?Sized, R: Read>(
 //   The returned StructurePosition after the end is one from the top of the stack before the begin of the array.
 //
 fn handle_array<T: ?Sized, R: Read>(
-    rjiter_cell: &RefCell<RJiter<R>>,
+    rjiter: &mut RJiter<R>,
     baton_cell: &RefCell<T>,
     find_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<T, R>>,
     find_end_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedEndAction<T>>,
@@ -253,8 +249,7 @@ fn handle_array<T: ?Sized, R: Read>(
         if let Some(begin_action) =
             find_action(StructuralPseudoname::Array, ContextIter::new(context))
         {
-            let mut rjiter = rjiter_cell.borrow_mut();
-            match begin_action(&mut *rjiter, baton_cell) {
+            match begin_action(rjiter, baton_cell) {
                 StreamOp::None => (),
                 StreamOp::ValueIsConsumed => {
                     return Ok((
@@ -285,7 +280,7 @@ fn handle_array<T: ?Sized, R: Read>(
             .is_err()
         {
             return Err(ScanError::MaxNestingExceeded {
-                position: rjiter_cell.borrow().current_index(),
+                position: rjiter.current_index(),
                 level: context.len(),
             });
         }
@@ -295,10 +290,8 @@ fn handle_array<T: ?Sized, R: Read>(
     // Get the next item in the array
     //
     let peeked = if position == StructurePosition::ArrayBegin {
-        let mut rjiter = rjiter_cell.borrow_mut();
         rjiter.known_array()
     } else {
-        let mut rjiter = rjiter_cell.borrow_mut();
         rjiter.array_step()
     }?;
 
@@ -312,7 +305,7 @@ fn handle_array<T: ?Sized, R: Read>(
         #[allow(unsafe_code)]
         unsafe { context.pop_assoc::<StructurePosition>() }.ok_or_else(|| {
             ScanError::InternalError {
-                position: rjiter_cell.borrow().current_index(),
+                position: rjiter.current_index(),
                 message: "Context stack is empty when ending array".to_string(),
             }
         })?;
@@ -326,7 +319,7 @@ fn handle_array<T: ?Sized, R: Read>(
             if let Err(e) = end_action(baton_cell) {
                 return Err(ScanError::ActionError {
                     message: e,
-                    position: rjiter_cell.borrow().current_index(),
+                    position: rjiter.current_index(),
                 });
             }
         }
@@ -335,7 +328,7 @@ fn handle_array<T: ?Sized, R: Read>(
             #[allow(unsafe_code)]
             *unsafe { context.top_assoc_obj::<StructurePosition>() }.ok_or_else(|| {
                 ScanError::InternalError {
-                    position: rjiter_cell.borrow().current_index(),
+                    position: rjiter.current_index(),
                     message: "Context stack is empty when ending array".to_string(),
                 }
             })?,
@@ -460,8 +453,9 @@ pub fn scan<'options, T: ?Sized, R: Read>(
         //
         if position == StructurePosition::ObjectBegin || position == StructurePosition::ObjectMiddle
         {
+            let mut rjiter = rjiter_cell.borrow_mut();
             match handle_object(
-                rjiter_cell,
+                &mut *rjiter,
                 baton_cell,
                 &find_action,
                 &find_end_action,
@@ -480,8 +474,9 @@ pub fn scan<'options, T: ?Sized, R: Read>(
         // Handle array states
         //
         if position == StructurePosition::ArrayBegin || position == StructurePosition::ArrayMiddle {
+            let mut rjiter = rjiter_cell.borrow_mut();
             match handle_array(
-                rjiter_cell,
+                &mut *rjiter,
                 baton_cell,
                 &find_action,
                 &find_end_action,
@@ -500,7 +495,7 @@ pub fn scan<'options, T: ?Sized, R: Read>(
                 }
                 Ok((peeked_val, unexpected)) => {
                     return Err(ScanError::InternalError {
-                        position: rjiter_cell.borrow().current_index(),
+                        position: rjiter.current_index(),
                         message: format!("Unexpected position from handle_array: {unexpected:?} with peeked: {peeked_val:?}"),
                     });
                 }
