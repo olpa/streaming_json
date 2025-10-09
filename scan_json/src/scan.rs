@@ -89,7 +89,7 @@ pub enum StructurePosition {
 //   The returned StructurePosition after the end is one from the top of the stack before the begin of the object.
 fn handle_object<T: Copy, R: Read>(
     rjiter: &mut RJiter<R>,
-    baton_cell: T,
+    baton: T,
     find_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<T, R>>,
     find_end_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedEndAction<T>>,
     position: StructurePosition,
@@ -102,7 +102,7 @@ fn handle_object<T: Copy, R: Read>(
         if let Some(begin_action) =
             find_action(StructuralPseudoname::Object, ContextIter::new(context))
         {
-            match begin_action(rjiter, baton_cell) {
+            match begin_action(rjiter, baton) {
                 StreamOp::None => (),
                 StreamOp::Error(e) => {
                     return Err(ScanError::ActionError {
@@ -131,7 +131,7 @@ fn handle_object<T: Copy, R: Read>(
         #[allow(unsafe_code)]
         let _ = unsafe { context.pop_assoc::<StructurePosition>() };
         if let Some(end_action) = end_action {
-            if let Err(e) = end_action(baton_cell) {
+            if let Err(e) = end_action(baton) {
                 return Err(ScanError::ActionError {
                     message: e,
                     position: rjiter.current_index(),
@@ -157,7 +157,7 @@ fn handle_object<T: Copy, R: Read>(
             if let Some(end_action) =
                 find_end_action(StructuralPseudoname::Object, ContextIter::new(context))
             {
-                if let Err(e) = end_action(baton_cell) {
+                if let Err(e) = end_action(baton) {
                     return Err(ScanError::ActionError {
                         message: e,
                         position: rjiter.current_index(),
@@ -199,7 +199,7 @@ fn handle_object<T: Copy, R: Read>(
     // Execute the action for the current key
     //
     if let Some(action) = find_action(StructuralPseudoname::None, ContextIter::new(context)) {
-        match action(rjiter, baton_cell) {
+        match action(rjiter, baton) {
             StreamOp::Error(e) => {
                 return Err(ScanError::ActionError {
                     message: e,
@@ -235,7 +235,7 @@ fn handle_object<T: Copy, R: Read>(
 //
 fn handle_array<T: Copy, R: Read>(
     rjiter: &mut RJiter<R>,
-    baton_cell: T,
+    baton: T,
     find_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<T, R>>,
     find_end_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedEndAction<T>>,
     position: StructurePosition,
@@ -248,7 +248,7 @@ fn handle_array<T: Copy, R: Read>(
         if let Some(begin_action) =
             find_action(StructuralPseudoname::Array, ContextIter::new(context))
         {
-            match begin_action(rjiter, baton_cell) {
+            match begin_action(rjiter, baton) {
                 StreamOp::None => (),
                 StreamOp::ValueIsConsumed => {
                     return Ok((
@@ -315,7 +315,7 @@ fn handle_array<T: Copy, R: Read>(
         if let Some(end_action) =
             find_end_action(StructuralPseudoname::Array, ContextIter::new(context))
         {
-            if let Err(e) = end_action(baton_cell) {
+            if let Err(e) = end_action(baton) {
                 return Err(ScanError::ActionError {
                     message: e,
                     position: rjiter.current_index(),
@@ -374,7 +374,7 @@ fn skip_basic_values<R: Read>(peeked: Peek, rjiter: &mut RJiter<R>) -> ScanResul
 /// * `find_action` - A matcher function that returns a callback for begin events
 /// * `find_end_action` - A matcher function that returns a callback for end events
 /// * `rjiter` - Mutable reference to the JSON iterator
-/// * `baton_cell` - Reference cell containing the caller's state
+/// * `baton` - Reference cell containing the caller's state
 /// * `working_buffer` - Working buffer for the context stack
 /// * `options` - Configuration options for scan behavior
 ///
@@ -393,12 +393,14 @@ fn skip_basic_values<R: Read>(peeked: Peek, rjiter: &mut RJiter<R>) -> ScanResul
 /// If in step 1 an action returns `StreamOp::ValueIsConsumed`, the `scan` function
 /// skips the remaining steps, assuming the action correctly advanced the parser.
 ///
-/// # Side Effects
+/// # Baton (State) Patterns and Side Effects
 ///
 /// Actions receive two arguments:
 ///
 /// - `rjiter`: Mutable reference to the `RJiter` parser object that actions can use to consume JSON values
-/// - `baton_cell`: `RefCell` containing user-defined state for side effects
+/// - `baton`: State object for side effects, which can be either:
+///   - **Simple baton**: Any `Copy` type (like `i32`, `bool`, `()`) passed by value for read-only or stateless operations
+///   - **`RefCell` baton**: `&RefCell<T>` for mutable state that needs to be shared across action calls
 ///
 /// # Working Buffer Sizing
 ///
@@ -423,7 +425,7 @@ pub fn scan<'options, T: Copy, R: Read>(
     find_action: impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<T, R>>,
     find_end_action: impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedEndAction<T>>,
     rjiter: &mut RJiter<R>,
-    baton_cell: T,
+    baton: T,
     working_buffer: &mut U8Pool,
     options: &Options<'options>,
 ) -> ScanResult<()> {
@@ -454,7 +456,7 @@ pub fn scan<'options, T: Copy, R: Read>(
         {
             match handle_object(
                 rjiter,
-                baton_cell,
+                baton,
                 &find_action,
                 &find_end_action,
                 position,
@@ -474,7 +476,7 @@ pub fn scan<'options, T: Copy, R: Read>(
         if position == StructurePosition::ArrayBegin || position == StructurePosition::ArrayMiddle {
             match handle_array(
                 rjiter,
-                baton_cell,
+                baton,
                 &find_action,
                 &find_end_action,
                 position,
@@ -552,7 +554,7 @@ pub fn scan<'options, T: Copy, R: Read>(
         //
         let action = find_action(StructuralPseudoname::Atom, ContextIter::new(context));
         if let Some(action) = action {
-            match action(rjiter, baton_cell) {
+            match action(rjiter, baton) {
                 StreamOp::Error(e) => {
                     return Err(ScanError::ActionError {
                         message: e,

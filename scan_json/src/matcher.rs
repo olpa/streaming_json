@@ -37,10 +37,18 @@ impl<E: core::fmt::Display> From<E> for StreamOp {
     }
 }
 
-/// Type alias for boxed action functions that can be called during JSON scanning
+/// Type alias for boxed action functions that can be called during JSON scanning.
+///
+/// The type parameter `T` represents the baton (state) type:
+/// - For simple batons: `T` is a `Copy` type like `i32`, `bool`, `()`
+/// - For mutable state: `T` is `&RefCell<SomeType>` for shared mutable access
 pub type BoxedAction<T, R> = Box<dyn Fn(&mut RJiter<R>, T) -> StreamOp>;
 
-/// Type alias for boxed end action functions that are called when a matched key ends
+/// Type alias for boxed end action functions that are called when a matched key ends.
+///
+/// The type parameter `T` represents the baton (state) type:
+/// - For simple batons: `T` is a `Copy` type like `i32`, `bool`, `()`
+/// - For mutable state: `T` is `&RefCell<SomeType>` for shared mutable access
 pub type BoxedEndAction<T> = Box<dyn Fn(T) -> Result<(), String>>;
 
 /// Match by name and ancestor names against the current JSON context.

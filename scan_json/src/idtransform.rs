@@ -2,7 +2,7 @@
 //! The implementation of `idtransform` is an example of advanced use of the `scan` function.
 
 //
-// The code uses the `scan`'s parameter `baton_cell` of type `IdTransform` to:
+// The code uses the `scan`'s parameter `baton` of type `IdTransform` to:
 // - maintain state to properly write JSON, adding or not adding a comma, `IdtSequencePos`
 // - pass information from matchers to handlers, `IdtMatcherToHandler`
 //

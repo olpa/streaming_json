@@ -253,7 +253,8 @@ fn test_call_begin_dont_touch_value() {
      -> Option<BoxedAction<&RefCell<bool>, &[u8]>> {
         if structural_pseudoname == StructuralPseudoname::None {
             if let Some(key) = context.into_iter().next() {
-                (key == b"foo").then(|| Box::new(set_state_true) as BoxedAction<&RefCell<bool>, &[u8]>)
+                (key == b"foo")
+                    .then(|| Box::new(set_state_true) as BoxedAction<&RefCell<bool>, &[u8]>)
             } else {
                 None
             }
@@ -303,7 +304,8 @@ fn test_call_begin_consume_value() {
      -> Option<BoxedAction<&RefCell<bool>, &[u8]>> {
         if structural_pseudoname == StructuralPseudoname::None {
             if let Some(key) = context.into_iter().next() {
-                (key == b"foo").then(|| Box::new(consume_foo_value) as BoxedAction<&RefCell<bool>, &[u8]>)
+                (key == b"foo")
+                    .then(|| Box::new(consume_foo_value) as BoxedAction<&RefCell<bool>, &[u8]>)
             } else {
                 None
             }
@@ -361,7 +363,8 @@ fn test_call_end() {
      -> Option<BoxedEndAction<&RefCell<i32>>> {
         if structural_pseudoname == StructuralPseudoname::None {
             if let Some(key) = context.into_iter().next() {
-                (key == b"foo").then(|| Box::new(increment_counter) as BoxedEndAction<&RefCell<i32>>)
+                (key == b"foo")
+                    .then(|| Box::new(increment_counter) as BoxedEndAction<&RefCell<i32>>)
             } else {
                 None
             }
@@ -670,10 +673,11 @@ fn several_arrays_top_level() {
             structural_pseudoname,
             context,
         ) {
-            let action: BoxedEndAction<&RefCell<Vec<u8>>> = Box::new(|writer: &RefCell<Vec<u8>>| {
-                writer.borrow_mut().write_all(b"</array>").unwrap();
-                Ok(())
-            });
+            let action: BoxedEndAction<&RefCell<Vec<u8>>> =
+                Box::new(|writer: &RefCell<Vec<u8>>| {
+                    writer.borrow_mut().write_all(b"</array>").unwrap();
+                    Ok(())
+                });
             Some(action)
         } else {
             None
@@ -776,10 +780,9 @@ fn error_in_begin_action() {
             structural_pseudoname,
             context,
         ) {
-            let action: BoxedAction<(), &[u8]> =
-                Box::new(|_: &mut RJiter<&[u8]>, _: ()| {
-                    StreamOp::Error("Test error in begin-action".into())
-                });
+            let action: BoxedAction<(), &[u8]> = Box::new(|_: &mut RJiter<&[u8]>, _: ()| {
+                StreamOp::Error("Test error in begin-action".into())
+            });
             Some(action)
         } else {
             None
@@ -890,10 +893,11 @@ fn several_objects_top_level() {
             structural_pseudoname,
             context,
         ) {
-            let action: BoxedEndAction<&RefCell<Vec<u8>>> = Box::new(|writer: &RefCell<Vec<u8>>| {
-                writer.borrow_mut().write_all(b"</foo>").unwrap();
-                Ok(())
-            });
+            let action: BoxedEndAction<&RefCell<Vec<u8>>> =
+                Box::new(|writer: &RefCell<Vec<u8>>| {
+                    writer.borrow_mut().write_all(b"</foo>").unwrap();
+                    Ok(())
+                });
             Some(action)
         } else {
             None
