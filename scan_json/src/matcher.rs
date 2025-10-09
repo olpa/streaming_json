@@ -39,7 +39,7 @@ impl<E: core::fmt::Display> From<E> for StreamOp {
 }
 
 /// Type alias for boxed action functions that can be called during JSON scanning
-pub type BoxedAction<T, R> = Box<dyn Fn(&RefCell<RJiter<R>>, &RefCell<T>) -> StreamOp>;
+pub type BoxedAction<T, R> = Box<dyn Fn(&mut RJiter<R>, &RefCell<T>) -> StreamOp>;
 
 /// Type alias for boxed end action functions that are called when a matched key ends
 pub type BoxedEndAction<T> = Box<dyn Fn(&RefCell<T>) -> Result<(), String>>;

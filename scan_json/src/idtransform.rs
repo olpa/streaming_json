@@ -262,7 +262,7 @@ fn create_idtransform_find_end_action<'a, 'workbuf, W: Write + 'static>(
 // ---------------- Handlers
 
 fn on_key<R: Read, W: Write>(
-    _rjiter_cell: &RefCell<RJiter<R>>,
+    _rjiter: &mut RJiter<R>,
     idt_cell: &RefCell<IdTransform<'_, '_, W>>,
 ) -> StreamOp {
     let mut idt = idt_cell.borrow_mut();
@@ -276,10 +276,9 @@ fn on_key<R: Read, W: Write>(
 }
 
 fn on_atom<R: Read, W: Write>(
-    rjiter_cell: &RefCell<RJiter<R>>,
+    rjiter: &mut RJiter<R>,
     idt_cell: &RefCell<IdTransform<'_, '_, W>>,
 ) -> StreamOp {
-    let mut rjiter = rjiter_cell.borrow_mut();
     let mut idt = idt_cell.borrow_mut();
 
     if let Err(e) = idt.write_seqpos() {
@@ -287,7 +286,7 @@ fn on_atom<R: Read, W: Write>(
     }
 
     match rjiter.peek() {
-        Ok(peeked) => match copy_atom(peeked, &mut rjiter, idt.get_writer_mut()) {
+        Ok(peeked) => match copy_atom(peeked, rjiter, idt.get_writer_mut()) {
             Ok(()) => StreamOp::ValueIsConsumed,
             Err(e) => StreamOp::Error(e.to_string()),
         },
@@ -323,7 +322,7 @@ fn on_struct_end<W: Write>(
 }
 
 fn on_array<R: Read, W: Write>(
-    _rjiter_cell: &RefCell<RJiter<R>>,
+    _rjiter: &mut RJiter<R>,
     idt_cell: &RefCell<IdTransform<'_, '_, W>>,
 ) -> StreamOp {
     on_struct(b"[", idt_cell)
@@ -334,7 +333,7 @@ fn on_array_end<W: Write>(idt_cell: &RefCell<IdTransform<'_, '_, W>>) -> Result<
 }
 
 fn on_object<R: Read, W: Write>(
-    _rjiter_cell: &RefCell<RJiter<R>>,
+    _rjiter: &mut RJiter<R>,
     idt_cell: &RefCell<IdTransform<'_, '_, W>>,
 ) -> StreamOp {
     on_struct(b"{", idt_cell)

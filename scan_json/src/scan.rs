@@ -103,19 +103,20 @@ fn handle_object<T: ?Sized, R: Read>(
         if let Some(begin_action) =
             find_action(StructuralPseudoname::Object, ContextIter::new(context))
         {
-            match begin_action(rjiter_cell, baton_cell) {
+            let mut rjiter = rjiter_cell.borrow_mut();
+            match begin_action(&mut *rjiter, baton_cell) {
                 StreamOp::None => (),
                 StreamOp::Error(e) => {
                     return Err(ScanError::ActionError {
                         message: e,
-                        position: rjiter_cell.borrow().current_index(),
+                        position: rjiter.current_index(),
                     })
                 }
                 StreamOp::ValueIsConsumed => {
                     #[allow(unsafe_code)]
                     return Ok(*unsafe { context.top_assoc_obj::<StructurePosition>() }
                         .ok_or_else(|| ScanError::InternalError {
-                            position: rjiter_cell.borrow().current_index(),
+                            position: rjiter.current_index(),
                             message: "Context stack is empty when handling ValueIsConsumed"
                                 .to_string(),
                         })?);
@@ -202,11 +203,12 @@ fn handle_object<T: ?Sized, R: Read>(
     //
     if let Some(action) = find_action(StructuralPseudoname::None, ContextIter::new(context)) {
         drop(rjiter);
-        match action(rjiter_cell, baton_cell) {
+        let mut rjiter = rjiter_cell.borrow_mut();
+        match action(&mut *rjiter, baton_cell) {
             StreamOp::Error(e) => {
                 return Err(ScanError::ActionError {
                     message: e,
-                    position: rjiter_cell.borrow().current_index(),
+                    position: rjiter.current_index(),
                 });
             }
             StreamOp::ValueIsConsumed => {
@@ -251,7 +253,8 @@ fn handle_array<T: ?Sized, R: Read>(
         if let Some(begin_action) =
             find_action(StructuralPseudoname::Array, ContextIter::new(context))
         {
-            match begin_action(rjiter_cell, baton_cell) {
+            let mut rjiter = rjiter_cell.borrow_mut();
+            match begin_action(&mut *rjiter, baton_cell) {
                 StreamOp::None => (),
                 StreamOp::ValueIsConsumed => {
                     return Ok((
@@ -259,7 +262,7 @@ fn handle_array<T: ?Sized, R: Read>(
                         #[allow(unsafe_code)]
                         *unsafe { context.top_assoc_obj::<StructurePosition>() }.ok_or_else(
                             || ScanError::InternalError {
-                                position: rjiter_cell.borrow().current_index(),
+                                position: rjiter.current_index(),
                                 message:
                                     "Context stack is empty when handling ValueIsConsumed in array"
                                         .to_string(),
@@ -270,7 +273,7 @@ fn handle_array<T: ?Sized, R: Read>(
                 StreamOp::Error(e) => {
                     return Err(ScanError::ActionError {
                         message: e,
-                        position: rjiter_cell.borrow().current_index(),
+                        position: rjiter.current_index(),
                     });
                 }
             }
@@ -560,7 +563,10 @@ pub fn scan<'options, T: ?Sized, R: Read>(
         let action = find_action(StructuralPseudoname::Atom, ContextIter::new(context));
         if let Some(action) = action {
             drop(rjiter);
-            let action_result = action(rjiter_cell, baton_cell);
+            let action_result = {
+                let mut rjiter = rjiter_cell.borrow_mut();
+                action(&mut *rjiter, baton_cell)
+            };
             rjiter = rjiter_cell.borrow_mut();
 
             match action_result {

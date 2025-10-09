@@ -243,7 +243,7 @@ fn test_call_begin_dont_touch_value() {
     let state = RefCell::new(false);
 
     // Action function for when "foo" is matched
-    fn set_state_true(_: &RefCell<RJiter<&[u8]>>, state: &RefCell<bool>) -> StreamOp {
+    fn set_state_true(_: &mut RJiter<&[u8]>, state: &RefCell<bool>) -> StreamOp {
         *state.borrow_mut() = true;
         StreamOp::None
     }
@@ -290,8 +290,7 @@ fn test_call_begin_consume_value() {
     let state = RefCell::new(false);
 
     // Action function for when "foo" is matched and value is consumed
-    fn consume_foo_value(rjiter_cell: &RefCell<RJiter<&[u8]>>, state: &RefCell<bool>) -> StreamOp {
-        let mut rjiter = rjiter_cell.borrow_mut();
+    fn consume_foo_value(rjiter: &mut RJiter<&[u8]>, state: &RefCell<bool>) -> StreamOp {
         let next = rjiter.next_value();
         next.unwrap();
 
@@ -398,10 +397,7 @@ fn notify_for_top_level_object() {
     let state = RefCell::new((false, false)); // (begin_called, end_called)
 
     // Action functions for #object matching
-    fn set_begin_called(
-        _rjiter: &RefCell<RJiter<&[u8]>>,
-        state: &RefCell<(bool, bool)>,
-    ) -> StreamOp {
+    fn set_begin_called(_rjiter: &mut RJiter<&[u8]>, state: &RefCell<(bool, bool)>) -> StreamOp {
         state.borrow_mut().0 = true;
         StreamOp::None
     }
@@ -459,10 +455,7 @@ fn notify_for_object_in_array() {
     let state = RefCell::new((0, 0)); // (begin_called, end_called)
 
     // Action functions for #object in #array matching
-    fn increment_begin_count(
-        _rjiter: &RefCell<RJiter<&[u8]>>,
-        state: &RefCell<(i32, i32)>,
-    ) -> StreamOp {
+    fn increment_begin_count(_rjiter: &mut RJiter<&[u8]>, state: &RefCell<(i32, i32)>) -> StreamOp {
         state.borrow_mut().0 += 1;
         StreamOp::None
     }
@@ -527,7 +520,7 @@ fn notify_for_array() {
 
     // Action functions for #array with parent items matching
     fn set_array_begin_called(
-        _rjiter: &RefCell<RJiter<&[u8]>>,
+        _rjiter: &mut RJiter<&[u8]>,
         state: &RefCell<(bool, bool)>,
     ) -> StreamOp {
         state.borrow_mut().0 = true;
@@ -587,11 +580,7 @@ fn client_can_consume_array() {
     let writer_cell = RefCell::new(Vec::new());
 
     // Action functions for #array with parent items consuming
-    fn consume_array_and_write(
-        rjiter_cell: &RefCell<RJiter<&[u8]>>,
-        writer: &RefCell<Vec<u8>>,
-    ) -> StreamOp {
-        let mut rjiter = rjiter_cell.borrow_mut();
+    fn consume_array_and_write(rjiter: &mut RJiter<&[u8]>, writer: &RefCell<Vec<u8>>) -> StreamOp {
         let mut writer = writer.borrow_mut();
         writer.write_all(b"Consuming array: ").unwrap();
         let value = rjiter.next_value().unwrap();
@@ -663,7 +652,7 @@ fn several_arrays_top_level() {
             context,
         ) {
             let action: BoxedAction<Vec<u8>, &[u8]> =
-                Box::new(|_: &RefCell<RJiter<&[u8]>>, writer: &RefCell<Vec<u8>>| {
+                Box::new(|_: &mut RJiter<&[u8]>, writer: &RefCell<Vec<u8>>| {
                     writer.borrow_mut().write_all(b"<array>").unwrap();
                     StreamOp::None
                 });
@@ -788,7 +777,7 @@ fn error_in_begin_action() {
             context,
         ) {
             let action: BoxedAction<(), &[u8]> =
-                Box::new(|_: &RefCell<RJiter<&[u8]>>, _: &RefCell<()>| {
+                Box::new(|_: &mut RJiter<&[u8]>, _: &RefCell<()>| {
                     StreamOp::Error("Test error in begin-action".into())
                 });
             Some(action)
@@ -883,7 +872,7 @@ fn several_objects_top_level() {
             context,
         ) {
             let action: BoxedAction<Vec<u8>, &[u8]> =
-                Box::new(|_: &RefCell<RJiter<&[u8]>>, writer: &RefCell<Vec<u8>>| {
+                Box::new(|_: &mut RJiter<&[u8]>, writer: &RefCell<Vec<u8>>| {
                     writer.borrow_mut().write_all(b"<foo>").unwrap();
                     StreamOp::None
                 });
@@ -950,9 +939,8 @@ fn match_in_array_context() {
             structural_pseudoname,
             context,
         ) {
-            let action: BoxedAction<Vec<u8>, &[u8]> = Box::new(
-                |rjiter_cell: &RefCell<RJiter<&[u8]>>, writer: &RefCell<Vec<u8>>| {
-                    let mut rjiter = rjiter_cell.borrow_mut();
+            let action: BoxedAction<Vec<u8>, &[u8]> =
+                Box::new(|rjiter: &mut RJiter<&[u8]>, writer: &RefCell<Vec<u8>>| {
                     let mut writer = writer.borrow_mut();
                     let result = rjiter
                         .peek()
@@ -961,8 +949,7 @@ fn match_in_array_context() {
                         Ok(_) => StreamOp::ValueIsConsumed,
                         Err(e) => StreamOp::Error(format!("RJiter error: {:?}", e)),
                     }
-                },
-            );
+                });
             Some(action)
         } else {
             None
@@ -1006,8 +993,7 @@ fn atoms_on_top_level() {
             context,
         ) {
             let action: BoxedAction<Vec<u8>, &[u8]> = Box::new(
-                |rjiter_cell: &RefCell<RJiter<&[u8]>>, writer_cell: &RefCell<Vec<u8>>| {
-                    let mut rjiter = rjiter_cell.borrow_mut();
+                |rjiter: &mut RJiter<&[u8]>, writer_cell: &RefCell<Vec<u8>>| {
                     let mut writer = writer_cell.borrow_mut();
                     let peek = rjiter.peek().unwrap();
                     write!(writer, "(matched {:?})", peek).unwrap();
@@ -1060,8 +1046,7 @@ fn atoms_in_array() {
             context,
         ) {
             Some(Box::new(
-                |rjiter_cell: &RefCell<RJiter<&[u8]>>, writer_cell: &RefCell<Vec<u8>>| {
-                    let mut rjiter = rjiter_cell.borrow_mut();
+                |rjiter: &mut RJiter<&[u8]>, writer_cell: &RefCell<Vec<u8>>| {
                     let mut writer = writer_cell.borrow_mut();
                     let peek = rjiter.peek().unwrap();
                     write!(writer, "(matched {:?})", peek).unwrap();
@@ -1103,11 +1088,7 @@ fn atoms_in_object() {
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
     let writer_cell = RefCell::new(Vec::new());
 
-    fn handle_atom(
-        rjiter_cell: &RefCell<RJiter<&[u8]>>,
-        writer_cell: &RefCell<Vec<u8>>,
-    ) -> StreamOp {
-        let mut rjiter = rjiter_cell.borrow_mut();
+    fn handle_atom(rjiter: &mut RJiter<&[u8]>, writer_cell: &RefCell<Vec<u8>>) -> StreamOp {
         let mut writer = writer_cell.borrow_mut();
         let peek = rjiter.peek().unwrap();
         write!(writer, "(matched {:?})", peek).unwrap();
@@ -1171,8 +1152,7 @@ fn atoms_stream_op_return_values() {
             context,
         ) {
             Some(Box::new(
-                |rjiter_cell: &RefCell<RJiter<&[u8]>>, writer: &RefCell<Vec<u8>>| {
-                    let mut rjiter = rjiter_cell.borrow_mut();
+                |rjiter: &mut RJiter<&[u8]>, writer: &RefCell<Vec<u8>>| {
                     let mut writer = writer.borrow_mut();
                     let peeked = rjiter.peek().unwrap();
 
@@ -1237,15 +1217,14 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
             context.clone(),
         ) {
             Some(Box::new(
-                |_: &RefCell<RJiter<&[u8]>>, writer: &RefCell<Vec<u8>>| {
+                |_: &mut RJiter<&[u8]>, writer: &RefCell<Vec<u8>>| {
                     writer.borrow_mut().write_all(b"(new message)\n").unwrap();
                     StreamOp::None
                 },
             ))
         } else if iter_match(|| ["content".as_bytes()], structural_pseudoname, context) {
             Some(Box::new(
-                |rjiter_cell: &RefCell<RJiter<&[u8]>>, writer_cell: &RefCell<Vec<u8>>| {
-                    let mut rjiter = rjiter_cell.borrow_mut();
+                |rjiter: &mut RJiter<&[u8]>, writer_cell: &RefCell<Vec<u8>>| {
                     let mut writer = writer_cell.borrow_mut();
                     let result = rjiter
                         .peek()

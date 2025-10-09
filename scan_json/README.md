@@ -21,10 +21,10 @@ The workflow for each key:
 - If the key value is an object or array, update the context and parse the next level
 - Afterwards, call `find_end_action` and execute if found
 
-An action receives two `RefCell` references as arguments:
+An action receives two arguments:
 
-- `baton_cell`: A black box for side effects by the action
-- `rjiter_cell`: `RJiter` parser object. An action can modify JSON parsing behavior by consuming the current key's value
+- `rjiter`: A mutable reference to the `RJiter` parser object. An action can modify JSON parsing behavior by consuming the current key's value
+- `baton_cell`: A `RefCell` containing a black box for side effects by the action
 
 
 ## Example of an action
@@ -42,8 +42,7 @@ use std::cell::RefCell;
 use embedded_io::Write;
 use u8pool::U8Pool;
 
-fn on_content(rjiter_cell: &RefCell<RJiter<&[u8]>>, writer_cell: &RefCell<Vec<u8>>) -> StreamOp {
-    let mut rjiter = rjiter_cell.borrow_mut();
+fn on_content(rjiter: &mut RJiter<&[u8]>, writer_cell: &RefCell<Vec<u8>>) -> StreamOp {
     let mut writer = writer_cell.borrow_mut();
     let result = rjiter
         .peek()
@@ -97,13 +96,12 @@ use scan_json::stack::ContextIter;
 use rjiter::RJiter;
 use u8pool::U8Pool;
 
-fn on_begin_message(_: &RefCell<RJiter<&[u8]>>, writer: &RefCell<Vec<u8>>) -> StreamOp {
+fn on_begin_message(_: &mut RJiter<&[u8]>, writer: &RefCell<Vec<u8>>) -> StreamOp {
     writer.borrow_mut().write_all(b"(new message)\n").unwrap();
     StreamOp::None
 }
 
-fn on_content(rjiter_cell: &RefCell<RJiter<&[u8]>>, writer_cell: &RefCell<Vec<u8>>) -> StreamOp {
-    let mut rjiter = rjiter_cell.borrow_mut();
+fn on_content(rjiter: &mut RJiter<&[u8]>, writer_cell: &RefCell<Vec<u8>>) -> StreamOp {
     let mut writer = writer_cell.borrow_mut();
     let result = rjiter
         .peek()
