@@ -21,10 +21,10 @@ The workflow for each key:
 - If the key value is an object or array, update the context and parse the next level
 - Afterwards, call `find_end_action` and execute if found
 
-An action receives two `RefCell` references as arguments:
+An action receives two arguments:
 
-- `baton_cell`: A black box for side effects by the action
-- `rjiter_cell`: `RJiter` parser object. An action can modify JSON parsing behavior by consuming the current key's value
+- `rjiter`: A mutable reference to the `RJiter` parser object. An action can modify JSON parsing behavior by consuming the current key's value
+- `baton_cell`: A `RefCell` containing a black box for side effects by the action
 
 
 ## Example of an action
@@ -42,8 +42,7 @@ use std::cell::RefCell;
 use std::io::Write;
 use u8pool::U8Pool;
 
-fn on_content(rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>) -> StreamOp {
-    let mut rjiter = rjiter_cell.borrow_mut();
+fn on_content(rjiter: &mut RJiter, writer_cell: &RefCell<dyn Write>) -> StreamOp {
     let mut writer = writer_cell.borrow_mut();
     let result = rjiter
         .peek()
@@ -87,7 +86,7 @@ use scan_json::stack::ContextIter;
 use rjiter::RJiter;
 use u8pool::U8Pool;
 
-fn on_begin_message(_: &RefCell<RJiter>, writer: &RefCell<dyn Write>) -> StreamOp {
+fn on_begin_message(_: &mut RJiter, writer: &RefCell<dyn Write>) -> StreamOp {
     let result = writer.borrow_mut().write_all(b"(new message)\n");
     match result {
         Ok(_) => StreamOp::None,
@@ -95,8 +94,7 @@ fn on_begin_message(_: &RefCell<RJiter>, writer: &RefCell<dyn Write>) -> StreamO
     }
 }
 
-fn on_content(rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>) -> StreamOp {
-    let mut rjiter = rjiter_cell.borrow_mut();
+fn on_content(rjiter: &mut RJiter, writer_cell: &RefCell<dyn Write>) -> StreamOp {
     let mut writer = writer_cell.borrow_mut();
     let result = rjiter
         .peek()
@@ -115,7 +113,7 @@ fn on_end_message(writer: &RefCell<dyn Write>) -> Result<(), Box<dyn std::error:
 fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 32];
-    let rjiter_cell = RefCell::new(RJiter::new(&mut reader, &mut buffer));
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
     let writer_cell = RefCell::new(Vec::new());
 
     let find_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedAction<dyn Write>> {
@@ -143,7 +141,7 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
     scan(
         find_action,
         find_end_action,
-        &rjiter_cell,
+        &mut rjiter,
         &writer_cell,
         &mut context,
         {
