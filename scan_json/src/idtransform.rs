@@ -352,7 +352,7 @@ fn on_object_end<W: Write>(idt_cell: &RefCell<IdTransform<'_, '_, W>>) -> Result
 ///
 /// # Arguments
 ///
-/// * `rjiter_cell` - Reference cell containing the JSON iterator
+/// * `rjiter` - Mutable reference to the JSON iterator
 /// * `writer` - Output writer for the transformed JSON
 /// * `working_buffer` - Working buffer for context stack (see [`crate::scan()`] for details)
 ///
@@ -362,7 +362,7 @@ fn on_object_end<W: Write>(idt_cell: &RefCell<IdTransform<'_, '_, W>>) -> Result
 /// Also, if an IO error occurs while writing to the output, return it.
 ///
 pub fn idtransform<R: Read + 'static, W: Write + 'static>(
-    rjiter_cell: &RefCell<RJiter<R>>,
+    rjiter: &mut RJiter<R>,
     writer: &mut W,
     working_buffer: &mut U8Pool,
 ) -> ScanResult<()> {
@@ -376,7 +376,7 @@ pub fn idtransform<R: Read + 'static, W: Write + 'static>(
     scan(
         find_action,
         find_end_action,
-        rjiter_cell,
+        rjiter,
         &idt_cell,
         working_buffer,
         &Options {

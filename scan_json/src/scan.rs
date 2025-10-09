@@ -374,7 +374,7 @@ fn skip_basic_values<R: Read>(peeked: Peek, rjiter: &mut RJiter<R>) -> ScanResul
 ///
 /// * `find_action` - A matcher function that returns a callback for begin events
 /// * `find_end_action` - A matcher function that returns a callback for end events
-/// * `rjiter_cell` - Reference cell containing the JSON iterator
+/// * `rjiter` - Mutable reference to the JSON iterator
 /// * `baton_cell` - Reference cell containing the caller's state
 /// * `working_buffer` - Working buffer for the context stack
 /// * `options` - Configuration options for scan behavior
@@ -396,10 +396,10 @@ fn skip_basic_values<R: Read>(peeked: Peek, rjiter: &mut RJiter<R>) -> ScanResul
 ///
 /// # Side Effects
 ///
-/// Actions receive two `RefCell` references as arguments:
+/// Actions receive two arguments:
 ///
-/// - `baton_cell`: User-defined state for side effects
-/// - `rjiter_cell`: `RJiter` parser object that actions can use to consume JSON values
+/// - `rjiter`: Mutable reference to the `RJiter` parser object that actions can use to consume JSON values
+/// - `baton_cell`: `RefCell` containing user-defined state for side effects
 ///
 /// # Working Buffer Sizing
 ///
@@ -423,7 +423,7 @@ fn skip_basic_values<R: Read>(peeked: Peek, rjiter: &mut RJiter<R>) -> ScanResul
 pub fn scan<'options, T: ?Sized, R: Read>(
     find_action: impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<T, R>>,
     find_end_action: impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedEndAction<T>>,
-    rjiter_cell: &RefCell<RJiter<R>>,
+    rjiter: &mut RJiter<R>,
     baton_cell: &RefCell<T>,
     working_buffer: &mut U8Pool,
     options: &Options<'options>,
@@ -434,7 +434,7 @@ pub fn scan<'options, T: ?Sized, R: Read>(
     context
         .push_assoc(position, b"#top")
         .map_err(|_e| ScanError::MaxNestingExceeded {
-            position: rjiter_cell.borrow().current_index(),
+            position: rjiter.current_index(),
             level: 0,
         })?;
 
@@ -453,9 +453,8 @@ pub fn scan<'options, T: ?Sized, R: Read>(
         //
         if position == StructurePosition::ObjectBegin || position == StructurePosition::ObjectMiddle
         {
-            let mut rjiter = rjiter_cell.borrow_mut();
             match handle_object(
-                &mut *rjiter,
+                rjiter,
                 baton_cell,
                 &find_action,
                 &find_end_action,
@@ -474,9 +473,8 @@ pub fn scan<'options, T: ?Sized, R: Read>(
         // Handle array states
         //
         if position == StructurePosition::ArrayBegin || position == StructurePosition::ArrayMiddle {
-            let mut rjiter = rjiter_cell.borrow_mut();
             match handle_array(
-                &mut *rjiter,
+                rjiter,
                 baton_cell,
                 &find_action,
                 &find_end_action,
@@ -502,8 +500,6 @@ pub fn scan<'options, T: ?Sized, R: Read>(
                 Err(e) => return Err(e),
             }
         }
-
-        let mut rjiter = rjiter_cell.borrow_mut();
 
         //
         // Peek the next JSON value, handling end of the input
@@ -557,14 +553,7 @@ pub fn scan<'options, T: ?Sized, R: Read>(
         //
         let action = find_action(StructuralPseudoname::Atom, ContextIter::new(context));
         if let Some(action) = action {
-            drop(rjiter);
-            let action_result = {
-                let mut rjiter = rjiter_cell.borrow_mut();
-                action(&mut *rjiter, baton_cell)
-            };
-            rjiter = rjiter_cell.borrow_mut();
-
-            match action_result {
+            match action(rjiter, baton_cell) {
                 StreamOp::Error(e) => {
                     return Err(ScanError::ActionError {
                         message: e,
@@ -576,7 +565,7 @@ pub fn scan<'options, T: ?Sized, R: Read>(
             }
         }
 
-        if skip_basic_values(peeked, &mut rjiter).is_ok() {
+        if skip_basic_values(peeked, rjiter).is_ok() {
             continue;
         }
 
