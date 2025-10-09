@@ -54,7 +54,7 @@ fn on_content(rjiter: &mut RJiter<&[u8]>, writer_cell: &RefCell<Vec<u8>>) -> Str
 }
 
 // Find action function that matches "content" key
-let find_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedAction<Vec<u8>, &[u8]>> {
+let find_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedAction<&RefCell<Vec<u8>>, &[u8]>> {
     if iter_match(|| ["content".as_bytes()], structural_pseudoname, context) {
         Some(Box::new(on_content))
     } else {
@@ -123,7 +123,7 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
     let writer_cell = RefCell::new(Vec::new());
 
-    let find_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedAction<Vec<u8>, &[u8]>> {
+    let find_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedAction<&RefCell<Vec<u8>>, &[u8]>> {
         if iter_match(|| ["content".as_bytes()], structural_pseudoname, context.clone()) {
             Some(Box::new(on_content))
         } else if iter_match(|| ["message".as_bytes()], structural_pseudoname, context.clone()) {
@@ -132,7 +132,7 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
             None
         }
     };
-    let find_end_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedEndAction<Vec<u8>>> {
+    let find_end_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedEndAction<&RefCell<Vec<u8>>>> {
         if iter_match(|| ["message".as_bytes()], structural_pseudoname, context.clone()) {
             Some(Box::new(on_end_message))
         } else {
