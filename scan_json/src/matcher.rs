@@ -39,17 +39,17 @@ impl<E: core::fmt::Display> From<E> for StreamOp {
 
 /// Type alias for action functions that can be called during JSON scanning.
 ///
-/// The type parameter `T` represents the baton (state) type:
-/// - For simple batons: `T` is a `Copy` type like `i32`, `bool`, `()`
-/// - For mutable state: `T` is `&RefCell<SomeType>` for shared mutable access
-pub type Action<T, R> = fn(&mut RJiter<R>, T) -> StreamOp;
+/// The type parameter `B` represents the baton (state) type:
+/// - For simple batons: `B` is a `Copy` type like `i32`, `bool`, `()`
+/// - For mutable state: `B` is `&RefCell<SomeType>` for shared mutable access
+pub type Action<B, R> = fn(&mut RJiter<R>, B) -> StreamOp;
 
 /// Type alias for end action functions that are called when a matched key ends.
 ///
-/// The type parameter `T` represents the baton (state) type:
-/// - For simple batons: `T` is a `Copy` type like `i32`, `bool`, `()`
-/// - For mutable state: `T` is `&RefCell<SomeType>` for shared mutable access
-pub type EndAction<T> = fn(T) -> Result<(), String>;
+/// The type parameter `B` represents the baton (state) type:
+/// - For simple batons: `B` is a `Copy` type like `i32`, `bool`, `()`
+/// - For mutable state: `B` is `&RefCell<SomeType>` for shared mutable access
+pub type EndAction<B> = fn(B) -> Result<(), String>;
 
 /// Match by name and ancestor names against the current JSON context.
 ///

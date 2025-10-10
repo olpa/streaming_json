@@ -61,4 +61,4 @@ impl From<embedded_io::ErrorKind> for Error {
 }
 
 /// Type alias for Results with `scan_json` Error
-pub type Result<T> = core::result::Result<T, Error>;
+pub type Result<B> = core::result::Result<B, Error>;

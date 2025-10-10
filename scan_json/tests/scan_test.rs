@@ -1,9 +1,7 @@
 use embedded_io::Write;
 use std::cell::RefCell;
 
-use ::scan_json::matcher::{
-    iter_match, Action, EndAction, StreamOp, StructuralPseudoname,
-};
+use ::scan_json::matcher::{iter_match, Action, EndAction, StreamOp, StructuralPseudoname};
 use ::scan_json::stack::ContextIter;
 use ::scan_json::{scan, Options};
 use rjiter::{jiter::Peek, RJiter};
@@ -253,8 +251,7 @@ fn test_call_begin_dont_touch_value() {
      -> Option<Action<&RefCell<bool>, &[u8]>> {
         if structural_pseudoname == StructuralPseudoname::None {
             if let Some(key) = context.into_iter().next() {
-                (key == b"foo")
-                    .then(|| set_state_true as Action<&RefCell<bool>, &[u8]>)
+                (key == b"foo").then(|| set_state_true as Action<&RefCell<bool>, &[u8]>)
             } else {
                 None
             }
@@ -304,8 +301,7 @@ fn test_call_begin_consume_value() {
      -> Option<Action<&RefCell<bool>, &[u8]>> {
         if structural_pseudoname == StructuralPseudoname::None {
             if let Some(key) = context.into_iter().next() {
-                (key == b"foo")
-                    .then(|| consume_foo_value as Action<&RefCell<bool>, &[u8]>)
+                (key == b"foo").then(|| consume_foo_value as Action<&RefCell<bool>, &[u8]>)
             } else {
                 None
             }
@@ -363,8 +359,7 @@ fn test_call_end() {
      -> Option<EndAction<&RefCell<i32>>> {
         if structural_pseudoname == StructuralPseudoname::None {
             if let Some(key) = context.into_iter().next() {
-                (key == b"foo")
-                    .then(|| increment_counter as EndAction<&RefCell<i32>>)
+                (key == b"foo").then(|| increment_counter as EndAction<&RefCell<i32>>)
             } else {
                 None
             }
@@ -680,8 +675,7 @@ fn several_arrays_top_level() {
             structural_pseudoname,
             context,
         ) {
-            let action: EndAction<&RefCell<Vec<u8>>> =
-                write_array_end_marker;
+            let action: EndAction<&RefCell<Vec<u8>>> = write_array_end_marker;
             Some(action)
         } else {
             None
@@ -843,8 +837,7 @@ fn error_in_end_action() {
             structural_pseudoname,
             context,
         ) {
-            let action: EndAction<()> =
-                noop_end_action;
+            let action: EndAction<()> = noop_end_action;
             Some(action)
         } else {
             None
@@ -909,8 +902,7 @@ fn several_objects_top_level() {
                 writer.borrow_mut().write_all(b"</foo>").unwrap();
                 Ok(())
             }
-            let action: EndAction<&RefCell<Vec<u8>>> =
-                write_foo_end_marker;
+            let action: EndAction<&RefCell<Vec<u8>>> = write_foo_end_marker;
             Some(action)
         } else {
             None
@@ -956,7 +948,10 @@ fn match_in_array_context() {
             structural_pseudoname,
             context,
         ) {
-            fn consume_content_value(rjiter: &mut RJiter<&[u8]>, writer_cell: &RefCell<Vec<u8>>) -> StreamOp {
+            fn consume_content_value(
+                rjiter: &mut RJiter<&[u8]>,
+                writer_cell: &RefCell<Vec<u8>>,
+            ) -> StreamOp {
                 let mut writer = writer_cell.borrow_mut();
                 let result = rjiter
                     .peek()
@@ -1009,7 +1004,10 @@ fn atoms_on_top_level() {
             structural_pseudoname,
             context,
         ) {
-            fn write_matched_peek(rjiter: &mut RJiter<&[u8]>, writer_cell: &RefCell<Vec<u8>>) -> StreamOp {
+            fn write_matched_peek(
+                rjiter: &mut RJiter<&[u8]>,
+                writer_cell: &RefCell<Vec<u8>>,
+            ) -> StreamOp {
                 let mut writer = writer_cell.borrow_mut();
                 let peek = rjiter.peek().unwrap();
                 let formatted = format!("(matched {:?})", peek);
@@ -1062,7 +1060,10 @@ fn atoms_in_array() {
             structural_pseudoname,
             context,
         ) {
-            fn write_matched_peek(rjiter: &mut RJiter<&[u8]>, writer_cell: &RefCell<Vec<u8>>) -> StreamOp {
+            fn write_matched_peek(
+                rjiter: &mut RJiter<&[u8]>,
+                writer_cell: &RefCell<Vec<u8>>,
+            ) -> StreamOp {
                 let mut writer = writer_cell.borrow_mut();
                 let peek = rjiter.peek().unwrap();
                 let formatted = format!("(matched {:?})", peek);
@@ -1167,7 +1168,10 @@ fn atoms_stream_op_return_values() {
             structural_pseudoname,
             context,
         ) {
-            fn handle_peek_conditionally(rjiter: &mut RJiter<&[u8]>, writer: &RefCell<Vec<u8>>) -> StreamOp {
+            fn handle_peek_conditionally(
+                rjiter: &mut RJiter<&[u8]>,
+                writer: &RefCell<Vec<u8>>,
+            ) -> StreamOp {
                 let mut writer = writer.borrow_mut();
                 let peeked = rjiter.peek().unwrap();
 
@@ -1231,13 +1235,19 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
             structural_pseudoname,
             context.clone(),
         ) {
-            fn consume_and_write_message(_: &mut RJiter<&[u8]>, writer: &RefCell<Vec<u8>>) -> StreamOp {
+            fn consume_and_write_message(
+                _: &mut RJiter<&[u8]>,
+                writer: &RefCell<Vec<u8>>,
+            ) -> StreamOp {
                 writer.borrow_mut().write_all(b"(new message)\n").unwrap();
                 StreamOp::None
             }
             Some(consume_and_write_message)
         } else if iter_match(|| ["content".as_bytes()], structural_pseudoname, context) {
-            fn consume_content_value(rjiter: &mut RJiter<&[u8]>, writer_cell: &RefCell<Vec<u8>>) -> StreamOp {
+            fn consume_content_value(
+                rjiter: &mut RJiter<&[u8]>,
+                writer_cell: &RefCell<Vec<u8>>,
+            ) -> StreamOp {
                 let mut writer = writer_cell.borrow_mut();
                 let result = rjiter
                     .peek()

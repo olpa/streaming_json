@@ -26,7 +26,7 @@ An action receives two arguments:
 - `rjiter`: A mutable reference to the `RJiter` parser object. An action can modify JSON parsing behavior by consuming the current key's value
 - `baton`: This can be either:
   - A simple `Copy` type (like `i32`, `bool`, `()`) passed by value for read-only or stateless operations
-  - `&RefCell<T>` for mutable state that needs to be shared across action calls
+  - `&RefCell<B>` for mutable state that needs to be shared across action calls
 
 ## Example of an action
 

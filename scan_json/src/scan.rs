@@ -87,11 +87,11 @@ pub enum StructurePosition {
 // - On end of object, pop the last key
 // - Contract: The stack state after the end of the object is the same as before the begin of the object.
 //   The returned StructurePosition after the end is one from the top of the stack before the begin of the object.
-fn handle_object<T: Copy, R: Read>(
+fn handle_object<B: Copy, R: Read>(
     rjiter: &mut RJiter<R>,
-    baton: T,
-    find_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<Action<T, R>>,
-    find_end_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<EndAction<T>>,
+    baton: B,
+    find_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<Action<B, R>>,
+    find_end_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<EndAction<B>>,
     position: StructurePosition,
     context: &mut U8Pool,
 ) -> ScanResult<StructurePosition> {
@@ -233,11 +233,11 @@ fn handle_object<T: Copy, R: Read>(
 // - Contract: The stack state after the end of the array is the same as before the begin of the array.
 //   The returned StructurePosition after the end is one from the top of the stack before the begin of the array.
 //
-fn handle_array<T: Copy, R: Read>(
+fn handle_array<B: Copy, R: Read>(
     rjiter: &mut RJiter<R>,
-    baton: T,
-    find_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<Action<T, R>>,
-    find_end_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<EndAction<T>>,
+    baton: B,
+    find_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<Action<B, R>>,
+    find_end_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<EndAction<B>>,
     position: StructurePosition,
     context: &mut U8Pool,
 ) -> ScanResult<(Option<Peek>, StructurePosition)> {
@@ -400,7 +400,7 @@ fn skip_basic_values<R: Read>(peeked: Peek, rjiter: &mut RJiter<R>) -> ScanResul
 /// - `rjiter`: Mutable reference to the `RJiter` parser object that actions can use to consume JSON values
 /// - `baton`: State object for side effects, which can be either:
 ///   - **Simple baton**: Any `Copy` type (like `i32`, `bool`, `()`) passed by value for read-only or stateless operations
-///   - **`RefCell` baton**: `&RefCell<T>` for mutable state that needs to be shared across action calls
+///   - **`RefCell` baton**: `&RefCell<B>` for mutable state that needs to be shared across action calls
 ///
 /// # Working Buffer Sizing
 ///
@@ -421,11 +421,11 @@ fn skip_basic_values<R: Read>(peeked: Peek, rjiter: &mut RJiter<R>) -> ScanResul
 /// Returns any error from [`crate::error::Error`].
 ///
 #[allow(clippy::too_many_lines, clippy::elidable_lifetime_names)]
-pub fn scan<'options, T: Copy, R: Read>(
-    find_action: impl Fn(StructuralPseudoname, ContextIter) -> Option<Action<T, R>>,
-    find_end_action: impl Fn(StructuralPseudoname, ContextIter) -> Option<EndAction<T>>,
+pub fn scan<'options, B: Copy, R: Read>(
+    find_action: impl Fn(StructuralPseudoname, ContextIter) -> Option<Action<B, R>>,
+    find_end_action: impl Fn(StructuralPseudoname, ContextIter) -> Option<EndAction<B>>,
     rjiter: &mut RJiter<R>,
-    baton: T,
+    baton: B,
     working_buffer: &mut U8Pool,
     options: &Options<'options>,
 ) -> ScanResult<()> {
