@@ -184,91 +184,63 @@ impl<'a, 'workbuf, W: Write> IdTransform<'a, 'workbuf, W> {
 
 // ---------------- Matchers
 
-/// Creates a `find_action` closure for `idtransform` that handles all JSON elements
-///
-/// # Arguments
-/// * `idt_cell` - Reference cell containing the `IdTransform` state
-///
-/// # Returns
-/// `find_action` parameter for the `scan` function
-fn create_idtransform_find_action<'a, 'workbuf, R: Read + 'static, W: Write + 'static>(
-    idt_cell: &'a RefCell<IdTransform<'a, 'workbuf, W>>,
-) -> impl Fn(
-    StructuralPseudoname,
-    ContextIter,
-    IdtBaton<'a, 'workbuf, W>,
-) -> Option<Action<IdtBaton<'a, 'workbuf, W>, R>>
-       + 'a {
-    move |structural_pseudoname: StructuralPseudoname,
-          mut context: ContextIter,
-          _baton: IdtBaton<'a, 'workbuf, W>|
-          -> Option<Action<IdtBaton<'a, 'workbuf, W>, R>> {
-        let context_count = context.len();
-        match structural_pseudoname {
-            StructuralPseudoname::Atom => {
-                // Handle context for is_top_level
-                let mut idt = idt_cell.borrow_mut();
-                idt.is_top_level = context_count < 2;
-                Some(on_atom)
-            }
-            StructuralPseudoname::Object => {
-                let mut idt = idt_cell.borrow_mut();
-                idt.is_top_level = context_count < 2;
-                Some(on_object)
-            }
-            StructuralPseudoname::Array => {
-                let mut idt = idt_cell.borrow_mut();
-                idt.is_top_level = context_count < 2;
-                Some(on_array)
-            }
-            StructuralPseudoname::None => {
-                // Handle key matching - for object keys, the key name is in the context path
-                if let Some(key_bytes) = context.next() {
-                    if key_bytes != b"#top" && key_bytes != b"#array" {
-                        let mut idt = idt_cell.borrow_mut();
-                        // Use unsafe to store the slice reference - we know it's safe because
-                        // the working buffer outlives the IdTransform
-                        #[allow(unsafe_code)]
-                        let key_slice: &'static [u8] =
-                            unsafe { transmute::<&[u8], &'static [u8]>(key_bytes) };
-                        idt.seqpos = match &idt.seqpos {
-                            IdtSequencePos::AtBeginning => {
-                                IdtSequencePos::AtBeginningKey(key_slice)
-                            }
-                            _ => IdtSequencePos::InMiddleKey(key_slice),
-                        };
-                        Some(on_key)
-                    } else {
-                        None
-                    }
+fn find_action<'a, 'workbuf, R: Read + 'static, W: Write + 'static>(
+    structural_pseudoname: StructuralPseudoname,
+    mut context: ContextIter,
+    baton: IdtBaton<'a, 'workbuf, W>,
+) -> Option<Action<IdtBaton<'a, 'workbuf, W>, R>> {
+    let context_count = context.len();
+    match structural_pseudoname {
+        StructuralPseudoname::Atom => {
+            // Handle context for is_top_level
+            let mut idt = baton.borrow_mut();
+            idt.is_top_level = context_count < 2;
+            Some(on_atom)
+        }
+        StructuralPseudoname::Object => {
+            let mut idt = baton.borrow_mut();
+            idt.is_top_level = context_count < 2;
+            Some(on_object)
+        }
+        StructuralPseudoname::Array => {
+            let mut idt = baton.borrow_mut();
+            idt.is_top_level = context_count < 2;
+            Some(on_array)
+        }
+        StructuralPseudoname::None => {
+            // Handle key matching - for object keys, the key name is in the context path
+            if let Some(key_bytes) = context.next() {
+                if key_bytes != b"#top" && key_bytes != b"#array" {
+                    let mut idt = baton.borrow_mut();
+                    // Use unsafe to store the slice reference - we know it's safe because
+                    // the working buffer outlives the IdTransform
+                    #[allow(unsafe_code)]
+                    let key_slice: &'static [u8] =
+                        unsafe { transmute::<&[u8], &'static [u8]>(key_bytes) };
+                    idt.seqpos = match &idt.seqpos {
+                        IdtSequencePos::AtBeginning => IdtSequencePos::AtBeginningKey(key_slice),
+                        _ => IdtSequencePos::InMiddleKey(key_slice),
+                    };
+                    Some(on_key)
                 } else {
                     None
                 }
+            } else {
+                None
             }
         }
     }
 }
 
-/// Creates a `find_end_action` closure for `idtransform` that handles end-of-structure events
-///
-/// # Returns
-/// `find_end_action` parameter for the `scan` function
-fn create_idtransform_find_end_action<'a, 'workbuf, W: Write + 'static>() -> impl Fn(
-    StructuralPseudoname,
-    ContextIter,
-    IdtBaton<'a, 'workbuf, W>,
-) -> Option<
-    EndAction<IdtBaton<'a, 'workbuf, W>>,
-> {
-    |structural_pseudoname: StructuralPseudoname,
-     _context: ContextIter,
-     _baton: IdtBaton<'a, 'workbuf, W>|
-     -> Option<EndAction<IdtBaton<'a, 'workbuf, W>>> {
-        match structural_pseudoname {
-            StructuralPseudoname::Object => Some(on_object_end),
-            StructuralPseudoname::Array => Some(on_array_end),
-            StructuralPseudoname::Atom | StructuralPseudoname::None => None,
-        }
+fn find_end_action<'a, 'workbuf, W: Write + 'static>(
+    structural_pseudoname: StructuralPseudoname,
+    _context: ContextIter,
+    _baton: IdtBaton<'a, 'workbuf, W>,
+) -> Option<EndAction<IdtBaton<'a, 'workbuf, W>>> {
+    match structural_pseudoname {
+        StructuralPseudoname::Object => Some(on_object_end),
+        StructuralPseudoname::Array => Some(on_array_end),
+        StructuralPseudoname::Atom | StructuralPseudoname::None => None,
     }
 }
 
@@ -381,10 +353,6 @@ pub fn idtransform<R: Read + 'static, W: Write + 'static>(
 ) -> ScanResult<()> {
     let idt = IdTransform::new(writer);
     let idt_cell = RefCell::new(idt);
-
-    // Use helper functions to create the finder closures
-    let find_action = create_idtransform_find_action(&idt_cell);
-    let find_end_action = create_idtransform_find_end_action();
 
     scan(
         find_action,
