@@ -35,7 +35,7 @@ An action receives two arguments:
 The action peeks the value and writes it to the output. Because the value is consumed, the action returns the `ValueIsConsumed` flag to `scan` so it can update its internal state.
 
 ```rust
-use scan_json::{scan, iter_match, BoxedAction, StreamOp, Options};
+use scan_json::{scan, iter_match, Action, StreamOp, Options};
 use scan_json::matcher::StructuralPseudoname;
 use scan_json::stack::ContextIter;
 use rjiter::RJiter;
@@ -55,9 +55,9 @@ fn on_content(rjiter: &mut RJiter<&[u8]>, writer_cell: &RefCell<Vec<u8>>) -> Str
 }
 
 // Find action function that matches "content" key
-let find_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedAction<&RefCell<Vec<u8>>, &[u8]>> {
+let find_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<Action<&RefCell<Vec<u8>>, &[u8]>> {
     if iter_match(|| ["content".as_bytes()], structural_pseudoname, context) {
-        Some(Box::new(on_content))
+        Some(on_content)
     } else {
         None
     }
@@ -91,7 +91,7 @@ The example demonstrates that `scan` can be used to handle LLM streaming output:
 ```rust
 use std::cell::RefCell;
 use embedded_io::Write;
-use scan_json::{scan, iter_match, BoxedAction, BoxedEndAction, StreamOp, Options};
+use scan_json::{scan, iter_match, Action, EndAction, StreamOp, Options};
 use scan_json::matcher::StructuralPseudoname;
 use scan_json::stack::ContextIter;
 use rjiter::RJiter;
@@ -124,18 +124,18 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
     let writer_cell = RefCell::new(Vec::new());
 
-    let find_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedAction<&RefCell<Vec<u8>>, &[u8]>> {
+    let find_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<Action<&RefCell<Vec<u8>>, &[u8]>> {
         if iter_match(|| ["content".as_bytes()], structural_pseudoname, context.clone()) {
-            Some(Box::new(on_content))
+            Some(on_content)
         } else if iter_match(|| ["message".as_bytes()], structural_pseudoname, context.clone()) {
-            Some(Box::new(on_begin_message))
+            Some(on_begin_message)
         } else {
             None
         }
     };
-    let find_end_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedEndAction<&RefCell<Vec<u8>>>> {
+    let find_end_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<EndAction<&RefCell<Vec<u8>>>> {
         if iter_match(|| ["message".as_bytes()], structural_pseudoname, context.clone()) {
-            Some(Box::new(on_end_message))
+            Some(on_end_message)
         } else {
             None
         }
