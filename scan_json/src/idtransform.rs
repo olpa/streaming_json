@@ -39,6 +39,9 @@ use std::cell::RefCell;
 
 use u8pool::U8Pool;
 
+/// Type alias for the baton type used in idtransform
+type IdtBaton<'a, 'workbuf, W> = &'a RefCell<IdTransform<'a, 'workbuf, W>>;
+
 /// Copy a JSON atom (string, number, boolean, or null) from the input to the output.
 /// Advances the input iterator to the next token.
 ///
@@ -193,11 +196,13 @@ fn create_idtransform_find_action<'a, 'workbuf, R: Read + 'static, W: Write + 's
 ) -> impl Fn(
     StructuralPseudoname,
     ContextIter,
-) -> Option<Action<&'a RefCell<IdTransform<'a, 'workbuf, W>>, R>>
+    IdtBaton<'a, 'workbuf, W>,
+) -> Option<Action<IdtBaton<'a, 'workbuf, W>, R>>
        + 'a {
     move |structural_pseudoname: StructuralPseudoname,
-          mut context: ContextIter|
-          -> Option<Action<&'a RefCell<IdTransform<'a, 'workbuf, W>>, R>> {
+          mut context: ContextIter,
+          _baton: IdtBaton<'a, 'workbuf, W>|
+          -> Option<Action<IdtBaton<'a, 'workbuf, W>, R>> {
         let context_count = context.len();
         match structural_pseudoname {
             StructuralPseudoname::Atom => {
@@ -251,12 +256,14 @@ fn create_idtransform_find_action<'a, 'workbuf, R: Read + 'static, W: Write + 's
 fn create_idtransform_find_end_action<'a, 'workbuf, W: Write + 'static>() -> impl Fn(
     StructuralPseudoname,
     ContextIter,
+    IdtBaton<'a, 'workbuf, W>,
 ) -> Option<
-    EndAction<&'a RefCell<IdTransform<'a, 'workbuf, W>>>,
+    EndAction<IdtBaton<'a, 'workbuf, W>>,
 > {
     |structural_pseudoname: StructuralPseudoname,
-     _context: ContextIter|
-     -> Option<EndAction<&'a RefCell<IdTransform<'a, 'workbuf, W>>>> {
+     _context: ContextIter,
+     _baton: IdtBaton<'a, 'workbuf, W>|
+     -> Option<EndAction<IdtBaton<'a, 'workbuf, W>>> {
         match structural_pseudoname {
             StructuralPseudoname::Object => Some(on_object_end),
             StructuralPseudoname::Array => Some(on_array_end),

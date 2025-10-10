@@ -87,11 +87,12 @@ pub enum StructurePosition {
 // - On end of object, pop the last key
 // - Contract: The stack state after the end of the object is the same as before the begin of the object.
 //   The returned StructurePosition after the end is one from the top of the stack before the begin of the object.
+#[allow(clippy::too_many_lines)]
 fn handle_object<B: Copy, R: Read>(
     rjiter: &mut RJiter<R>,
     baton: B,
-    find_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<Action<B, R>>,
-    find_end_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<EndAction<B>>,
+    find_action: &impl Fn(StructuralPseudoname, ContextIter, B) -> Option<Action<B, R>>,
+    find_end_action: &impl Fn(StructuralPseudoname, ContextIter, B) -> Option<EndAction<B>>,
     position: StructurePosition,
     context: &mut U8Pool,
 ) -> ScanResult<StructurePosition> {
@@ -99,9 +100,11 @@ fn handle_object<B: Copy, R: Read>(
     // Call the begin-trigger for the object
     //
     if position == StructurePosition::ObjectBegin {
-        if let Some(begin_action) =
-            find_action(StructuralPseudoname::Object, ContextIter::new(context))
-        {
+        if let Some(begin_action) = find_action(
+            StructuralPseudoname::Object,
+            ContextIter::new(context),
+            baton,
+        ) {
             match begin_action(rjiter, baton) {
                 StreamOp::None => (),
                 StreamOp::Error(e) => {
@@ -127,7 +130,8 @@ fn handle_object<B: Copy, R: Read>(
     // Call the end-trigger for the previous key
     //
     if position != StructurePosition::ObjectBegin {
-        let end_action = find_end_action(StructuralPseudoname::None, ContextIter::new(context));
+        let end_action =
+            find_end_action(StructuralPseudoname::None, ContextIter::new(context), baton);
         #[allow(unsafe_code)]
         let _ = unsafe { context.pop_assoc::<StructurePosition>() };
         if let Some(end_action) = end_action {
@@ -154,9 +158,11 @@ fn handle_object<B: Copy, R: Read>(
             //
             // Call the end-trigger for the object
             //
-            if let Some(end_action) =
-                find_end_action(StructuralPseudoname::Object, ContextIter::new(context))
-            {
+            if let Some(end_action) = find_end_action(
+                StructuralPseudoname::Object,
+                ContextIter::new(context),
+                baton,
+            ) {
                 if let Err(e) = end_action(baton) {
                     return Err(ScanError::ActionError {
                         message: e,
@@ -198,7 +204,8 @@ fn handle_object<B: Copy, R: Read>(
     //
     // Execute the action for the current key
     //
-    if let Some(action) = find_action(StructuralPseudoname::None, ContextIter::new(context)) {
+    if let Some(action) = find_action(StructuralPseudoname::None, ContextIter::new(context), baton)
+    {
         match action(rjiter, baton) {
             StreamOp::Error(e) => {
                 return Err(ScanError::ActionError {
@@ -236,8 +243,8 @@ fn handle_object<B: Copy, R: Read>(
 fn handle_array<B: Copy, R: Read>(
     rjiter: &mut RJiter<R>,
     baton: B,
-    find_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<Action<B, R>>,
-    find_end_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<EndAction<B>>,
+    find_action: &impl Fn(StructuralPseudoname, ContextIter, B) -> Option<Action<B, R>>,
+    find_end_action: &impl Fn(StructuralPseudoname, ContextIter, B) -> Option<EndAction<B>>,
     position: StructurePosition,
     context: &mut U8Pool,
 ) -> ScanResult<(Option<Peek>, StructurePosition)> {
@@ -245,9 +252,11 @@ fn handle_array<B: Copy, R: Read>(
     // Call the begin-trigger at the beginning of the array
     //
     if position == StructurePosition::ArrayBegin {
-        if let Some(begin_action) =
-            find_action(StructuralPseudoname::Array, ContextIter::new(context))
-        {
+        if let Some(begin_action) = find_action(
+            StructuralPseudoname::Array,
+            ContextIter::new(context),
+            baton,
+        ) {
             match begin_action(rjiter, baton) {
                 StreamOp::None => (),
                 StreamOp::ValueIsConsumed => {
@@ -312,9 +321,11 @@ fn handle_array<B: Copy, R: Read>(
         //
         // Call the end-trigger
         //
-        if let Some(end_action) =
-            find_end_action(StructuralPseudoname::Array, ContextIter::new(context))
-        {
+        if let Some(end_action) = find_end_action(
+            StructuralPseudoname::Array,
+            ContextIter::new(context),
+            baton,
+        ) {
             if let Err(e) = end_action(baton) {
                 return Err(ScanError::ActionError {
                     message: e,
@@ -422,8 +433,8 @@ fn skip_basic_values<R: Read>(peeked: Peek, rjiter: &mut RJiter<R>) -> ScanResul
 ///
 #[allow(clippy::too_many_lines, clippy::elidable_lifetime_names)]
 pub fn scan<'options, B: Copy, R: Read>(
-    find_action: impl Fn(StructuralPseudoname, ContextIter) -> Option<Action<B, R>>,
-    find_end_action: impl Fn(StructuralPseudoname, ContextIter) -> Option<EndAction<B>>,
+    find_action: impl Fn(StructuralPseudoname, ContextIter, B) -> Option<Action<B, R>>,
+    find_end_action: impl Fn(StructuralPseudoname, ContextIter, B) -> Option<EndAction<B>>,
     rjiter: &mut RJiter<R>,
     baton: B,
     working_buffer: &mut U8Pool,
@@ -552,7 +563,7 @@ pub fn scan<'options, B: Copy, R: Read>(
         // - continue to the main loop if value is consumed, or
         // - pass through to the default handler
         //
-        let action = find_action(StructuralPseudoname::Atom, ContextIter::new(context));
+        let action = find_action(StructuralPseudoname::Atom, ContextIter::new(context), baton);
         if let Some(action) = action {
             match action(rjiter, baton) {
                 StreamOp::Error(e) => {

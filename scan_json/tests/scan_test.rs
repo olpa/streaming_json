@@ -17,11 +17,13 @@ fn test_scan_json_empty_input() {
 
     // find_action that never matches anything
     let find_action = |_structural_pseudoname: StructuralPseudoname,
-                       _context: ContextIter|
+                       _context: ContextIter,
+                       _baton: ()|
      -> Option<Action<(), &[u8]>> { None };
     // find_end_action that never matches anything
     let find_end_action = |_structural_pseudoname: StructuralPseudoname,
-                           _context: ContextIter|
+                           _context: ContextIter,
+                           _baton: ()|
      -> Option<EndAction<()>> { None };
 
     scan(
@@ -46,11 +48,13 @@ fn test_scan_json_top_level_types() {
 
     // find_action that never matches anything
     let find_action = |_structural_pseudoname: StructuralPseudoname,
-                       _context: ContextIter|
+                       _context: ContextIter,
+                       _baton: ()|
      -> Option<Action<(), &[u8]>> { None };
     // find_end_action that never matches anything
     let find_end_action = |_structural_pseudoname: StructuralPseudoname,
-                           _context: ContextIter|
+                           _context: ContextIter,
+                           _baton: ()|
      -> Option<EndAction<()>> { None };
 
     scan(
@@ -75,11 +79,13 @@ fn test_scan_json_simple_object() {
 
     // find_action that never matches anything
     let find_action = |_structural_pseudoname: StructuralPseudoname,
-                       _context: ContextIter|
+                       _context: ContextIter,
+                       _baton: ()|
      -> Option<Action<(), &[u8]>> { None };
     // find_end_action that never matches anything
     let find_end_action = |_structural_pseudoname: StructuralPseudoname,
-                           _context: ContextIter|
+                           _context: ContextIter,
+                           _baton: ()|
      -> Option<EndAction<()>> { None };
 
     scan(
@@ -104,11 +110,13 @@ fn test_scan_json_simple_array() {
 
     // find_action that never matches anything
     let find_action = |_structural_pseudoname: StructuralPseudoname,
-                       _context: ContextIter|
+                       _context: ContextIter,
+                       _baton: ()|
      -> Option<Action<(), &[u8]>> { None };
     // find_end_action that never matches anything
     let find_end_action = |_structural_pseudoname: StructuralPseudoname,
-                           _context: ContextIter|
+                           _context: ContextIter,
+                           _baton: ()|
      -> Option<EndAction<()>> { None };
 
     scan(
@@ -154,11 +162,13 @@ fn test_scan_json_nested_complex() {
 
     // find_action that never matches anything
     let find_action = |_structural_pseudoname: StructuralPseudoname,
-                       _context: ContextIter|
+                       _context: ContextIter,
+                       _baton: ()|
      -> Option<Action<(), &[u8]>> { None };
     // find_end_action that never matches anything
     let find_end_action = |_structural_pseudoname: StructuralPseudoname,
-                           _context: ContextIter|
+                           _context: ContextIter,
+                           _baton: ()|
      -> Option<EndAction<()>> { None };
 
     scan(
@@ -182,10 +192,12 @@ fn skip_long_string() {
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
     let find_action = |_structural_pseudoname: StructuralPseudoname,
-                       _context: ContextIter|
+                       _context: ContextIter,
+                       _baton: ()|
      -> Option<Action<(), &[u8]>> { None };
     let find_end_action = |_structural_pseudoname: StructuralPseudoname,
-                           _context: ContextIter|
+                           _context: ContextIter,
+                           _baton: ()|
      -> Option<EndAction<()>> { None };
 
     scan(
@@ -212,10 +224,12 @@ fn test_skip_sse_tokens() {
     let options = Options::with_sse_tokens(sse_tokens);
 
     let find_action = |_structural_pseudoname: StructuralPseudoname,
-                       _context: ContextIter|
+                       _context: ContextIter,
+                       _baton: ()|
      -> Option<Action<(), &[u8]>> { None };
     let find_end_action = |_structural_pseudoname: StructuralPseudoname,
-                           _context: ContextIter|
+                           _context: ContextIter,
+                           _baton: ()|
      -> Option<EndAction<()>> { None };
 
     scan(
@@ -247,7 +261,8 @@ fn test_call_begin_dont_touch_value() {
     }
     // find_action that matches "foo"
     let find_action = |structural_pseudoname: StructuralPseudoname,
-                       context: ContextIter|
+                       context: ContextIter,
+                       _baton: &RefCell<bool>|
      -> Option<Action<&RefCell<bool>, &[u8]>> {
         if structural_pseudoname == StructuralPseudoname::None {
             if let Some(key) = context.into_iter().next() {
@@ -261,7 +276,8 @@ fn test_call_begin_dont_touch_value() {
     };
     // find_end_action that never matches anything
     let find_end_action = |_structural_pseudoname: StructuralPseudoname,
-                           _context: ContextIter|
+                           _context: ContextIter,
+                           _baton: &RefCell<bool>|
      -> Option<EndAction<&RefCell<bool>>> { None };
 
     scan(
@@ -297,7 +313,8 @@ fn test_call_begin_consume_value() {
     }
     // find_action that matches "foo" and consumes value
     let find_action = |structural_pseudoname: StructuralPseudoname,
-                       context: ContextIter|
+                       context: ContextIter,
+                       _baton: &RefCell<bool>|
      -> Option<Action<&RefCell<bool>, &[u8]>> {
         if structural_pseudoname == StructuralPseudoname::None {
             if let Some(key) = context.into_iter().next() {
@@ -311,7 +328,8 @@ fn test_call_begin_consume_value() {
     };
     // find_end_action that never matches anything
     let find_end_action = |_structural_pseudoname: StructuralPseudoname,
-                           _context: ContextIter|
+                           _context: ContextIter,
+                           _baton: &RefCell<bool>|
      -> Option<EndAction<&RefCell<bool>>> { None };
 
     scan(
@@ -351,11 +369,13 @@ fn test_call_end() {
     }
     // find_action that never matches anything
     let find_action = |_structural_pseudoname: StructuralPseudoname,
-                       _context: ContextIter|
+                       _context: ContextIter,
+                       _baton: &RefCell<i32>|
      -> Option<Action<&RefCell<i32>, &[u8]>> { None };
     // find_end_action that matches "foo"
     let find_end_action = |structural_pseudoname: StructuralPseudoname,
-                           context: ContextIter|
+                           context: ContextIter,
+                           _baton: &RefCell<i32>|
      -> Option<EndAction<&RefCell<i32>>> {
         if structural_pseudoname == StructuralPseudoname::None {
             if let Some(key) = context.into_iter().next() {
@@ -406,7 +426,8 @@ fn notify_for_top_level_object() {
 
     // find_action that matches #object with parent #top
     let find_action = |structural_pseudoname: StructuralPseudoname,
-                       context: ContextIter|
+                       context: ContextIter,
+                       _baton: &RefCell<(bool, bool)>|
      -> Option<Action<&RefCell<(bool, bool)>, &[u8]>> {
         iter_match(
             || ["#object".as_bytes(), "#top".as_bytes()],
@@ -417,7 +438,8 @@ fn notify_for_top_level_object() {
     };
     // find_end_action that matches #object with parent #top
     let find_end_action = |structural_pseudoname: StructuralPseudoname,
-                           context: ContextIter|
+                           context: ContextIter,
+                           _baton: &RefCell<(bool, bool)>|
      -> Option<EndAction<&RefCell<(bool, bool)>>> {
         iter_match(
             || ["#object".as_bytes(), "#top".as_bytes()],
@@ -464,7 +486,8 @@ fn notify_for_object_in_array() {
 
     // find_action that matches #object with parent #array and grandparent #top
     let find_action = |structural_pseudoname: StructuralPseudoname,
-                       context: ContextIter|
+                       context: ContextIter,
+                       _baton: &RefCell<(i32, i32)>|
      -> Option<Action<&RefCell<(i32, i32)>, &[u8]>> {
         iter_match(
             || ["#object".as_bytes(), "#array".as_bytes(), "#top".as_bytes()],
@@ -475,7 +498,8 @@ fn notify_for_object_in_array() {
     };
     // find_end_action that matches #object with parent #array and grandparent #top
     let find_end_action = |structural_pseudoname: StructuralPseudoname,
-                           context: ContextIter|
+                           context: ContextIter,
+                           _baton: &RefCell<(i32, i32)>|
      -> Option<EndAction<&RefCell<(i32, i32)>>> {
         iter_match(
             || ["#object".as_bytes(), "#array".as_bytes(), "#top".as_bytes()],
@@ -531,7 +555,8 @@ fn notify_for_array() {
 
     // find_action that matches #array with parent items
     let find_action = |structural_pseudoname: StructuralPseudoname,
-                       context: ContextIter|
+                       context: ContextIter,
+                       _baton: &RefCell<(bool, bool)>|
      -> Option<Action<&RefCell<(bool, bool)>, &[u8]>> {
         iter_match(
             || ["#array".as_bytes(), "items".as_bytes(), "#top".as_bytes()],
@@ -542,7 +567,8 @@ fn notify_for_array() {
     };
     // find_end_action that matches #array with parent items
     let find_end_action = |structural_pseudoname: StructuralPseudoname,
-                           context: ContextIter|
+                           context: ContextIter,
+                           _baton: &RefCell<(bool, bool)>|
      -> Option<EndAction<&RefCell<(bool, bool)>>> {
         iter_match(
             || ["#array".as_bytes(), "items".as_bytes(), "#top".as_bytes()],
@@ -592,7 +618,8 @@ fn client_can_consume_array() {
 
     // find_action that matches #array with parent items
     let find_action = |structural_pseudoname: StructuralPseudoname,
-                       context: ContextIter|
+                       context: ContextIter,
+                       _baton: &RefCell<Vec<u8>>|
      -> Option<Action<&RefCell<Vec<u8>>, &[u8]>> {
         iter_match(
             || ["#array".as_bytes(), "items".as_bytes(), "#top".as_bytes()],
@@ -604,7 +631,8 @@ fn client_can_consume_array() {
     // find_end_action that matches #array with parent items
     // Will not be called because the array is consumed in the begin action
     let find_end_action = |structural_pseudoname: StructuralPseudoname,
-                           context: ContextIter|
+                           context: ContextIter,
+                           _baton: &RefCell<Vec<u8>>|
      -> Option<EndAction<&RefCell<Vec<u8>>>> {
         iter_match(
             || ["#array".as_bytes(), "items".as_bytes(), "#top".as_bytes()],
@@ -653,7 +681,8 @@ fn several_arrays_top_level() {
 
     // find_action that matches #array with parent #top
     let find_action = |structural_pseudoname: StructuralPseudoname,
-                       context: ContextIter|
+                       context: ContextIter,
+                       _baton: &RefCell<Vec<u8>>|
      -> Option<Action<&RefCell<Vec<u8>>, &[u8]>> {
         if iter_match(
             || ["#array".as_bytes(), "#top".as_bytes()],
@@ -668,7 +697,8 @@ fn several_arrays_top_level() {
     };
     // find_end_action that matches #array with parent #top
     let find_end_action = |structural_pseudoname: StructuralPseudoname,
-                           context: ContextIter|
+                           context: ContextIter,
+                           _baton: &RefCell<Vec<u8>>|
      -> Option<EndAction<&RefCell<Vec<u8>>>> {
         if iter_match(
             || ["#array".as_bytes(), "#top".as_bytes()],
@@ -708,10 +738,12 @@ fn max_nesting_array() {
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 3).unwrap();
 
     let find_action = |_structural_pseudoname: StructuralPseudoname,
-                       _context: ContextIter|
+                       _context: ContextIter,
+                       _baton: ()|
      -> Option<Action<(), &[u8]>> { None };
     let find_end_action = |_structural_pseudoname: StructuralPseudoname,
-                           _context: ContextIter|
+                           _context: ContextIter,
+                           _baton: ()|
      -> Option<EndAction<()>> { None };
 
     let result = scan(
@@ -739,10 +771,12 @@ fn max_nesting_object() {
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 3).unwrap();
 
     let find_action = |_structural_pseudoname: StructuralPseudoname,
-                       _context: ContextIter|
+                       _context: ContextIter,
+                       _baton: ()|
      -> Option<Action<(), &[u8]>> { None };
     let find_end_action = |_structural_pseudoname: StructuralPseudoname,
-                           _context: ContextIter|
+                           _context: ContextIter,
+                           _baton: ()|
      -> Option<EndAction<()>> { None };
 
     let result = scan(
@@ -776,7 +810,8 @@ fn error_in_begin_action() {
 
     // find_action that matches "foo" and returns error
     let find_action = |structural_pseudoname: StructuralPseudoname,
-                       context: ContextIter|
+                       context: ContextIter,
+                       _baton: ()|
      -> Option<Action<(), &[u8]>> {
         if iter_match(
             || ["foo".as_bytes(), "#top".as_bytes()],
@@ -791,7 +826,8 @@ fn error_in_begin_action() {
     };
     // find_end_action that never matches anything
     let find_end_action = |_structural_pseudoname: StructuralPseudoname,
-                           _context: ContextIter|
+                           _context: ContextIter,
+                           _baton: ()|
      -> Option<EndAction<()>> { None };
 
     let result = scan(
@@ -826,11 +862,13 @@ fn error_in_end_action() {
 
     // find_action that never matches anything
     let find_action = |_structural_pseudoname: StructuralPseudoname,
-                       _context: ContextIter|
+                       _context: ContextIter,
+                       _baton: ()|
      -> Option<Action<(), &[u8]>> { None };
     // find_end_action that matches "foo" and returns error
     let find_end_action = |structural_pseudoname: StructuralPseudoname,
-                           context: ContextIter|
+                           context: ContextIter,
+                           _baton: ()|
      -> Option<EndAction<()>> {
         if iter_match(
             || ["foo".as_bytes(), "#top".as_bytes()],
@@ -872,7 +910,8 @@ fn several_objects_top_level() {
 
     // find_action that matches "foo"
     let find_action = |structural_pseudoname: StructuralPseudoname,
-                       context: ContextIter|
+                       context: ContextIter,
+                       _baton: &RefCell<Vec<u8>>|
      -> Option<Action<&RefCell<Vec<u8>>, &[u8]>> {
         if iter_match(
             || ["foo".as_bytes(), "#top".as_bytes()],
@@ -891,7 +930,8 @@ fn several_objects_top_level() {
     };
     // find_end_action that matches "foo"
     let find_end_action = |structural_pseudoname: StructuralPseudoname,
-                           context: ContextIter|
+                           context: ContextIter,
+                           _baton: &RefCell<Vec<u8>>|
      -> Option<EndAction<&RefCell<Vec<u8>>>> {
         if iter_match(
             || ["foo".as_bytes(), "#top".as_bytes()],
@@ -934,7 +974,8 @@ fn match_in_array_context() {
 
     // find_action that matches name with parent #array and grandparent items
     let find_action = |structural_pseudoname: StructuralPseudoname,
-                       context: ContextIter|
+                       context: ContextIter,
+                       _baton: &RefCell<Vec<u8>>|
      -> Option<Action<&RefCell<Vec<u8>>, &[u8]>> {
         if iter_match(
             || {
@@ -969,7 +1010,8 @@ fn match_in_array_context() {
     };
     // find_end_action that never matches anything
     let find_end_action = |_structural_pseudoname: StructuralPseudoname,
-                           _context: ContextIter|
+                           _context: ContextIter,
+                           _baton: &RefCell<Vec<u8>>|
      -> Option<EndAction<&RefCell<Vec<u8>>>> { None };
 
     scan(
@@ -997,7 +1039,8 @@ fn atoms_on_top_level() {
 
     // find_action that matches #atom with parent #top
     let find_action = |structural_pseudoname: StructuralPseudoname,
-                       context: ContextIter|
+                       context: ContextIter,
+                       _baton: &RefCell<Vec<u8>>|
      -> Option<Action<&RefCell<Vec<u8>>, &[u8]>> {
         if iter_match(
             || ["#atom".as_bytes(), "#top".as_bytes()],
@@ -1022,7 +1065,8 @@ fn atoms_on_top_level() {
     };
     // find_end_action that never matches anything
     let find_end_action = |_structural_pseudoname: StructuralPseudoname,
-                           _context: ContextIter|
+                           _context: ContextIter,
+                           _baton: &RefCell<Vec<u8>>|
      -> Option<EndAction<&RefCell<Vec<u8>>>> { None };
 
     let result = scan(
@@ -1053,7 +1097,8 @@ fn atoms_in_array() {
     let writer_cell = RefCell::new(Vec::new());
 
     let find_action = |structural_pseudoname: StructuralPseudoname,
-                       context: ContextIter|
+                       context: ContextIter,
+                       _baton: &RefCell<Vec<u8>>|
      -> Option<Action<&RefCell<Vec<u8>>, &[u8]>> {
         if iter_match(
             || ["#atom".as_bytes(), "#array".as_bytes(), "#top".as_bytes()],
@@ -1076,7 +1121,8 @@ fn atoms_in_array() {
         }
     };
     let find_end_action = |_structural_pseudoname: StructuralPseudoname,
-                           _context: ContextIter|
+                           _context: ContextIter,
+                           _baton: &RefCell<Vec<u8>>|
      -> Option<EndAction<&RefCell<Vec<u8>>>> { None };
 
     let result = scan(
@@ -1115,7 +1161,8 @@ fn atoms_in_object() {
 
     let fields = vec!['a', 'b', 'c', 'd', 'e', 'f'];
     let find_action = |structural_pseudoname: StructuralPseudoname,
-                       context: ContextIter|
+                       context: ContextIter,
+                       _baton: &RefCell<Vec<u8>>|
      -> Option<Action<&RefCell<Vec<u8>>, &[u8]>> {
         for field in &fields {
             let field_str = field.to_string();
@@ -1130,7 +1177,8 @@ fn atoms_in_object() {
         None
     };
     let find_end_action = |_structural_pseudoname: StructuralPseudoname,
-                           _context: ContextIter|
+                           _context: ContextIter,
+                           _baton: &RefCell<Vec<u8>>|
      -> Option<EndAction<&RefCell<Vec<u8>>>> { None };
 
     let result = scan(
@@ -1161,7 +1209,8 @@ fn atoms_stream_op_return_values() {
     let writer_cell = RefCell::new(Vec::new());
 
     let find_action = |structural_pseudoname: StructuralPseudoname,
-                       context: ContextIter|
+                       context: ContextIter,
+                       _baton: &RefCell<Vec<u8>>|
      -> Option<Action<&RefCell<Vec<u8>>, &[u8]>> {
         if iter_match(
             || ["#atom".as_bytes(), "#top".as_bytes()],
@@ -1197,7 +1246,8 @@ fn atoms_stream_op_return_values() {
         }
     };
     let find_end_action = |_structural_pseudoname: StructuralPseudoname,
-                           _context: ContextIter|
+                           _context: ContextIter,
+                           _baton: &RefCell<Vec<u8>>|
      -> Option<EndAction<&RefCell<Vec<u8>>>> { None };
 
     let result = scan(
@@ -1228,7 +1278,8 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
     let writer_cell = RefCell::new(Vec::new());
 
     let find_action = |structural_pseudoname: StructuralPseudoname,
-                       context: ContextIter|
+                       context: ContextIter,
+                       _baton: &RefCell<Vec<u8>>|
      -> Option<Action<&RefCell<Vec<u8>>, &[u8]>> {
         if iter_match(
             || ["message".as_bytes()],
@@ -1263,7 +1314,8 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
         }
     };
     let find_end_action = |structural_pseudoname: StructuralPseudoname,
-                           context: ContextIter|
+                           context: ContextIter,
+                           _baton: &RefCell<Vec<u8>>|
      -> Option<EndAction<&RefCell<Vec<u8>>>> {
         if iter_match(|| ["message".as_bytes()], structural_pseudoname, context) {
             fn write_newline_end(writer: &RefCell<Vec<u8>>) -> Result<(), String> {
@@ -1381,11 +1433,13 @@ fn stop_early() {
 
     // find_action that never matches anything
     let find_action = |_structural_pseudoname: StructuralPseudoname,
-                       _context: ContextIter|
+                       _context: ContextIter,
+                       _baton: ()|
      -> Option<Action<(), &[u8]>> { None };
     // find_end_action that never matches anything
     let find_end_action = |_structural_pseudoname: StructuralPseudoname,
-                           _context: ContextIter|
+                           _context: ContextIter,
+                           _baton: ()|
      -> Option<EndAction<()>> { None };
 
     scan(
