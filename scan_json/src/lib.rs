@@ -8,7 +8,7 @@ pub mod stack;
 
 pub use error::{Error, Result};
 pub use idtransform::idtransform;
-pub use matcher::{iter_match, BoxedAction, BoxedEndAction, StreamOp};
+pub use matcher::{iter_match, Action, EndAction, StreamOp};
 pub use scan::{scan, Options};
 
 pub use rjiter;

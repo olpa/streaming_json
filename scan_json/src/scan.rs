@@ -2,7 +2,7 @@
 
 use crate::error::Error as ScanError;
 use crate::error::Result as ScanResult;
-use crate::matcher::{BoxedAction, BoxedEndAction, StreamOp, StructuralPseudoname};
+use crate::matcher::{Action, EndAction, StreamOp, StructuralPseudoname};
 use crate::stack::ContextIter;
 use embedded_io::{Read, Write};
 use rjiter::jiter::Peek;
@@ -90,8 +90,8 @@ pub enum StructurePosition {
 fn handle_object<T: Copy, R: Read>(
     rjiter: &mut RJiter<R>,
     baton: T,
-    find_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<T, R>>,
-    find_end_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedEndAction<T>>,
+    find_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<Action<T, R>>,
+    find_end_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<EndAction<T>>,
     position: StructurePosition,
     context: &mut U8Pool,
 ) -> ScanResult<StructurePosition> {
@@ -236,8 +236,8 @@ fn handle_object<T: Copy, R: Read>(
 fn handle_array<T: Copy, R: Read>(
     rjiter: &mut RJiter<R>,
     baton: T,
-    find_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<T, R>>,
-    find_end_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedEndAction<T>>,
+    find_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<Action<T, R>>,
+    find_end_action: &impl Fn(StructuralPseudoname, ContextIter) -> Option<EndAction<T>>,
     position: StructurePosition,
     context: &mut U8Pool,
 ) -> ScanResult<(Option<Peek>, StructurePosition)> {
@@ -422,8 +422,8 @@ fn skip_basic_values<R: Read>(peeked: Peek, rjiter: &mut RJiter<R>) -> ScanResul
 ///
 #[allow(clippy::too_many_lines, clippy::elidable_lifetime_names)]
 pub fn scan<'options, T: Copy, R: Read>(
-    find_action: impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedAction<T, R>>,
-    find_end_action: impl Fn(StructuralPseudoname, ContextIter) -> Option<BoxedEndAction<T>>,
+    find_action: impl Fn(StructuralPseudoname, ContextIter) -> Option<Action<T, R>>,
+    find_end_action: impl Fn(StructuralPseudoname, ContextIter) -> Option<EndAction<T>>,
     rjiter: &mut RJiter<R>,
     baton: T,
     working_buffer: &mut U8Pool,

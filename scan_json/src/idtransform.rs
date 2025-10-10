@@ -30,7 +30,7 @@ use crate::matcher::StructuralPseudoname;
 use crate::stack::ContextIter;
 use crate::StreamOp;
 use crate::{
-    rjiter::jiter::Peek, scan, BoxedAction, BoxedEndAction, Error as ScanError, Options, RJiter,
+    rjiter::jiter::Peek, scan, Action, EndAction, Error as ScanError, Options, RJiter,
     Result as ScanResult,
 };
 use core::mem::transmute;
@@ -193,30 +193,28 @@ fn create_idtransform_find_action<'a, 'workbuf, R: Read + 'static, W: Write + 's
 ) -> impl Fn(
     StructuralPseudoname,
     ContextIter,
-) -> Option<BoxedAction<&'a RefCell<IdTransform<'a, 'workbuf, W>>, R>>
+) -> Option<Action<&'a RefCell<IdTransform<'a, 'workbuf, W>>, R>>
        + 'a {
     move |structural_pseudoname: StructuralPseudoname,
           mut context: ContextIter|
-          -> Option<BoxedAction<&'a RefCell<IdTransform<'a, 'workbuf, W>>, R>> {
+          -> Option<Action<&'a RefCell<IdTransform<'a, 'workbuf, W>>, R>> {
         let context_count = context.len();
         match structural_pseudoname {
             StructuralPseudoname::Atom => {
                 // Handle context for is_top_level
                 let mut idt = idt_cell.borrow_mut();
                 idt.is_top_level = context_count < 2;
-                Some(Box::new(move |rjiter, idt_cell| on_atom(rjiter, idt_cell)))
+                Some(on_atom)
             }
             StructuralPseudoname::Object => {
                 let mut idt = idt_cell.borrow_mut();
                 idt.is_top_level = context_count < 2;
-                Some(Box::new(move |rjiter, idt_cell| {
-                    on_object(rjiter, idt_cell)
-                }))
+                Some(on_object)
             }
             StructuralPseudoname::Array => {
                 let mut idt = idt_cell.borrow_mut();
                 idt.is_top_level = context_count < 2;
-                Some(Box::new(move |rjiter, idt_cell| on_array(rjiter, idt_cell)))
+                Some(on_array)
             }
             StructuralPseudoname::None => {
                 // Handle key matching - for object keys, the key name is in the context path
@@ -234,7 +232,7 @@ fn create_idtransform_find_action<'a, 'workbuf, R: Read + 'static, W: Write + 's
                             }
                             _ => IdtSequencePos::InMiddleKey(key_slice),
                         };
-                        Some(Box::new(move |rjiter, idt_cell| on_key(rjiter, idt_cell)))
+                        Some(on_key)
                     } else {
                         None
                     }
@@ -254,14 +252,14 @@ fn create_idtransform_find_end_action<'a, 'workbuf, W: Write + 'static>() -> imp
     StructuralPseudoname,
     ContextIter,
 ) -> Option<
-    BoxedEndAction<&'a RefCell<IdTransform<'a, 'workbuf, W>>>,
+    EndAction<&'a RefCell<IdTransform<'a, 'workbuf, W>>>,
 > {
     |structural_pseudoname: StructuralPseudoname,
      _context: ContextIter|
-     -> Option<BoxedEndAction<&'a RefCell<IdTransform<'a, 'workbuf, W>>>> {
+     -> Option<EndAction<&'a RefCell<IdTransform<'a, 'workbuf, W>>>> {
         match structural_pseudoname {
-            StructuralPseudoname::Object => Some(Box::new(move |idt_cell| on_object_end(idt_cell))),
-            StructuralPseudoname::Array => Some(Box::new(move |idt_cell| on_array_end(idt_cell))),
+            StructuralPseudoname::Object => Some(on_object_end),
+            StructuralPseudoname::Array => Some(on_array_end),
             StructuralPseudoname::Atom | StructuralPseudoname::None => None,
         }
     }
