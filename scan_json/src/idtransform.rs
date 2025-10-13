@@ -33,9 +33,9 @@ use crate::{
     rjiter::jiter::Peek, scan, Action, EndAction, Error as ScanError, Options, RJiter,
     Result as ScanResult,
 };
+use core::cell::RefCell;
 use core::mem::transmute;
 use embedded_io::{Error as EmbeddedError, Read, Write};
-use std::cell::RefCell;
 
 use u8pool::U8Pool;
 
