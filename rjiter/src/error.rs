@@ -2,7 +2,6 @@
 extern crate alloc;
 
 use crate::jiter::{JiterError, JiterErrorType, JsonErrorType, JsonType, LinePosition};
-use thiserror::Error;
 
 #[cfg(feature = "std")]
 use alloc::{format, string::String};
@@ -11,9 +10,15 @@ use alloc::{format, string::String};
 pub type Result<T> = core::result::Result<T, Error>;
 
 /// Custom I/O error for `no_std` compatibility
-#[derive(Error, Debug, Clone, Copy, PartialEq, Eq)]
-#[error("I/O operation failed")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IoError;
+
+#[cfg(any(feature = "std", feature = "display"))]
+impl core::fmt::Display for IoError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "I/O operation failed")
+    }
+}
 
 impl embedded_io::Error for IoError {
     fn kind(&self) -> embedded_io::ErrorKind {
@@ -22,14 +27,12 @@ impl embedded_io::Error for IoError {
 }
 
 /// Like `Jiter::JiterErrorType`, but also with `IoError`
-#[derive(Error, Debug)]
+#[derive(Debug)]
 #[allow(clippy::module_name_repetitions)]
 pub enum ErrorType {
     /// JSON parsing error from the underlying jiter.
-    #[error("JSON parsing error: {0}")]
     JsonError(JsonErrorType),
     /// Type mismatch error.
-    #[error("expected {expected} but found {actual}")]
     WrongType {
         /// The expected JSON type.
         expected: JsonType,
@@ -37,8 +40,20 @@ pub enum ErrorType {
         actual: JsonType,
     },
     /// I/O operation error.
-    #[error("I/O operation failed")]
     IoError(IoError),
+}
+
+#[cfg(any(feature = "std", feature = "display"))]
+impl core::fmt::Display for ErrorType {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            ErrorType::JsonError(err) => write!(f, "JSON parsing error: {}", err),
+            ErrorType::WrongType { expected, actual } => {
+                write!(f, "expected {} but found {}", expected, actual)
+            }
+            ErrorType::IoError(err) => write!(f, "{}", err),
+        }
+    }
 }
 
 /// An error from the `RJiter` iterator.
