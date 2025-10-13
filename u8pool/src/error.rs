@@ -1,10 +1,7 @@
-use thiserror::Error;
-
 /// Error types for `U8Pool` operations
-#[derive(Error, Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum U8PoolError {
     /// Buffer has insufficient space for the requested operation
-    #[error("Buffer overflow: requested {requested} bytes, but only {available} bytes available")]
     BufferOverflow {
         /// Number of bytes requested
         requested: usize,
@@ -12,7 +9,6 @@ pub enum U8PoolError {
         available: usize,
     },
     /// Index is beyond the current vector length
-    #[error("Index out of bounds: index {index} is beyond vector length {length}")]
     IndexOutOfBounds {
         /// Index that was accessed
         index: usize,
@@ -20,23 +16,54 @@ pub enum U8PoolError {
         length: usize,
     },
     /// Invalid parameters or buffer provided to `U8Pool::new`
-    #[error("Invalid U8Pool initialization: {reason}")]
     InvalidInitialization {
         /// Description of why initialization failed
         reason: &'static str,
     },
     /// Maximum number of slices has been reached
-    #[error("Slice limit exceeded: maximum {max_slices} slices allowed")]
     SliceLimitExceeded {
         /// Maximum number of slices allowed
         max_slices: usize,
     },
     /// Value too large for 2-byte storage
-    #[error("Value too large: {value} exceeds maximum of {max}")]
     ValueTooLarge {
         /// Value that was too large
         value: usize,
         /// Maximum allowed value
         max: usize,
     },
+}
+
+#[cfg(any(feature = "std", feature = "display"))]
+impl core::fmt::Display for U8PoolError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            U8PoolError::BufferOverflow {
+                requested,
+                available,
+            } => write!(
+                f,
+                "Buffer overflow: requested {} bytes, but only {} bytes available",
+                requested, available
+            ),
+            U8PoolError::IndexOutOfBounds { index, length } => write!(
+                f,
+                "Index out of bounds: index {} is beyond vector length {}",
+                index, length
+            ),
+            U8PoolError::InvalidInitialization { reason } => {
+                write!(f, "Invalid U8Pool initialization: {}", reason)
+            }
+            U8PoolError::SliceLimitExceeded { max_slices } => {
+                write!(
+                    f,
+                    "Slice limit exceeded: maximum {} slices allowed",
+                    max_slices
+                )
+            }
+            U8PoolError::ValueTooLarge { value, max } => {
+                write!(f, "Value too large: {} exceeds maximum of {}", value, max)
+            }
+        }
+    }
 }

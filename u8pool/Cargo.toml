@@ -9,8 +9,8 @@ keywords = ["memory-pool", "no-std", "embedded", "zero-allocation", "stack"]
 categories = ["memory-management", "no-std", "embedded"]
 
 [dependencies]
-thiserror = { version = "2.0", default-features = false }
 
 [features]
 default = []
-std = []
+std = ["display"]
+display = []
