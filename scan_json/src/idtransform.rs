@@ -137,7 +137,7 @@ impl<'a, 'workbuf, W: Write> IdTransform<'a, 'workbuf, W> {
         self.is_top_level
     }
 
-    fn write_seqpos(&mut self) -> Result<(), String> {
+    fn write_seqpos(&mut self) -> Result<(), &'static str> {
         match &self.seqpos {
             IdtSequencePos::AtBeginning => {
                 self.seqpos = IdtSequencePos::InMiddle;
@@ -147,33 +147,33 @@ impl<'a, 'workbuf, W: Write> IdTransform<'a, 'workbuf, W> {
                 let seqpos = if self.is_top_level() { b" " } else { b"," };
                 self.writer
                     .write_all(seqpos)
-                    .map_err(|e| format!("IO error: {:?}", e.kind()))?;
+                    .map_err(|_e| "IO error writing sequence position")?;
                 self.seqpos = IdtSequencePos::InMiddle;
                 Ok(())
             }
             IdtSequencePos::AtBeginningKey(key) => {
                 self.writer
                     .write_all(b"\"")
-                    .map_err(|e| format!("IO error: {:?}", e.kind()))?;
+                    .map_err(|_e| "IO error writing key quote")?;
                 self.writer
                     .write_all(key)
-                    .map_err(|e| format!("IO error: {:?}", e.kind()))?;
+                    .map_err(|_e| "IO error writing key")?;
                 self.writer
                     .write_all(b"\":")
-                    .map_err(|e| format!("IO error: {:?}", e.kind()))?;
+                    .map_err(|_e| "IO error writing key suffix")?;
                 self.seqpos = IdtSequencePos::InMiddle;
                 Ok(())
             }
             IdtSequencePos::InMiddleKey(key) => {
                 self.writer
                     .write_all(b",\"")
-                    .map_err(|e| format!("IO error: {:?}", e.kind()))?;
+                    .map_err(|_e| "IO error writing key prefix")?;
                 self.writer
                     .write_all(key)
-                    .map_err(|e| format!("IO error: {:?}", e.kind()))?;
+                    .map_err(|_e| "IO error writing key")?;
                 self.writer
                     .write_all(b"\":")
-                    .map_err(|e| format!("IO error: {:?}", e.kind()))?;
+                    .map_err(|_e| "IO error writing key suffix")?;
                 self.seqpos = IdtSequencePos::InMiddle;
                 Ok(())
             }
@@ -252,8 +252,8 @@ fn on_key<R: Read, W: Write>(
 ) -> StreamOp {
     let mut idt = idt_cell.borrow_mut();
 
-    if let Err(e) = idt.write_seqpos() {
-        return StreamOp::Error(e);
+    if let Err(message) = idt.write_seqpos() {
+        return StreamOp::Error { code: 0, message };
     }
     idt.seqpos = IdtSequencePos::AfterKey;
 
@@ -266,16 +266,22 @@ fn on_atom<R: Read, W: Write>(
 ) -> StreamOp {
     let mut idt = idt_cell.borrow_mut();
 
-    if let Err(e) = idt.write_seqpos() {
-        return StreamOp::Error(e);
+    if let Err(message) = idt.write_seqpos() {
+        return StreamOp::Error { code: 0, message };
     }
 
     match rjiter.peek() {
         Ok(peeked) => match copy_atom(peeked, rjiter, idt.get_writer_mut()) {
             Ok(()) => StreamOp::ValueIsConsumed,
-            Err(e) => StreamOp::Error(e.to_string()),
+            Err(_e) => StreamOp::Error {
+                code: 0,
+                message: "Error copying atom",
+            },
         },
-        Err(e) => StreamOp::Error(format!("RJiter error: {e:?}")),
+        Err(_e) => StreamOp::Error {
+            code: 0,
+            message: "RJiter error",
+        },
     }
 }
 
@@ -283,12 +289,15 @@ fn on_atom<R: Read, W: Write>(
 fn on_struct<W: Write>(bytes: &[u8], idt_cell: &RefCell<IdTransform<'_, '_, W>>) -> StreamOp {
     let mut idt = idt_cell.borrow_mut();
 
-    if let Err(e) = idt.write_seqpos() {
-        return StreamOp::Error(e);
+    if let Err(message) = idt.write_seqpos() {
+        return StreamOp::Error { code: 0, message };
     }
 
-    if let Err(e) = idt.writer.write_all(bytes) {
-        return StreamOp::Error(format!("IO error: {:?}", e.kind()));
+    if let Err(_e) = idt.writer.write_all(bytes) {
+        return StreamOp::Error {
+            code: 0,
+            message: "IO error writing struct",
+        };
     }
     idt.seqpos = IdtSequencePos::AtBeginning;
     StreamOp::None
@@ -297,12 +306,12 @@ fn on_struct<W: Write>(bytes: &[u8], idt_cell: &RefCell<IdTransform<'_, '_, W>>)
 fn on_struct_end<W: Write>(
     bytes: &[u8],
     idt_cell: &RefCell<IdTransform<'_, '_, W>>,
-) -> Result<(), String> {
+) -> Result<(), (i32, &'static str)> {
     let mut idt = idt_cell.borrow_mut();
     idt.seqpos = IdtSequencePos::InMiddle;
     idt.writer
         .write_all(bytes)
-        .map_err(|e| format!("IO error: {:?}", e.kind()))?;
+        .map_err(|_e| (0, "IO error writing struct end"))?;
     Ok(())
 }
 
@@ -313,7 +322,9 @@ fn on_array<R: Read, W: Write>(
     on_struct(b"[", idt_cell)
 }
 
-fn on_array_end<W: Write>(idt_cell: &RefCell<IdTransform<'_, '_, W>>) -> Result<(), String> {
+fn on_array_end<W: Write>(
+    idt_cell: &RefCell<IdTransform<'_, '_, W>>,
+) -> Result<(), (i32, &'static str)> {
     on_struct_end(b"]", idt_cell)
 }
 
@@ -324,7 +335,9 @@ fn on_object<R: Read, W: Write>(
     on_struct(b"{", idt_cell)
 }
 
-fn on_object_end<W: Write>(idt_cell: &RefCell<IdTransform<'_, '_, W>>) -> Result<(), String> {
+fn on_object_end<W: Write>(
+    idt_cell: &RefCell<IdTransform<'_, '_, W>>,
+) -> Result<(), (i32, &'static str)> {
     on_struct_end(b"}", idt_cell)
 }
 

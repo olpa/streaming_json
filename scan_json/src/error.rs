@@ -25,7 +25,7 @@ pub enum Error {
         /// The byte position where the error occurred
         position: usize,
         /// Description of the internal error
-        message: String,
+        message: &'static str,
     },
     /// Maximum nesting depth exceeded (current, max)
     #[error("Max nesting exceeded at position {position} with level {level}")]
@@ -36,10 +36,12 @@ pub enum Error {
         level: usize,
     },
     /// Error from user action at position
-    #[error("Action error: {message} at position {position}")]
+    #[error("Action error: {message} (code {code}) at position {position}")]
     ActionError {
         /// The error message from the user action
-        message: String,
+        message: &'static str,
+        /// User-defined error code
+        code: i32,
         /// The byte position where the error occurred
         position: usize,
     },

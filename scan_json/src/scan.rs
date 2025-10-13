@@ -107,9 +107,10 @@ fn handle_object<B: Copy, R: Read>(
         ) {
             match begin_action(rjiter, baton) {
                 StreamOp::None => (),
-                StreamOp::Error(e) => {
+                StreamOp::Error { code, message } => {
                     return Err(ScanError::ActionError {
-                        message: e,
+                        message,
+                        code,
                         position: rjiter.current_index(),
                     })
                 }
@@ -118,8 +119,7 @@ fn handle_object<B: Copy, R: Read>(
                     return Ok(*unsafe { context.top_assoc_obj::<StructurePosition>() }
                         .ok_or_else(|| ScanError::InternalError {
                             position: rjiter.current_index(),
-                            message: "Context stack is empty when handling ValueIsConsumed"
-                                .to_string(),
+                            message: "Context stack is empty when handling ValueIsConsumed",
                         })?);
                 }
             }
@@ -135,9 +135,10 @@ fn handle_object<B: Copy, R: Read>(
         #[allow(unsafe_code)]
         let _ = unsafe { context.pop_assoc::<StructurePosition>() };
         if let Some(end_action) = end_action {
-            if let Err(e) = end_action(baton) {
+            if let Err((code, message)) = end_action(baton) {
                 return Err(ScanError::ActionError {
-                    message: e,
+                    message,
+                    code,
                     position: rjiter.current_index(),
                 });
             }
@@ -163,9 +164,10 @@ fn handle_object<B: Copy, R: Read>(
                 ContextIter::new(context),
                 baton,
             ) {
-                if let Err(e) = end_action(baton) {
+                if let Err((code, message)) = end_action(baton) {
                     return Err(ScanError::ActionError {
-                        message: e,
+                        message,
+                        code,
                         position: rjiter.current_index(),
                     });
                 }
@@ -175,7 +177,7 @@ fn handle_object<B: Copy, R: Read>(
                 *unsafe { context.top_assoc_obj::<StructurePosition>() }.ok_or_else(|| {
                     ScanError::InternalError {
                         position: rjiter.current_index(),
-                        message: "Context stack is empty when ending object".to_string(),
+                        message: "Context stack is empty when ending object",
                     }
                 })?,
             );
@@ -195,7 +197,7 @@ fn handle_object<B: Copy, R: Read>(
                     }
                     _ => ScanError::InternalError {
                         position: rjiter.current_index(),
-                        message: format!("Failed to push key to context pool: {e}"),
+                        message: "Failed to push key to context pool",
                     },
                 })?;
         }
@@ -207,9 +209,10 @@ fn handle_object<B: Copy, R: Read>(
     if let Some(action) = find_action(StructuralPseudoname::None, ContextIter::new(context), baton)
     {
         match action(rjiter, baton) {
-            StreamOp::Error(e) => {
+            StreamOp::Error { code, message } => {
                 return Err(ScanError::ActionError {
-                    message: e,
+                    message,
+                    code,
                     position: rjiter.current_index(),
                 });
             }
@@ -267,15 +270,15 @@ fn handle_array<B: Copy, R: Read>(
                             || ScanError::InternalError {
                                 position: rjiter.current_index(),
                                 message:
-                                    "Context stack is empty when handling ValueIsConsumed in array"
-                                        .to_string(),
+                                    "Context stack is empty when handling ValueIsConsumed in array",
                             },
                         )?,
                     ));
                 }
-                StreamOp::Error(e) => {
+                StreamOp::Error { code, message } => {
                     return Err(ScanError::ActionError {
-                        message: e,
+                        message,
+                        code,
                         position: rjiter.current_index(),
                     });
                 }
@@ -314,7 +317,7 @@ fn handle_array<B: Copy, R: Read>(
         unsafe { context.pop_assoc::<StructurePosition>() }.ok_or_else(|| {
             ScanError::InternalError {
                 position: rjiter.current_index(),
-                message: "Context stack is empty when ending array".to_string(),
+                message: "Context stack is empty when ending array",
             }
         })?;
 
@@ -326,9 +329,10 @@ fn handle_array<B: Copy, R: Read>(
             ContextIter::new(context),
             baton,
         ) {
-            if let Err(e) = end_action(baton) {
+            if let Err((code, message)) = end_action(baton) {
                 return Err(ScanError::ActionError {
-                    message: e,
+                    message,
+                    code,
                     position: rjiter.current_index(),
                 });
             }
@@ -339,7 +343,7 @@ fn handle_array<B: Copy, R: Read>(
             *unsafe { context.top_assoc_obj::<StructurePosition>() }.ok_or_else(|| {
                 ScanError::InternalError {
                     position: rjiter.current_index(),
-                    message: "Context stack is empty when ending array".to_string(),
+                    message: "Context stack is empty when ending array",
                 }
             })?,
         ));
@@ -503,10 +507,10 @@ pub fn scan<'options, B: Copy, R: Read>(
                     position = new_position;
                     continue 'main_loop;
                 }
-                Ok((peeked_val, unexpected)) => {
+                Ok((_peeked_val, _unexpected)) => {
                     return Err(ScanError::InternalError {
                         position: rjiter.current_index(),
-                        message: format!("Unexpected position from handle_array: {unexpected:?} with peeked: {peeked_val:?}"),
+                        message: "Unexpected position from handle_array",
                     });
                 }
                 Err(e) => return Err(e),
@@ -539,7 +543,7 @@ pub fn scan<'options, B: Copy, R: Read>(
 
         let peeked = peeked.ok_or(ScanError::InternalError {
             position: rjiter.current_index(),
-            message: "peeked is none when it should not be".to_string(),
+            message: "peeked is none when it should not be",
         })?;
         if position == StructurePosition::ObjectBetweenKV {
             position = StructurePosition::ObjectMiddle;
@@ -566,9 +570,10 @@ pub fn scan<'options, B: Copy, R: Read>(
         let action = find_action(StructuralPseudoname::Atom, ContextIter::new(context), baton);
         if let Some(action) = action {
             match action(rjiter, baton) {
-                StreamOp::Error(e) => {
+                StreamOp::Error { code, message } => {
                     return Err(ScanError::ActionError {
-                        message: e,
+                        message,
+                        code,
                         position: rjiter.current_index(),
                     })
                 }
