@@ -215,8 +215,8 @@ fn find_action<'a, 'workbuf, R: Read + 'static, W: Write + 'static>(
                     // Use unsafe to store the slice reference - we know it's safe because
                     // the working buffer outlives the IdTransform
                     #[allow(unsafe_code)]
-                    let key_slice: &'static [u8] =
-                        unsafe { transmute::<&[u8], &'static [u8]>(key_bytes) };
+                    let key_slice: &'workbuf [u8] =
+                        unsafe { transmute::<&[u8], &'workbuf [u8]>(key_bytes) };
                     idt.seqpos = match &idt.seqpos {
                         IdtSequencePos::AtBeginning => IdtSequencePos::AtBeginningKey(key_slice),
                         _ => IdtSequencePos::InMiddleKey(key_slice),
