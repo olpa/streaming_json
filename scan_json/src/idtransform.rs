@@ -184,7 +184,7 @@ impl<'a, 'workbuf, W: Write> IdTransform<'a, 'workbuf, W> {
 
 // ---------------- Matchers
 
-fn find_action<'a, 'workbuf, R: Read + 'static, W: Write + 'static>(
+fn find_action<'a, 'workbuf, R: Read, W: Write>(
     structural_pseudoname: StructuralPseudoname,
     mut context: ContextIter,
     baton: IdtBaton<'a, 'workbuf, W>,
@@ -232,7 +232,7 @@ fn find_action<'a, 'workbuf, R: Read + 'static, W: Write + 'static>(
     }
 }
 
-fn find_end_action<'a, 'workbuf, W: Write + 'static>(
+fn find_end_action<'a, 'workbuf, W: Write>(
     structural_pseudoname: StructuralPseudoname,
     _context: ContextIter,
     _baton: IdtBaton<'a, 'workbuf, W>,
@@ -359,7 +359,7 @@ fn on_object_end<W: Write>(
 /// If `scan` fails (malformed json, nesting too deep, etc), return `scan`'s error.
 /// Also, if an IO error occurs while writing to the output, return it.
 ///
-pub fn idtransform<R: Read + 'static, W: Write + 'static>(
+pub fn idtransform<R: Read, W: Write>(
     rjiter: &mut RJiter<R>,
     writer: &mut W,
     working_buffer: &mut U8Pool,
