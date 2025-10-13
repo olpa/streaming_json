@@ -1,15 +1,11 @@
 //! Error types for JSON stream processing.
 
-use thiserror::Error;
-
 /// Error types for the JSON stream processor
-#[derive(Error, Debug)]
+#[derive(Debug)]
 pub enum Error {
     /// Error from the underlying `RJiter` JSON parser
-    #[error("RJiter error: {0:?}")]
     RJiterError(rjiter::Error),
     /// Unhandled peek token encountered at position
-    #[error("UnhandledPeek: {peek:?} at position {position}")]
     UnhandledPeek {
         /// The unexpected peek token encountered
         peek: rjiter::jiter::Peek,
@@ -17,10 +13,8 @@ pub enum Error {
         position: usize,
     },
     /// JSON structure is unbalanced at position
-    #[error("Unbalanced JSON at position {0}")]
     UnbalancedJson(usize),
     /// Internal error with position and description
-    #[error("Internal error at position {position}: {message}")]
     InternalError {
         /// The byte position where the error occurred
         position: usize,
@@ -28,7 +22,6 @@ pub enum Error {
         message: &'static str,
     },
     /// Maximum nesting depth exceeded (current, max)
-    #[error("Max nesting exceeded at position {position} with level {level}")]
     MaxNestingExceeded {
         /// The byte position where the error occurred
         position: usize,
@@ -36,7 +29,6 @@ pub enum Error {
         level: usize,
     },
     /// Error from user action at position
-    #[error("Action error: {message} (code {code}) at position {position}")]
     ActionError {
         /// The error message from the user action
         message: &'static str,
@@ -46,8 +38,42 @@ pub enum Error {
         position: usize,
     },
     /// IO error during processing
-    #[error("IO error: {0:?}")]
     IOError(embedded_io::ErrorKind),
+}
+
+#[cfg(any(feature = "std", feature = "display"))]
+impl core::fmt::Display for Error {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Error::RJiterError(err) => write!(f, "RJiter error: {:?}", err),
+            Error::UnhandledPeek { peek, position } => {
+                write!(f, "UnhandledPeek: {:?} at position {}", peek, position)
+            }
+            Error::UnbalancedJson(position) => {
+                write!(f, "Unbalanced JSON at position {}", position)
+            }
+            Error::InternalError { position, message } => {
+                write!(f, "Internal error at position {}: {}", position, message)
+            }
+            Error::MaxNestingExceeded { position, level } => {
+                write!(
+                    f,
+                    "Max nesting exceeded at position {} with level {}",
+                    position, level
+                )
+            }
+            Error::ActionError {
+                message,
+                code,
+                position,
+            } => write!(
+                f,
+                "Action error: {} (code {}) at position {}",
+                message, code, position
+            ),
+            Error::IOError(kind) => write!(f, "IO error: {:?}", kind),
+        }
+    }
 }
 
 impl From<rjiter::Error> for Error {
