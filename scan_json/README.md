@@ -21,11 +21,12 @@ The workflow for each key:
 - If the key value is an object or array, update the context and parse the next level
 - Afterwards, call `find_end_action` and execute if found
 
-An action receives two `RefCell` references as arguments:
+An action receives two arguments:
 
-- `baton_cell`: A black box for side effects by the action
-- `rjiter_cell`: `RJiter` parser object. An action can modify JSON parsing behavior by consuming the current key's value
-
+- `rjiter`: A mutable reference to the `RJiter` parser object. An action can modify JSON parsing behavior by consuming the current key's value
+- `baton`: This can be either:
+  - A simple `Copy` type (like `i32`, `bool`, `()`) passed by value for read-only or stateless operations
+  - `&RefCell<B>` for mutable state that needs to be shared across action calls
 
 ## Example of an action
 
@@ -34,30 +35,29 @@ An action receives two `RefCell` references as arguments:
 The action peeks the value and writes it to the output. Because the value is consumed, the action returns the `ValueIsConsumed` flag to `scan` so it can update its internal state.
 
 ```rust
-use scan_json::{scan, iter_match, BoxedAction, StreamOp, Options};
+use scan_json::{scan, iter_match, Action, StreamOp, Options};
 use scan_json::matcher::StructuralPseudoname;
 use scan_json::stack::ContextIter;
 use rjiter::RJiter;
 use std::cell::RefCell;
-use std::io::Write;
+use embedded_io::Write;
 use u8pool::U8Pool;
 
-fn on_content(rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>) -> StreamOp {
-    let mut rjiter = rjiter_cell.borrow_mut();
+fn on_content(rjiter: &mut RJiter<&[u8]>, writer_cell: &RefCell<Vec<u8>>) -> StreamOp {
     let mut writer = writer_cell.borrow_mut();
     let result = rjiter
         .peek()
         .and_then(|_| rjiter.write_long_bytes(&mut *writer));
     match result {
         Ok(_) => StreamOp::ValueIsConsumed,
-        Err(e) => StreamOp::Error(Box::new(e)),
+        Err(_e) => StreamOp::Error { code: 0, message: "RJiter error" },
     }
 }
 
 // Find action function that matches "content" key
-let find_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedAction<dyn Write>> {
+let find_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter, _baton: &RefCell<Vec<u8>>| -> Option<Action<&RefCell<Vec<u8>>, &[u8]>> {
     if iter_match(|| ["content".as_bytes()], structural_pseudoname, context) {
-        Some(Box::new(on_content))
+        Some(on_content)
     } else {
         None
     }
@@ -90,56 +90,52 @@ The example demonstrates that `scan` can be used to handle LLM streaming output:
 
 ```rust
 use std::cell::RefCell;
-use std::io::Write;
-use scan_json::{scan, iter_match, BoxedAction, BoxedEndAction, StreamOp, Options};
+use embedded_io::Write;
+use scan_json::{scan, iter_match, Action, EndAction, StreamOp, Options};
 use scan_json::matcher::StructuralPseudoname;
 use scan_json::stack::ContextIter;
 use rjiter::RJiter;
 use u8pool::U8Pool;
 
-fn on_begin_message(_: &RefCell<RJiter>, writer: &RefCell<dyn Write>) -> StreamOp {
-    let result = writer.borrow_mut().write_all(b"(new message)\n");
-    match result {
-        Ok(_) => StreamOp::None,
-        Err(e) => StreamOp::Error(Box::new(e)),
-    }
+fn on_begin_message(_: &mut RJiter<&[u8]>, writer: &RefCell<Vec<u8>>) -> StreamOp {
+    writer.borrow_mut().write_all(b"(new message)\n").unwrap();
+    StreamOp::None
 }
 
-fn on_content(rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>) -> StreamOp {
-    let mut rjiter = rjiter_cell.borrow_mut();
+fn on_content(rjiter: &mut RJiter<&[u8]>, writer_cell: &RefCell<Vec<u8>>) -> StreamOp {
     let mut writer = writer_cell.borrow_mut();
     let result = rjiter
         .peek()
         .and_then(|_| rjiter.write_long_bytes(&mut *writer));
     match result {
         Ok(_) => StreamOp::ValueIsConsumed,
-        Err(e) => StreamOp::Error(Box::new(e)),
+        Err(_e) => StreamOp::Error { code: 0, message: "RJiter error" },
     }
 }
 
-fn on_end_message(writer: &RefCell<dyn Write>) -> Result<(), Box<dyn std::error::Error>> {
-    writer.borrow_mut().write_all(b"\n")?;
+fn on_end_message(writer: &RefCell<Vec<u8>>) -> Result<(), (i32, &'static str)> {
+    writer.borrow_mut().write_all(b"\n").unwrap();
     Ok(())
 }
 
 fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 32];
-    let rjiter_cell = RefCell::new(RJiter::new(&mut reader, &mut buffer));
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
     let writer_cell = RefCell::new(Vec::new());
 
-    let find_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedAction<dyn Write>> {
+    let find_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter, _baton: &RefCell<Vec<u8>>| -> Option<Action<&RefCell<Vec<u8>>, &[u8]>> {
         if iter_match(|| ["content".as_bytes()], structural_pseudoname, context.clone()) {
-            Some(Box::new(on_content))
+            Some(on_content)
         } else if iter_match(|| ["message".as_bytes()], structural_pseudoname, context.clone()) {
-            Some(Box::new(on_begin_message))
+            Some(on_begin_message)
         } else {
             None
         }
     };
-    let find_end_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedEndAction<dyn Write>> {
+    let find_end_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter, _baton: &RefCell<Vec<u8>>| -> Option<EndAction<&RefCell<Vec<u8>>>> {
         if iter_match(|| ["message".as_bytes()], structural_pseudoname, context.clone()) {
-            Some(Box::new(on_end_message))
+            Some(on_end_message)
         } else {
             None
         }
@@ -153,7 +149,7 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
     scan(
         find_action,
         find_end_action,
-        &rjiter_cell,
+        &mut rjiter,
         &writer_cell,
         &mut context,
         {

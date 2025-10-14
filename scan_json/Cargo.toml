@@ -15,5 +15,14 @@ categories = ["parser-implementations", "parsing"]
 crate-type = ["lib"]
 
 [dependencies]
-rjiter = "1.1.4"
+rjiter = { version = "1.2.0", path = "../rjiter" }
 u8pool = { version = "1.0.0", path = "../u8pool" }
+embedded-io = "0.6"
+
+[dev-dependencies]
+embedded-io = { version = "0.6", features = ["std"] }
+
+[features]
+default = []
+std = ["embedded-io/std", "rjiter/std", "u8pool/std", "display"]
+display = []

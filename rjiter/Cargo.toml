@@ -16,7 +16,6 @@ crate-type = ["lib"]
 
 [dependencies]
 jiter = "0.8.2"
-thiserror = { version = "2.0", default-features = false }
 embedded-io = "0.6"
 
 [dev-dependencies]
@@ -24,5 +23,5 @@ embedded-io = { version = "0.6", features = ["std"] }
 
 [features]
 default = []
-std = ["thiserror/std", "embedded-io/std", "display"]
+std = ["embedded-io/std", "display"]
 display = []

@@ -2,7 +2,6 @@
 
 use crate::stack::ContextIter;
 use rjiter::RJiter;
-use std::cell::RefCell;
 
 /// Represents structural pseudo-names for JSON nodes
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,21 +27,32 @@ pub enum StreamOp {
     /// - Inside an array, the action consumed the item, the next event should be a value or an end-array
     /// - At the top level, the action consumed the item, the next event should be a value or end-of-input
     ValueIsConsumed,
-    /// An error
-    Error(Box<dyn std::error::Error>),
+    /// An error with error code and message
+    Error {
+        /// User-defined error code
+        code: i32,
+        /// Static error message
+        message: &'static str,
+    },
 }
 
-impl<E: std::error::Error + 'static> From<E> for StreamOp {
-    fn from(error: E) -> Self {
-        StreamOp::Error(Box::new(error))
-    }
-}
+/// Type alias for action functions that can be called during JSON scanning.
+///
+/// The type parameter `B` represents the baton (state) type:
+/// - For simple batons: `B` is a `Copy` type like `i32`, `bool`, `()`
+/// - For mutable state: `B` is `&RefCell<SomeType>` for shared mutable access
+pub type Action<B, R> = fn(&mut RJiter<R>, B) -> StreamOp;
 
-/// Type alias for boxed action functions that can be called during JSON scanning
-pub type BoxedAction<T> = Box<dyn Fn(&RefCell<RJiter>, &RefCell<T>) -> StreamOp>;
-
-/// Type alias for boxed end action functions that are called when a matched key ends
-pub type BoxedEndAction<T> = Box<dyn Fn(&RefCell<T>) -> Result<(), Box<dyn std::error::Error>>>;
+/// Type alias for end action functions that are called when a matched key ends.
+///
+/// The type parameter `B` represents the baton (state) type:
+/// - For simple batons: `B` is a `Copy` type like `i32`, `bool`, `()`
+/// - For mutable state: `B` is `&RefCell<SomeType>` for shared mutable access
+///
+/// Returns `Ok(())` on success, or `Err((code, message))` where:
+/// - `code` is a user-defined error code
+/// - `message` is a static error message
+pub type EndAction<B> = fn(B) -> Result<(), (i32, &'static str)>;
 
 /// Match by name and ancestor names against the current JSON context.
 ///

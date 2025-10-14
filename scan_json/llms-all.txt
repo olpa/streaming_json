@@ -8,8 +8,6 @@ For a fast start,
 - then learn about [`crate::scan()`], and
 - about the context stack and matching by [`crate::iter_match()`].
 
-The goal of `1.2.0` rewrite is to bring zero allocation and `no_std` compatibility. For `1.1.x` branch README, visit the [documentation on docs.rs](https://docs.rs/scan_json/).
-
 
 ## Concepts
 
@@ -21,10 +19,12 @@ The workflow for each key:
 - If the key value is an object or array, update the context and parse the next level
 - Afterwards, call `find_end_action` and execute if found
 
-An action receives two `RefCell` references as arguments:
+An action receives two arguments:
 
-- `baton_cell`: A black box for side effects by the action
-- `rjiter_cell`: `RJiter` parser object. An action can modify JSON parsing behavior by consuming the current key's value
+- `rjiter`: A mutable reference to the `RJiter` parser object. An action can modify JSON parsing behavior by consuming the current key's value
+- `baton`: This can be either:
+  - A simple `Copy` type (like `i32`, `bool`, `()`) passed by value for read-only or stateless operations
+  - `&RefCell<B>` for mutable state that needs to be shared across action calls
 
 
 ## Example of an action
@@ -34,30 +34,29 @@ An action receives two `RefCell` references as arguments:
 The action peeks the value and writes it to the output. Because the value is consumed, the action returns the `ValueIsConsumed` flag to `scan` so it can update its internal state.
 
 ```rust
-use scan_json::{scan, iter_match, BoxedAction, StreamOp, Options};
+use scan_json::{scan, iter_match, Action, StreamOp, Options};
 use scan_json::matcher::StructuralPseudoname;
 use scan_json::stack::ContextIter;
 use rjiter::RJiter;
 use std::cell::RefCell;
-use std::io::Write;
+use embedded_io::Write;
 use u8pool::U8Pool;
 
-fn on_content(rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>) -> StreamOp {
-    let mut rjiter = rjiter_cell.borrow_mut();
+fn on_content(rjiter: &mut RJiter<&[u8]>, writer_cell: &RefCell<Vec<u8>>) -> StreamOp {
     let mut writer = writer_cell.borrow_mut();
     let result = rjiter
         .peek()
         .and_then(|_| rjiter.write_long_bytes(&mut *writer));
     match result {
         Ok(_) => StreamOp::ValueIsConsumed,
-        Err(e) => StreamOp::Error(Box::new(e)),
+        Err(_e) => StreamOp::Error { code: 0, message: "RJiter error" },
     }
 }
 
 // Find action function that matches "content" key
-let find_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedAction<dyn Write>> {
+let find_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter, _baton: &RefCell<Vec<u8>>| -> Option<Action<&RefCell<Vec<u8>>, &[u8]>> {
     if iter_match(|| ["content".as_bytes()], structural_pseudoname, context) {
-        Some(Box::new(on_content))
+        Some(on_content)
     } else {
         None
     }
@@ -80,56 +79,52 @@ The example demonstrates that `scan` can be used to handle LLM streaming output:
 
 ```rust
 use std::cell::RefCell;
-use std::io::Write;
-use scan_json::{scan, iter_match, BoxedAction, BoxedEndAction, StreamOp, Options};
+use embedded_io::Write;
+use scan_json::{scan, iter_match, Action, EndAction, StreamOp, Options};
 use scan_json::matcher::StructuralPseudoname;
 use scan_json::stack::ContextIter;
 use rjiter::RJiter;
 use u8pool::U8Pool;
 
-fn on_begin_message(_: &RefCell<RJiter>, writer: &RefCell<dyn Write>) -> StreamOp {
-    let result = writer.borrow_mut().write_all(b"(new message)\n");
-    match result {
-        Ok(_) => StreamOp::None,
-        Err(e) => StreamOp::Error(Box::new(e)),
-    }
+fn on_begin_message(_: &mut RJiter<&[u8]>, writer: &RefCell<Vec<u8>>) -> StreamOp {
+    writer.borrow_mut().write_all(b"(new message)\n").unwrap();
+    StreamOp::None
 }
 
-fn on_content(rjiter_cell: &RefCell<RJiter>, writer_cell: &RefCell<dyn Write>) -> StreamOp {
-    let mut rjiter = rjiter_cell.borrow_mut();
+fn on_content(rjiter: &mut RJiter<&[u8]>, writer_cell: &RefCell<Vec<u8>>) -> StreamOp {
     let mut writer = writer_cell.borrow_mut();
     let result = rjiter
         .peek()
         .and_then(|_| rjiter.write_long_bytes(&mut *writer));
     match result {
         Ok(_) => StreamOp::ValueIsConsumed,
-        Err(e) => StreamOp::Error(Box::new(e)),
+        Err(_e) => StreamOp::Error { code: 0, message: "RJiter error" },
     }
 }
 
-fn on_end_message(writer: &RefCell<dyn Write>) -> Result<(), Box<dyn std::error::Error>> {
-    writer.borrow_mut().write_all(b"\n")?;
+fn on_end_message(writer: &RefCell<Vec<u8>>) -> Result<(), (i32, &'static str)> {
+    writer.borrow_mut().write_all(b"\n").unwrap();
     Ok(())
 }
 
 fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 32];
-    let rjiter_cell = RefCell::new(RJiter::new(&mut reader, &mut buffer));
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
     let writer_cell = RefCell::new(Vec::new());
 
-    let find_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedAction<dyn Write>> {
+    let find_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter, _baton: &RefCell<Vec<u8>>| -> Option<Action<&RefCell<Vec<u8>>, &[u8]>> {
         if iter_match(|| ["content".as_bytes()], structural_pseudoname, context.clone()) {
-            Some(Box::new(on_content))
+            Some(on_content)
         } else if iter_match(|| ["message".as_bytes()], structural_pseudoname, context.clone()) {
-            Some(Box::new(on_begin_message))
+            Some(on_begin_message)
         } else {
             None
         }
     };
-    let find_end_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter| -> Option<BoxedEndAction<dyn Write>> {
+    let find_end_action = |structural_pseudoname: StructuralPseudoname, context: ContextIter, _baton: &RefCell<Vec<u8>>| -> Option<EndAction<&RefCell<Vec<u8>>>> {
         if iter_match(|| ["message".as_bytes()], structural_pseudoname, context.clone()) {
-            Some(Box::new(on_end_message))
+            Some(on_end_message)
         } else {
             None
         }
@@ -143,7 +138,7 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
     scan(
         find_action,
         find_end_action,
-        &rjiter_cell,
+        &mut rjiter,
         &writer_cell,
         &mut context,
         {
@@ -172,7 +167,330 @@ let message = String::from_utf8(writer_cell.borrow().to_vec()).unwrap();
 assert_eq!(message, "Hello! How can I assist you today?");
 ```
 
-# TODO
 
-- API docs from "cargo doc"
-- "scan" first, "iter_match" second, the rest afterwards
+# API Reference
+
+## Core Functions: `scan` and `iter_match`
+
+### `scan`
+
+```rust
+pub fn scan<'options, B: Copy, R: Read>(
+    find_action: impl Fn(StructuralPseudoname, ContextIter, B) -> Option<Action<B, R>>,
+    find_end_action: impl Fn(StructuralPseudoname, ContextIter, B) -> Option<EndAction<B>>,
+    rjiter: &mut RJiter<R>,
+    baton: B,
+    working_buffer: &mut U8Pool,
+    options: &Options<'options>,
+) -> Result<()>
+```
+
+Parses JSON and executes callbacks based on patterns. See `README.md` for examples of how to use this function.
+
+**Arguments:**
+
+* `find_action` - A matcher function that returns a callback for begin events
+* `find_end_action` - A matcher function that returns a callback for end events
+* `rjiter` - Mutable reference to the JSON iterator
+* `baton` - Reference cell containing the caller's state
+* `working_buffer` - Working buffer for the context stack
+* `options` - Configuration options for scan behavior
+
+**Matching and Actions:**
+
+While parsing, `scan` maintains a context stack containing the path of element names from the root to the current nesting level. See `iter_match` for details about context and matching.
+
+The workflow for each structural element:
+
+1. Call `find_action` and execute the returned callback if found
+2. If the element is an object or array, update the context and parse the next level
+3. Call `find_end_action` and execute the returned callback if found
+
+If in step 1 an action returns `StreamOp::ValueIsConsumed`, the `scan` function skips the remaining steps, assuming the action correctly advanced the parser.
+
+**Baton (State) Patterns and Side Effects:**
+
+Actions receive two arguments:
+
+- `rjiter`: Mutable reference to the `RJiter` parser object that actions can use to consume JSON values
+- `baton`: State object for side effects, which can be either:
+  - **Simple baton**: Any `Copy` type (like `i32`, `bool`, `()`) passed by value for read-only or stateless operations
+  - **`RefCell` baton**: `&RefCell<B>` for mutable state that needs to be shared across action calls
+
+**Working Buffer Sizing:**
+
+The working buffer should be sized based on expected nesting depth, average key length, and 8 bytes per context frame. A reasonable default for most applications:
+
+- 512 bytes and 20 nesting levels with 16-byte average key names
+
+**Options:**
+
+- `sse_tokens`: Tokens to ignore at the top level, useful for server-side events tokens like `data:` or `[DONE]`
+- `stop_early`: By default, `scan` processes multiple JSON objects (like JSONL format). Set to `true` to stop after the first complete element
+
+**Errors:**
+
+Returns any error from `Error`.
+
+---
+
+### `iter_match`
+
+```rust
+pub fn iter_match<F, T, Item>(
+    iter_creator: F,
+    structural_pseudoname: StructuralPseudoname,
+    path: ContextIter,
+) -> bool
+where
+    F: Fn() -> T,
+    T: IntoIterator<Item = Item>,
+    Item: AsRef<[u8]>,
+```
+
+Match by name and ancestor names against the current JSON context.
+
+Additionally, the structural events (begin/end of array/object, primitive values in array/on top) can be matched via structural pseudo-names.
+
+**Arguments:**
+
+* `iter_creator` - A sequence of names to match, as a function that returns an iterator
+* `structural_pseudoname` - A structural event, a part of the json context
+* `path` - The json context
+
+**Details:**
+
+In the name-iterator, the first name is the name to match, the second name is its expected parent name, the third name is the expected grandparent name, and so on.
+
+In the context-iterator, the first element is the most recent name, the second element is the parent name, the third element is the grandparent name, and so on.
+
+To return `true` (to match), the whole name-iterator should be consumed, and the names should match context names.
+
+An empty name-iterator always returns true (matches everything).
+
+**Pseudo names:**
+
+There are pseudo names that can appear in `path`:
+
+- `#top` - The top level context. Always present as the last element in `path`
+- `#array`
+
+As a performance optimization, the structural events are not included in `path`, and if there is a structural event, it is passed as a separate argument.
+
+To match a structural event, the name-iterator should start with a structural pseudo-name:
+
+- `#object` - Beginning or end of an object, matches `StructuralPseudoname::Object`
+- `#array` - Beginning or end of an array, matches `StructuralPseudoname::Array`
+- `#atom` - A primitive value in an array or at the top level, matches `StructuralPseudoname::Atom`
+
+**Returns:**
+
+* `true` if the node matches the criteria
+* `false` otherwise
+
+---
+
+## Supporting Types and Functions
+
+### Type Aliases
+
+**`Action<B, R>`**
+
+```rust
+pub type Action<B, R> = fn(&mut RJiter<R>, B) -> StreamOp;
+```
+
+Type alias for action functions that can be called during JSON scanning.
+
+The type parameter `B` represents the baton (state) type:
+- For simple batons: `B` is a `Copy` type like `i32`, `bool`, `()`
+- For mutable state: `B` is `&RefCell<SomeType>` for shared mutable access
+
+---
+
+**`EndAction<B>`**
+
+```rust
+pub type EndAction<B> = fn(B) -> Result<(), (i32, &'static str)>;
+```
+
+Type alias for end action functions that are called when a matched key ends.
+
+The type parameter `B` represents the baton (state) type:
+- For simple batons: `B` is a `Copy` type like `i32`, `bool`, `()`
+- For mutable state: `B` is `&RefCell<SomeType>` for shared mutable access
+
+Returns `Ok(())` on success, or `Err((code, message))` where:
+- `code` is a user-defined error code
+- `message` is a static error message
+
+---
+
+**`Result<B>`**
+
+```rust
+pub type Result<B> = core::result::Result<B, Error>;
+```
+
+Type alias for Results with `scan_json` Error.
+
+---
+
+### Enums
+
+**`StreamOp`**
+
+```rust
+pub enum StreamOp {
+    None,
+    ValueIsConsumed,
+    Error { code: i32, message: &'static str },
+}
+```
+
+Return value from a callback to the `scan` function.
+
+Variants:
+- `None`: Indicates that the action did not advance the `RJiter` parser (it may have peeked at the next token without consuming it), therefore `scan` can work further as if the action was not called at all.
+- `ValueIsConsumed`: Indicates that the action advanced the `RJiter` parser, therefore `scan` should update its state:
+  - Inside an object, the action consumed the key value, therefore the next event should be a key or an end-object
+  - Inside an array, the action consumed the item, the next event should be a value or an end-array
+  - At the top level, the action consumed the item, the next event should be a value or end-of-input
+- `Error`: An error with error code and message
+
+---
+
+**`StructuralPseudoname`**
+
+```rust
+pub enum StructuralPseudoname {
+    Array,
+    Object,
+    Atom,
+    None,
+}
+```
+
+Represents structural pseudo-names for JSON nodes.
+
+Variants:
+- `Array`: The beginning or end of an array element
+- `Object`: The beginning or end of an object element
+- `Atom`: Anything that is not an array or object (primitives like strings, numbers, booleans, null)
+- `None`: An object key, with its name in `path` (see `iter_match` function)
+
+---
+
+**`Error`**
+
+```rust
+pub enum Error {
+    RJiterError(rjiter::Error),
+    UnhandledPeek { peek: rjiter::jiter::Peek, position: usize },
+    UnbalancedJson(usize),
+    InternalError { position: usize, message: &'static str },
+    MaxNestingExceeded { position: usize, level: usize },
+    ActionError { message: &'static str, code: i32, position: usize },
+    IOError(embedded_io::ErrorKind),
+}
+```
+
+Error types for the JSON stream processor.
+
+Variants:
+- `RJiterError`: Error from the underlying `RJiter` JSON parser
+- `UnhandledPeek`: Unhandled peek token encountered at position
+- `UnbalancedJson`: JSON structure is unbalanced at position
+- `InternalError`: Internal error with position and description
+- `MaxNestingExceeded`: Maximum nesting depth exceeded
+- `ActionError`: Error from user action at position
+- `IOError`: IO error during processing
+
+---
+
+### Structs
+
+**`Options`**
+
+```rust
+pub struct Options<'options> {
+    pub sse_tokens: &'options [&'options [u8]],
+    pub stop_early: bool,
+}
+```
+
+Options for configuring the scan behavior.
+
+Fields:
+- `sse_tokens`: Slice of SSE tokens to ignore at the top level
+- `stop_early`: Whether to stop scanning as soon as possible, or scan the complete JSON stream
+
+Methods:
+- `new()`: Creates new default options with no SSE tokens
+- `with_sse_tokens(tokens: &'options [&'options [u8]])`: Creates options with specified SSE tokens
+
+---
+
+**`ContextIter`**
+
+```rust
+pub struct ContextIter<'a> { /* private fields */ }
+```
+
+Wrapper around the `U8Pool` associated iterator for context iteration. Provides a convenient interface with syntactic sugar for for-loops and `.next()`.
+
+Methods:
+- `new(pool: &'a U8Pool) -> Self`: Creates a new `ContextIter` from a `U8Pool` reference
+- `len(&self) -> usize`: Returns the number of items in the context
+- `is_empty(&self) -> bool`: Returns true if the context is empty
+
+Implements `Iterator` with `Item = &'a [u8]` and `Clone`.
+
+---
+
+### Identity Transform Functions
+
+**`idtransform`**
+
+```rust
+pub fn idtransform<R: Read, W: Write>(
+    rjiter: &mut RJiter<R>,
+    writer: &mut W,
+    working_buffer: &mut U8Pool,
+) -> Result<()>
+```
+
+Copy JSON input to output, retaining the original structure and collapsing whitespace.
+
+The implementation of `idtransform` is an example of how to use the `scan` function. Consult the source code for more details.
+
+**Arguments:**
+
+* `rjiter` - Mutable reference to the JSON iterator
+* `writer` - Output writer for the transformed JSON
+* `working_buffer` - Working buffer for context stack (see `scan` for details)
+
+**Errors:**
+
+If `scan` fails (malformed json, nesting too deep, etc), return `scan`'s error. Also, if an IO error occurs while writing to the output, return it.
+
+---
+
+**`copy_atom`**
+
+```rust
+pub fn copy_atom<R: Read, W: Write>(
+    peeked: Peek,
+    rjiter: &mut RJiter<R>,
+    writer: &mut W,
+) -> Result<()>
+```
+
+Copy a JSON atom (string, number, boolean, or null) from the input to the output. Advances the input iterator to the next token.
+
+**Errors:**
+
+This function will return an error if:
+* The input JSON is malformed
+* An IO error occurs while writing to the output
+* An unexpected token type is encountered

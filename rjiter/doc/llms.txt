@@ -78,8 +78,6 @@ All methods return `Result<T, Error>` where Error can be:
 - Buffer overflow errors when elements are too large
 - Type mismatch errors when expected type doesn't match actual JSON type
 
-Error types are based on `thiserror`.
-
 ## Advanced Features
 
 ### Token Skipping

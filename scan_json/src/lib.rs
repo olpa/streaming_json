@@ -1,4 +1,5 @@
 #![doc = include_str!("../README.md")]
+#![no_std]
 
 pub mod error;
 pub mod idtransform;
@@ -8,7 +9,7 @@ pub mod stack;
 
 pub use error::{Error, Result};
 pub use idtransform::idtransform;
-pub use matcher::{iter_match, BoxedAction, BoxedEndAction, StreamOp};
+pub use matcher::{iter_match, Action, EndAction, StreamOp};
 pub use scan::{scan, Options};
 
 pub use rjiter;

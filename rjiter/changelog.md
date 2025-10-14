@@ -1,7 +1,6 @@
-## [1.2.0] - 2025-09-10
+## [1.2.0] - 2025-10-13
 
 - Support `no_std` environment
-- Use `thiserror` instead of `std::Error` traits
 - Use `embedded-io` instead of `std::io` traits
 
 

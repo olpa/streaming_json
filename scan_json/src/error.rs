@@ -1,47 +1,77 @@
 //! Error types for JSON stream processing.
 
 /// Error types for the JSON stream processor
-///
-/// - `ActionError`: Error returned from a trigger action
-/// - `RJiterError`: Wraps errors from the underlying `RJiter` parser
-/// - `UnhandledPeek`: Encountered an unexpected token type while peeking
-/// - `UnbalancedJson`: JSON structure is not properly balanced at the given position
-/// - `InternalError`: Internal processing error at the given position with message
-/// - `MaxNestingExceeded`: JSON nesting level exceeded maximum at given position
-/// - `IOError`: IO error when writing to the output stream. Reading errors are inside `RJiterError`
 #[derive(Debug)]
 pub enum Error {
     /// Error from the underlying `RJiter` JSON parser
     RJiterError(rjiter::Error),
     /// Unhandled peek token encountered at position
-    UnhandledPeek(rjiter::jiter::Peek, usize),
+    UnhandledPeek {
+        /// The unexpected peek token encountered
+        peek: rjiter::jiter::Peek,
+        /// The byte position where the error occurred
+        position: usize,
+    },
     /// JSON structure is unbalanced at position
     UnbalancedJson(usize),
     /// Internal error with position and description
-    InternalError(usize, String),
+    InternalError {
+        /// The byte position where the error occurred
+        position: usize,
+        /// Description of the internal error
+        message: &'static str,
+    },
     /// Maximum nesting depth exceeded (current, max)
-    MaxNestingExceeded(usize, usize),
+    MaxNestingExceeded {
+        /// The byte position where the error occurred
+        position: usize,
+        /// The nesting level that exceeded the maximum
+        level: usize,
+    },
     /// Error from user action at position
-    ActionError(Box<dyn std::error::Error>, usize),
+    ActionError {
+        /// The error message from the user action
+        message: &'static str,
+        /// User-defined error code
+        code: i32,
+        /// The byte position where the error occurred
+        position: usize,
+    },
     /// IO error during processing
-    IOError(std::io::Error),
+    IOError(embedded_io::ErrorKind),
 }
 
-impl std::error::Error for Error {}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+#[cfg(any(feature = "std", feature = "display"))]
+impl core::fmt::Display for Error {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Error::RJiterError(e) => write!(f, "RJiter error: {e}"), // position is inside `e`
-            Error::ActionError(e, pos) => write!(f, "Action error: {e} at position {pos}"),
-            Error::UnhandledPeek(p, pos) => write!(f, "UnhandledPeek: {p:?} at position {pos}"),
-            Error::UnbalancedJson(pos) => write!(f, "Unbalanced JSON at position {pos}"),
-            Error::InternalError(pos, msg) => write!(f, "Internal error at position {pos}: {msg}"),
-            Error::MaxNestingExceeded(pos, level) => write!(
+            Error::RJiterError(err) => write!(f, "RJiter error: {:?}", err),
+            Error::UnhandledPeek { peek, position } => {
+                write!(f, "UnhandledPeek: {:?} at position {}", peek, position)
+            }
+            Error::UnbalancedJson(position) => {
+                write!(f, "Unbalanced JSON at position {}", position)
+            }
+            Error::InternalError { position, message } => {
+                write!(f, "Internal error at position {}: {}", position, message)
+            }
+            Error::MaxNestingExceeded { position, level } => {
+                write!(
+                    f,
+                    "Max nesting exceeded at position {} with level {}",
+                    position, level
+                )
+            }
+            Error::ActionError {
+                message,
+                code,
+                position,
+            } => write!(
                 f,
-                "Max nesting exceeded at position {pos} with level {level}"
+                "Action error: {} (code {}) at position {}",
+                message, code, position
             ),
-            Error::IOError(e) => write!(f, "IO error: {e}"),
+            Error::IOError(kind) => write!(f, "IO error: {:?}", kind),
         }
     }
 }
@@ -52,11 +82,11 @@ impl From<rjiter::Error> for Error {
     }
 }
 
-impl From<std::io::Error> for Error {
-    fn from(error: std::io::Error) -> Self {
+impl From<embedded_io::ErrorKind> for Error {
+    fn from(error: embedded_io::ErrorKind) -> Self {
         Error::IOError(error)
     }
 }
 
 /// Type alias for Results with `scan_json` Error
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<B> = core::result::Result<B, Error>;
