@@ -17,7 +17,7 @@ impl<'a> ChunkReader<'a> {
 }
 
 impl<'a> embedded_io::ErrorType for ChunkReader<'a> {
-    type Error = rjiter::error::IoError;
+    type Error = embedded_io::ErrorKind;
 }
 
 impl<'a> Read for ChunkReader<'a> {

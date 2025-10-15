@@ -1,8 +1,8 @@
-use embedded_io::{Read, Write};
+use embedded_io::{Error as _, Read, Write};
 
 use crate::buffer::Buffer;
 use crate::buffer::ChangeFlag;
-use crate::error::{can_retry_if_partial, Error as RJiterError, Result as RJiterResult};
+use crate::error::{can_retry_if_partial, Error as RJiterError, ErrorType, Result as RJiterResult};
 use crate::jiter::{
     Jiter, JiterResult, JsonErrorType, JsonValue, LinePosition, NumberAny, NumberInt, Peek,
 };
@@ -400,12 +400,7 @@ impl<'rj, R: Read> RJiter<'rj, R> {
 
             let n_read = self.buffer.read_more();
             match n_read {
-                Err(_) => {
-                    return Err(RJiterError {
-                        error_type: crate::error::ErrorType::IoError(crate::error::IoError),
-                        index: self.current_index(),
-                    })
-                }
+                Err(e) => return Err(e),
                 Ok(0) => {
                     // EOF is reached in the error state
                     return result
@@ -432,29 +427,15 @@ impl<'rj, R: Read> RJiter<'rj, R> {
         if jiter_pos > to_pos {
             self.buffer.shift_buffer(to_pos, jiter_pos);
         }
-        if self.buffer.skip_spaces(to_pos).is_err() {
-            return Err(RJiterError {
-                error_type: crate::error::ErrorType::IoError(crate::error::IoError),
-                index: self.current_index(),
-            });
-        }
+        self.buffer.skip_spaces(to_pos)?;
         if let Some(transparent_token) = transparent_token {
-            if to_pos >= self.buffer.n_bytes && self.buffer.read_more().is_err() {
-                return Err(RJiterError {
-                    error_type: crate::error::ErrorType::IoError(crate::error::IoError),
-                    index: self.current_index(),
-                });
+            if to_pos >= self.buffer.n_bytes {
+                self.buffer.read_more()?;
             }
             // `0 <= to_pos` (usize), `to_pos < buffer.n_bytes` (if check), `n_bytes <= buf.len()` by the `Buffer` contract
             #[allow(clippy::indexing_slicing)]
-            if to_pos < self.buffer.n_bytes
-                && self.buffer.buf[to_pos] == transparent_token
-                && self.buffer.skip_spaces(to_pos + 1).is_err()
-            {
-                return Err(RJiterError {
-                    error_type: crate::error::ErrorType::IoError(crate::error::IoError),
-                    index: self.current_index(),
-                });
+            if to_pos < self.buffer.n_bytes && self.buffer.buf[to_pos] == transparent_token {
+                self.buffer.skip_spaces(to_pos + 1)?;
             }
         }
 
@@ -477,15 +458,9 @@ impl<'rj, R: Read> RJiter<'rj, R> {
             }
             // The current buffer was all only spaces. Read more.
             if self.jiter.current_index() < self.buffer.buf.len() {
-                let n_new_bytes = self.buffer.read_more();
-                if n_new_bytes.is_err() {
-                    return Err(RJiterError {
-                        error_type: crate::error::ErrorType::IoError(crate::error::IoError),
-                        index: self.current_index(),
-                    });
-                }
+                let n_new_bytes = self.buffer.read_more()?;
                 // The end of the json is reached
-                if let Ok(0) = n_new_bytes {
+                if n_new_bytes == 0 {
                     return Ok(());
                 }
             }
@@ -623,16 +598,10 @@ impl<'rj, R: Read> RJiter<'rj, R> {
             }
 
             // Read more and repeat
-            let n_new_bytes = self.buffer.read_more();
+            let n_new_bytes = self.buffer.read_more()?;
             match n_new_bytes {
-                Err(_) => {
-                    return Err(RJiterError {
-                        error_type: crate::error::ErrorType::IoError(crate::error::IoError),
-                        index: self.current_index(),
-                    })
-                }
-                Ok(0) => return Err(RJiterError::from_jiter_error(self.current_index(), err)),
-                Ok(1..) => self.create_new_jiter(),
+                0 => return Err(RJiterError::from_jiter_error(self.current_index(), err)),
+                1.. => self.create_new_jiter(),
             }
         }
     }
@@ -652,8 +621,8 @@ impl<'rj, R: Read> RJiter<'rj, R> {
             index: usize,
             writer: &mut W,
         ) -> RJiterResult<()> {
-            writer.write_all(bytes).map_err(|_| RJiterError {
-                error_type: crate::error::ErrorType::IoError(crate::error::IoError),
+            writer.write_all(bytes).map_err(|e| RJiterError {
+                error_type: ErrorType::IoError { kind: e.kind() },
                 index,
             })
         }
@@ -667,8 +636,8 @@ impl<'rj, R: Read> RJiter<'rj, R> {
             #[allow(clippy::indexing_slicing)]
             writer
                 .write_all(&bytes[1..end_pos])
-                .map_err(|_| RJiterError {
-                    error_type: crate::error::ErrorType::IoError(crate::error::IoError),
+                .map_err(|e| RJiterError {
+                    error_type: ErrorType::IoError { kind: e.kind() },
                     index,
                 })
         }
@@ -695,8 +664,8 @@ impl<'rj, R: Read> RJiter<'rj, R> {
         ) -> RJiterResult<()> {
             writer
                 .write_all(string.as_bytes())
-                .map_err(|_| RJiterError {
-                    error_type: crate::error::ErrorType::IoError(crate::error::IoError),
+                .map_err(|e| RJiterError {
+                    error_type: ErrorType::IoError { kind: e.kind() },
                     index,
                 })
         }
@@ -728,8 +697,8 @@ impl<'rj, R: Read> RJiter<'rj, R> {
             match sub_result {
                 Ok(string) => writer
                     .write_all(string.as_bytes())
-                    .map_err(|_| RJiterError {
-                        error_type: crate::error::ErrorType::IoError(crate::error::IoError),
+                    .map_err(|e| RJiterError {
+                        error_type: ErrorType::IoError { kind: e.kind() },
                         index,
                     }),
                 Err(e) => Err(RJiterError::from_jiter_error(index, e)),
@@ -762,15 +731,8 @@ impl<'rj, R: Read> RJiter<'rj, R> {
             pos = 0;
         }
         while self.buffer.n_bytes < pos + token.len() {
-            let n_new_bytes = self.buffer.read_more();
-            if n_new_bytes.is_err() {
-                // Fatal error, the caller can't do anything anymore
-                return Err(RJiterError {
-                    error_type: crate::error::ErrorType::IoError(crate::error::IoError),
-                    index: self.current_index(),
-                });
-            }
-            if let Ok(0) = n_new_bytes {
+            let n_new_bytes = self.buffer.read_more()?;
+            if n_new_bytes == 0 {
                 // Not an error for the caller, just a normal end of the json
                 // The code should create a new Jiter. Doing so below
                 err_flag = true;
