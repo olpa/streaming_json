@@ -32,8 +32,6 @@ pub enum Error {
     ActionError {
         /// The error message from the user action
         message: &'static str,
-        /// User-defined error code
-        code: i32,
         /// The byte position where the error occurred
         position: usize,
     },
@@ -64,12 +62,11 @@ impl core::fmt::Display for Error {
             }
             Error::ActionError {
                 message,
-                code,
                 position,
             } => write!(
                 f,
-                "Action error: {} (code {}) at position {}",
-                message, code, position
+                "Action error: {} at position {}",
+                message, position
             ),
             Error::IOError(kind) => write!(f, "IO error: {:?}", kind),
         }

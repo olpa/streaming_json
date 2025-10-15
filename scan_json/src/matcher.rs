@@ -27,13 +27,8 @@ pub enum StreamOp {
     /// - Inside an array, the action consumed the item, the next event should be a value or an end-array
     /// - At the top level, the action consumed the item, the next event should be a value or end-of-input
     ValueIsConsumed,
-    /// An error with error code and message
-    Error {
-        /// User-defined error code
-        code: i32,
-        /// Static error message
-        message: &'static str,
-    },
+    /// An error with a static error message
+    Error(&'static str),
 }
 
 /// Type alias for action functions that can be called during JSON scanning.
@@ -49,10 +44,8 @@ pub type Action<B, R> = fn(&mut RJiter<R>, B) -> StreamOp;
 /// - For simple batons: `B` is a `Copy` type like `i32`, `bool`, `()`
 /// - For mutable state: `B` is `&RefCell<SomeType>` for shared mutable access
 ///
-/// Returns `Ok(())` on success, or `Err((code, message))` where:
-/// - `code` is a user-defined error code
-/// - `message` is a static error message
-pub type EndAction<B> = fn(B) -> Result<(), (i32, &'static str)>;
+/// Returns `Ok(())` on success, or `Err(message)` where `message` is a static error message.
+pub type EndAction<B> = fn(B) -> Result<(), &'static str>;
 
 /// Match by name and ancestor names against the current JSON context.
 ///

@@ -107,10 +107,9 @@ fn handle_object<B: Copy, R: Read>(
         ) {
             match begin_action(rjiter, baton) {
                 StreamOp::None => (),
-                StreamOp::Error { code, message } => {
+                StreamOp::Error(message) => {
                     return Err(ScanError::ActionError {
                         message,
-                        code,
                         position: rjiter.current_index(),
                     })
                 }
@@ -135,10 +134,9 @@ fn handle_object<B: Copy, R: Read>(
         #[allow(unsafe_code)]
         let _ = unsafe { context.pop_assoc::<StructurePosition>() };
         if let Some(end_action) = end_action {
-            if let Err((code, message)) = end_action(baton) {
+            if let Err(message) = end_action(baton) {
                 return Err(ScanError::ActionError {
                     message,
-                    code,
                     position: rjiter.current_index(),
                 });
             }
@@ -164,10 +162,9 @@ fn handle_object<B: Copy, R: Read>(
                 ContextIter::new(context),
                 baton,
             ) {
-                if let Err((code, message)) = end_action(baton) {
+                if let Err(message) = end_action(baton) {
                     return Err(ScanError::ActionError {
                         message,
-                        code,
                         position: rjiter.current_index(),
                     });
                 }
@@ -209,10 +206,9 @@ fn handle_object<B: Copy, R: Read>(
     if let Some(action) = find_action(StructuralPseudoname::None, ContextIter::new(context), baton)
     {
         match action(rjiter, baton) {
-            StreamOp::Error { code, message } => {
+            StreamOp::Error(message) => {
                 return Err(ScanError::ActionError {
                     message,
-                    code,
                     position: rjiter.current_index(),
                 });
             }
@@ -275,10 +271,9 @@ fn handle_array<B: Copy, R: Read>(
                         )?,
                     ));
                 }
-                StreamOp::Error { code, message } => {
+                StreamOp::Error(message) => {
                     return Err(ScanError::ActionError {
                         message,
-                        code,
                         position: rjiter.current_index(),
                     });
                 }
@@ -329,10 +324,9 @@ fn handle_array<B: Copy, R: Read>(
             ContextIter::new(context),
             baton,
         ) {
-            if let Err((code, message)) = end_action(baton) {
+            if let Err(message) = end_action(baton) {
                 return Err(ScanError::ActionError {
                     message,
-                    code,
                     position: rjiter.current_index(),
                 });
             }
@@ -570,10 +564,9 @@ pub fn scan<'options, B: Copy, R: Read>(
         let action = find_action(StructuralPseudoname::Atom, ContextIter::new(context), baton);
         if let Some(action) = action {
             match action(rjiter, baton) {
-                StreamOp::Error { code, message } => {
+                StreamOp::Error(message) => {
                     return Err(ScanError::ActionError {
                         message,
-                        code,
                         position: rjiter.current_index(),
                     })
                 }

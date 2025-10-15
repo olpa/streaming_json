@@ -363,7 +363,7 @@ fn test_call_end() {
     let state = RefCell::new(0);
 
     // End action function for when "foo" ends
-    fn increment_counter(state: &RefCell<i32>) -> Result<(), (i32, &'static str)> {
+    fn increment_counter(state: &RefCell<i32>) -> Result<(), &'static str> {
         *state.borrow_mut() += 1;
         Ok(())
     }
@@ -419,7 +419,7 @@ fn notify_for_top_level_object() {
         state.borrow_mut().0 = true;
         StreamOp::None
     }
-    fn set_end_called(state: &RefCell<(bool, bool)>) -> Result<(), (i32, &'static str)> {
+    fn set_end_called(state: &RefCell<(bool, bool)>) -> Result<(), &'static str> {
         state.borrow_mut().1 = true;
         Ok(())
     }
@@ -479,7 +479,7 @@ fn notify_for_object_in_array() {
         state.borrow_mut().0 += 1;
         StreamOp::None
     }
-    fn increment_end_count(state: &RefCell<(i32, i32)>) -> Result<(), (i32, &'static str)> {
+    fn increment_end_count(state: &RefCell<(i32, i32)>) -> Result<(), &'static str> {
         state.borrow_mut().1 += 1;
         Ok(())
     }
@@ -548,7 +548,7 @@ fn notify_for_array() {
         state.borrow_mut().0 = true;
         StreamOp::None
     }
-    fn set_array_end_called(state: &RefCell<(bool, bool)>) -> Result<(), (i32, &'static str)> {
+    fn set_array_end_called(state: &RefCell<(bool, bool)>) -> Result<(), &'static str> {
         state.borrow_mut().1 = true;
         Ok(())
     }
@@ -611,7 +611,7 @@ fn client_can_consume_array() {
         writer.write_all(format!("{value:?}").as_bytes()).unwrap();
         StreamOp::ValueIsConsumed
     }
-    fn write_array_end(writer: &RefCell<Vec<u8>>) -> Result<(), (i32, &'static str)> {
+    fn write_array_end(writer: &RefCell<Vec<u8>>) -> Result<(), &'static str> {
         writer.borrow_mut().write_all(b"</array>").unwrap();
         Ok(())
     }
@@ -674,7 +674,7 @@ fn several_arrays_top_level() {
         StreamOp::None
     }
 
-    fn write_array_end_marker(writer: &RefCell<Vec<u8>>) -> Result<(), (i32, &'static str)> {
+    fn write_array_end_marker(writer: &RefCell<Vec<u8>>) -> Result<(), &'static str> {
         writer.borrow_mut().write_all(b"</array>").unwrap();
         Ok(())
     }
@@ -805,10 +805,7 @@ fn error_in_begin_action() {
 
     // Local helper function for this test
     fn noop_begin_action(_: &mut RJiter<&[u8]>, _: ()) -> StreamOp {
-        StreamOp::Error {
-            code: 0,
-            message: "Test error in begin-action",
-        }
+        StreamOp::Error("Test error in begin-action")
     }
 
     // find_action that matches "foo" and returns error
@@ -845,7 +842,7 @@ fn error_in_begin_action() {
     let err = result.unwrap_err();
     assert_eq!(
         format!("{err}"),
-        "Action error: Test error in begin-action (code 0) at position 7"
+        "Action error: Test error in begin-action at position 7"
     );
 }
 
@@ -859,8 +856,8 @@ fn error_in_end_action() {
     let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
 
     // Local helper function for this test
-    fn noop_end_action(_: ()) -> Result<(), (i32, &'static str)> {
-        Err((0, "Test error in end-action"))
+    fn noop_end_action(_: ()) -> Result<(), &'static str> {
+        Err("Test error in end-action")
     }
 
     // find_action that never matches anything
@@ -897,7 +894,7 @@ fn error_in_end_action() {
     let err = result.unwrap_err();
     assert_eq!(
         format!("{err}"),
-        "Action error: Test error in end-action (code 0) at position 11"
+        "Action error: Test error in end-action at position 11"
     );
 }
 
@@ -941,7 +938,7 @@ fn several_objects_top_level() {
             structural_pseudoname,
             context,
         ) {
-            fn write_foo_end_marker(writer: &RefCell<Vec<u8>>) -> Result<(), (i32, &'static str)> {
+            fn write_foo_end_marker(writer: &RefCell<Vec<u8>>) -> Result<(), &'static str> {
                 writer.borrow_mut().write_all(b"</foo>").unwrap();
                 Ok(())
             }
@@ -1002,10 +999,7 @@ fn match_in_array_context() {
                     .and_then(|_| rjiter.write_long_bytes(&mut *writer));
                 match result {
                     Ok(_) => StreamOp::ValueIsConsumed,
-                    Err(_e) => StreamOp::Error {
-                        code: 0,
-                        message: "RJiter error: {:?}",
-                    },
+                    Err(_e) => StreamOp::Error("RJiter error: {:?}"),
                 }
             }
             let action: Action<&RefCell<Vec<u8>>, &[u8]> = consume_content_value;
@@ -1242,10 +1236,7 @@ fn atoms_stream_op_return_values() {
                     }
                     _ => {
                         writer.write_all(b"unexpected,").unwrap();
-                        StreamOp::Error {
-                            code: 0,
-                            message: "Expected error for the test",
-                        }
+                        StreamOp::Error("Expected error for the test")
                     }
                 }
             }
@@ -1314,10 +1305,7 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
                     .and_then(|_| rjiter.write_long_bytes(&mut *writer));
                 match result {
                     Ok(_) => StreamOp::ValueIsConsumed,
-                    Err(_e) => StreamOp::Error {
-                        code: 0,
-                        message: "RJiter error: {:?}",
-                    },
+                    Err(_e) => StreamOp::Error("RJiter error: {:?}"),
                 }
             }
             Some(consume_content_value)
@@ -1330,7 +1318,7 @@ fn scan_llm_output(json: &str) -> RefCell<Vec<u8>> {
                            _baton: &RefCell<Vec<u8>>|
      -> Option<EndAction<&RefCell<Vec<u8>>>> {
         if iter_match(|| ["message".as_bytes()], structural_pseudoname, context) {
-            fn write_newline_end(writer: &RefCell<Vec<u8>>) -> Result<(), (i32, &'static str)> {
+            fn write_newline_end(writer: &RefCell<Vec<u8>>) -> Result<(), &'static str> {
                 writer.borrow_mut().write_all(b"\n").unwrap();
                 Ok(())
             }
