@@ -7,7 +7,7 @@ See `llms.txt` for `RJiter` description.
 ### Public Re-exports
 ```rust
 pub use error::Result;
-pub use error::{Error, IoError};
+pub use error::Error;
 pub use rjiter::RJiter;
 pub use jiter;
 ```
@@ -368,13 +368,6 @@ pub struct Error {
 - `error_type: ErrorType` - The type of error that occurred
 - `index: usize` - The byte index in the input where the error occurred
 
-#### IoError
-Custom I/O error for `no_std` compatibility
-```rust
-#[derive(Error, Debug, Clone, Copy, PartialEq, Eq)]
-pub struct IoError;
-```
-
 ### Enums
 #### ErrorType
 Like `Jiter::JiterErrorType`, but also with `IoError`
@@ -385,13 +378,15 @@ pub enum ErrorType {
         expected: JsonType,
         actual: JsonType,
     },
-    IoError(IoError),
+    IoError {
+        kind: embedded_io::ErrorKind,
+    },
 }
 ```
 **Variants:**
 - `JsonError(JsonErrorType)` - JSON parsing error from the underlying jiter
 - `WrongType { expected: JsonType, actual: JsonType }` - Type mismatch error
-- `IoError(IoError)` - I/O operation error
+- `IoError { kind: embedded_io::ErrorKind }` - I/O operation error with the specific error kind
 
 ### Functions
 #### get_position
