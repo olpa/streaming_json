@@ -39,6 +39,16 @@ use embedded_io::{Error as EmbeddedError, Read, Write};
 
 use u8pool::U8Pool;
 
+/// Macro to write to the writer and store IO error on failure
+macro_rules! write_and_store_error {
+    ($idt:expr, $buf:expr, $msg:expr) => {
+        $idt.writer.write_all($buf).map_err(|e| {
+            $idt.io_error = Some(e);
+            $msg
+        })
+    };
+}
+
 /// Type alias for the baton type used in idtransform
 type IdtBaton<'a, 'workbuf, W> = &'a RefCell<IdTransform<'a, 'workbuf, W>>;
 
@@ -117,6 +127,7 @@ struct IdTransform<'a, 'workbuf, W: Write> {
     // `seqpos`+`is_top_level` could be the own type `IdtFromMatcherToHandler`
     seqpos: IdtSequencePos<'workbuf>,
     is_top_level: bool,
+    io_error: Option<<W as embedded_io::ErrorType>::Error>,
 }
 
 #[allow(clippy::elidable_lifetime_names)]
@@ -126,6 +137,7 @@ impl<'a, 'workbuf, W: Write> IdTransform<'a, 'workbuf, W> {
             writer,
             seqpos: IdtSequencePos::AtBeginning,
             is_top_level: true,
+            io_error: None,
         }
     }
 
@@ -145,35 +157,21 @@ impl<'a, 'workbuf, W: Write> IdTransform<'a, 'workbuf, W> {
             }
             IdtSequencePos::InMiddle => {
                 let seqpos = if self.is_top_level() { b" " } else { b"," };
-                self.writer
-                    .write_all(seqpos)
-                    .map_err(|_e| "IO error writing sequence position")?;
+                write_and_store_error!(self, seqpos, "IO error writing sequence position")?;
                 self.seqpos = IdtSequencePos::InMiddle;
                 Ok(())
             }
             IdtSequencePos::AtBeginningKey(key) => {
-                self.writer
-                    .write_all(b"\"")
-                    .map_err(|_e| "IO error writing key quote")?;
-                self.writer
-                    .write_all(key)
-                    .map_err(|_e| "IO error writing key")?;
-                self.writer
-                    .write_all(b"\":")
-                    .map_err(|_e| "IO error writing key suffix")?;
+                write_and_store_error!(self, b"\"", "IO error writing key quote")?;
+                write_and_store_error!(self, key, "IO error writing key")?;
+                write_and_store_error!(self, b"\":", "IO error writing key suffix")?;
                 self.seqpos = IdtSequencePos::InMiddle;
                 Ok(())
             }
             IdtSequencePos::InMiddleKey(key) => {
-                self.writer
-                    .write_all(b",\"")
-                    .map_err(|_e| "IO error writing key prefix")?;
-                self.writer
-                    .write_all(key)
-                    .map_err(|_e| "IO error writing key")?;
-                self.writer
-                    .write_all(b"\":")
-                    .map_err(|_e| "IO error writing key suffix")?;
+                write_and_store_error!(self, b",\"", "IO error writing key prefix")?;
+                write_and_store_error!(self, key, "IO error writing key")?;
+                write_and_store_error!(self, b"\":", "IO error writing key suffix")?;
                 self.seqpos = IdtSequencePos::InMiddle;
                 Ok(())
             }
@@ -287,8 +285,8 @@ fn on_struct<W: Write>(bytes: &[u8], idt_cell: &RefCell<IdTransform<'_, '_, W>>)
         return StreamOp::Error(message);
     }
 
-    if let Err(_e) = idt.writer.write_all(bytes) {
-        return StreamOp::Error("IO error writing struct");
+    if let Err(message) = write_and_store_error!(idt, bytes, "IO error writing struct") {
+        return StreamOp::Error(message);
     }
     idt.seqpos = IdtSequencePos::AtBeginning;
     StreamOp::None
@@ -300,9 +298,7 @@ fn on_struct_end<W: Write>(
 ) -> Result<(), &'static str> {
     let mut idt = idt_cell.borrow_mut();
     idt.seqpos = IdtSequencePos::InMiddle;
-    idt.writer
-        .write_all(bytes)
-        .map_err(|_e| "IO error writing struct end")?;
+    write_and_store_error!(idt, bytes, "IO error writing struct end")?;
     Ok(())
 }
 
@@ -358,7 +354,7 @@ pub fn idtransform<R: Read, W: Write>(
     let idt = IdTransform::new(writer);
     let idt_cell = RefCell::new(idt);
 
-    scan(
+    let scan_result = scan(
         find_action,
         find_end_action,
         rjiter,
@@ -368,5 +364,16 @@ pub fn idtransform<R: Read, W: Write>(
             sse_tokens: &[],
             stop_early: true,
         },
-    )
+    );
+
+    // Check if scan failed and if we have a stored IO error
+    if let Err(scan_error) = scan_result {
+        // If we have stored an IO error, return it with the actual error kind
+        if let Some(ref io_error) = idt_cell.borrow().io_error {
+            return Err(ScanError::IOError(io_error.kind()));
+        }
+        return Err(scan_error);
+    }
+
+    Ok(())
 }
