@@ -323,3 +323,57 @@ fn idt_stop_after_object() {
     let key = rjiter.next_object().unwrap();
     assert_eq!(key, Some("next_obj_key"));
 }
+
+#[test]
+fn idt_preserves_io_error_kind() {
+    // Create a writer that fails with a specific error kind
+    struct FailingWriter {
+        fail_after: usize,
+        written: usize,
+    }
+
+    impl embedded_io::ErrorType for FailingWriter {
+        type Error = embedded_io::ErrorKind;
+    }
+
+    impl Write for FailingWriter {
+        fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+            if self.written >= self.fail_after {
+                return Err(embedded_io::ErrorKind::WriteZero);
+            }
+            self.written += buf.len();
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> Result<(), Self::Error> {
+            Ok(())
+        }
+    }
+
+    let input = r#"{"key1": "value1", "key2": "value2"}"#;
+
+    let mut reader = input.as_bytes();
+    let mut buffer = vec![0u8; 32];
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
+    let mut writer = FailingWriter {
+        fail_after: 5, // Fail after writing 5 bytes
+        written: 0,
+    };
+
+    // Act: Call idtransform with a failing writer
+    let result = idtransform(&mut rjiter, &mut writer, &mut scan_stack);
+
+    // Assert: The error should be an IOError with WriteZero kind
+    match result {
+        Err(scan_json::Error::IOError(kind)) => {
+            assert_eq!(
+                kind,
+                embedded_io::ErrorKind::WriteZero,
+                "IO error kind should be preserved"
+            );
+        }
+        _ => panic!("Expected IOError(WriteZero), got: {:?}", result),
+    }
+}
