@@ -129,6 +129,7 @@ struct IdTransform<'a, 'workbuf, W: Write> {
     is_top_level: bool,
     io_error: Option<embedded_io::ErrorKind>,
     rjiter_error: Option<rjiter::Error>,
+    scan_error: Option<ScanError>,
 }
 
 #[allow(clippy::elidable_lifetime_names)]
@@ -140,6 +141,7 @@ impl<'a, 'workbuf, W: Write> IdTransform<'a, 'workbuf, W> {
             is_top_level: true,
             io_error: None,
             rjiter_error: None,
+            scan_error: None,
         }
     }
 
@@ -286,9 +288,11 @@ fn on_atom<R: Read, W: Write>(
                         }
                         idt.rjiter_error = Some(rjiter_error);
                     }
-                    _ => {}
+                    other_error => {
+                        idt.scan_error = Some(other_error);
+                    }
                 }
-                StreamOp::Error("Error copying atom")
+                StreamOp::Error("Error copying atom (stored in idt)")
             }
         },
         Err(e) => {
@@ -297,7 +301,7 @@ fn on_atom<R: Read, W: Write>(
                 idt.io_error = Some(kind);
             }
             idt.rjiter_error = Some(e);
-            StreamOp::Error("RJiter error")
+            StreamOp::Error("RJiter error (stored in idt)")
         }
     }
 }
@@ -405,7 +409,12 @@ pub fn idtransform<R: Read, W: Write>(
             return Err(ScanError::RJiterError(rjiter_error.clone()));
         }
 
-        // Priority 3: Return the original scan error
+        // Priority 3: If we have stored another scan error, return it
+        if let Some(ref stored_scan_error) = idt.scan_error {
+            return Err(stored_scan_error.clone());
+        }
+
+        // Priority 4: Return the original scan error (should not happen if all paths store errors)
         return Err(scan_error);
     }
 
