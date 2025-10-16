@@ -43,7 +43,7 @@ use u8pool::U8Pool;
 macro_rules! write_and_store_error {
     ($idt:expr, $buf:expr, $msg:expr) => {
         $idt.writer.write_all($buf).map_err(|e| {
-            $idt.io_error = Some(e);
+            $idt.io_error = Some(e.kind());
             $msg
         })
     };
@@ -127,7 +127,7 @@ struct IdTransform<'a, 'workbuf, W: Write> {
     // `seqpos`+`is_top_level` could be the own type `IdtFromMatcherToHandler`
     seqpos: IdtSequencePos<'workbuf>,
     is_top_level: bool,
-    io_error: Option<<W as embedded_io::ErrorType>::Error>,
+    io_error: Option<embedded_io::ErrorKind>,
 }
 
 #[allow(clippy::elidable_lifetime_names)]
@@ -271,7 +271,21 @@ fn on_atom<R: Read, W: Write>(
     match rjiter.peek() {
         Ok(peeked) => match copy_atom(peeked, rjiter, idt.get_writer_mut()) {
             Ok(()) => StreamOp::ValueIsConsumed,
-            Err(_e) => StreamOp::Error("Error copying atom"),
+            Err(e) => {
+                // Store IO error kind if it's an IOError or RJiterError with IoError
+                match e {
+                    ScanError::IOError(kind) => {
+                        idt.io_error = Some(kind);
+                    }
+                    ScanError::RJiterError(ref rjiter_error) => {
+                        if let rjiter::error::ErrorType::IoError { kind } = rjiter_error.error_type {
+                            idt.io_error = Some(kind);
+                        }
+                    }
+                    _ => {}
+                }
+                StreamOp::Error("Error copying atom")
+            }
         },
         Err(_e) => StreamOp::Error("RJiter error"),
     }
@@ -368,9 +382,9 @@ pub fn idtransform<R: Read, W: Write>(
 
     // Check if scan failed and if we have a stored IO error
     if let Err(scan_error) = scan_result {
-        // If we have stored an IO error, return it with the actual error kind
-        if let Some(ref io_error) = idt_cell.borrow().io_error {
-            return Err(ScanError::IOError(io_error.kind()));
+        // If we have stored an IO error kind, return it
+        if let Some(io_error_kind) = idt_cell.borrow().io_error {
+            return Err(ScanError::IOError(io_error_kind));
         }
         return Err(scan_error);
     }
