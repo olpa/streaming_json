@@ -432,3 +432,32 @@ fn idt_preserves_io_error_from_long_string() {
         _ => panic!("Expected IOError(WriteZero), got: {:?}", result),
     }
 }
+#[test]
+fn idt_preserves_rjiter_error() {
+    // Test with malformed JSON to trigger a RJiter JSON parsing error
+    let input = r#"{"key": "unclosed string}"#; // Missing closing quote on value
+
+    let mut reader = input.as_bytes();
+    let mut buffer = vec![0u8; 32];
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
+    let mut writer = Vec::new();
+
+    // Act: Call idtransform with malformed JSON
+    let result = idtransform(&mut rjiter, &mut writer, &mut scan_stack);
+
+    // Assert: The error should be a RJiterError (JSON parsing error)
+    match result {
+        Err(scan_json::Error::RJiterError(rjiter_error)) => {
+            // Verify it is a JSON parsing error
+            match rjiter_error.error_type {
+                rjiter::error::ErrorType::JsonError(_) => {
+                    // Success - the RJiter error was preserved
+                }
+                _ => panic!("Expected JsonError, got: {:?}", rjiter_error.error_type),
+            }
+        }
+        _ => panic!("Expected RJiterError, got: {:?}", result),
+    }
+}

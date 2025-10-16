@@ -128,6 +128,7 @@ struct IdTransform<'a, 'workbuf, W: Write> {
     seqpos: IdtSequencePos<'workbuf>,
     is_top_level: bool,
     io_error: Option<embedded_io::ErrorKind>,
+    rjiter_error: Option<rjiter::Error>,
 }
 
 #[allow(clippy::elidable_lifetime_names)]
@@ -138,6 +139,7 @@ impl<'a, 'workbuf, W: Write> IdTransform<'a, 'workbuf, W> {
             seqpos: IdtSequencePos::AtBeginning,
             is_top_level: true,
             io_error: None,
+            rjiter_error: None,
         }
     }
 
@@ -272,22 +274,31 @@ fn on_atom<R: Read, W: Write>(
         Ok(peeked) => match copy_atom(peeked, rjiter, idt.get_writer_mut()) {
             Ok(()) => StreamOp::ValueIsConsumed,
             Err(e) => {
-                // Store IO error kind if it's an IOError or RJiterError with IoError
+                // Store the error for later retrieval
                 match e {
                     ScanError::IOError(kind) => {
                         idt.io_error = Some(kind);
                     }
-                    ScanError::RJiterError(ref rjiter_error) => {
+                    ScanError::RJiterError(rjiter_error) => {
+                        // Store IO error kind if it's an IoError
                         if let rjiter::error::ErrorType::IoError { kind } = rjiter_error.error_type {
                             idt.io_error = Some(kind);
                         }
+                        idt.rjiter_error = Some(rjiter_error);
                     }
                     _ => {}
                 }
                 StreamOp::Error("Error copying atom")
             }
         },
-        Err(_e) => StreamOp::Error("RJiter error"),
+        Err(e) => {
+            // Store IO error kind if peek failed with an IO error
+            if let rjiter::error::ErrorType::IoError { kind } = e.error_type {
+                idt.io_error = Some(kind);
+            }
+            idt.rjiter_error = Some(e);
+            StreamOp::Error("RJiter error")
+        }
     }
 }
 
@@ -380,12 +391,21 @@ pub fn idtransform<R: Read, W: Write>(
         },
     );
 
-    // Check if scan failed and if we have a stored IO error
+    // Check if scan failed and if we have stored errors
     if let Err(scan_error) = scan_result {
-        // If we have stored an IO error kind, return it
-        if let Some(io_error_kind) = idt_cell.borrow().io_error {
+        let idt = idt_cell.borrow();
+
+        // Priority 1: If we have stored an IO error kind, return it
+        if let Some(io_error_kind) = idt.io_error {
             return Err(ScanError::IOError(io_error_kind));
         }
+
+        // Priority 2: If we have stored a RJiter error, return it
+        if let Some(ref rjiter_error) = idt.rjiter_error {
+            return Err(ScanError::RJiterError(rjiter_error.clone()));
+        }
+
+        // Priority 3: Return the original scan error
         return Err(scan_error);
     }
 
