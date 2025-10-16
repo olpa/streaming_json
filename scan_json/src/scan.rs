@@ -411,6 +411,18 @@ fn skip_basic_values<R: Read>(peeked: Peek, rjiter: &mut RJiter<R>) -> ScanResul
 ///   - **Simple baton**: Any `Copy` type (like `i32`, `bool`, `()`) passed by value for read-only or stateless operations
 ///   - **`RefCell` baton**: `&RefCell<B>` for mutable state that needs to be shared across action calls
 ///
+/// # Error Handling in Actions
+///
+/// When an action encounters an error, it returns `StreamOp::Error(message)` with a static string message.
+/// The `scan` function converts this to an `ActionError` with the message and position.
+///
+/// If handlers need to preserve detailed errors (like IO error kinds from `embedded_io::ErrorKind`
+/// or specific RJiter error details), they must store them in their baton and retrieve them after `scan()` returns.
+/// The `StreamOp::Error` message is only a generic indicator that an error occurred.
+///
+/// See the `idtransform` implementation for an example of storing detailed errors in the baton and retrieving
+/// them after `scan()` completes.
+///
 /// # Working Buffer Sizing
 ///
 /// The working buffer should be sized based on expected nesting depth, average key
