@@ -60,14 +60,9 @@ impl core::fmt::Display for Error {
                     position, level
                 )
             }
-            Error::ActionError {
-                message,
-                position,
-            } => write!(
-                f,
-                "Action error: {} at position {}",
-                message, position
-            ),
+            Error::ActionError { message, position } => {
+                write!(f, "Action error: {} at position {}", message, position)
+            }
             Error::IOError(kind) => write!(f, "IO error: {:?}", kind),
         }
     }

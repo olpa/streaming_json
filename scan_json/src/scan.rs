@@ -417,7 +417,7 @@ fn skip_basic_values<R: Read>(peeked: Peek, rjiter: &mut RJiter<R>) -> ScanResul
 /// The `scan` function converts this to an `ActionError` with the message and position.
 ///
 /// If handlers need to preserve detailed errors (like IO error kinds from `embedded_io::ErrorKind`
-/// or specific RJiter error details), they must store them in their baton and retrieve them after `scan()` returns.
+/// or specific `RJiter` error details), they must store them in their baton and retrieve them after `scan()` returns.
 /// The `StreamOp::Error` message is only a generic indicator that an error occurred.
 ///
 /// See the `idtransform` implementation for an example of storing detailed errors in the baton and retrieving

@@ -283,7 +283,8 @@ fn on_atom<R: Read, W: Write>(
                     }
                     ScanError::RJiterError(rjiter_error) => {
                         // Store IO error kind if it's an IoError
-                        if let rjiter::error::ErrorType::IoError { kind } = rjiter_error.error_type {
+                        if let rjiter::error::ErrorType::IoError { kind } = rjiter_error.error_type
+                        {
                             idt.io_error = Some(kind);
                         }
                         idt.rjiter_error = Some(rjiter_error);
@@ -338,9 +339,7 @@ fn on_array<R: Read, W: Write>(
     on_struct(b"[", idt_cell)
 }
 
-fn on_array_end<W: Write>(
-    idt_cell: &RefCell<IdTransform<'_, '_, W>>,
-) -> Result<(), &'static str> {
+fn on_array_end<W: Write>(idt_cell: &RefCell<IdTransform<'_, '_, W>>) -> Result<(), &'static str> {
     on_struct_end(b"]", idt_cell)
 }
 
@@ -351,9 +350,7 @@ fn on_object<R: Read, W: Write>(
     on_struct(b"{", idt_cell)
 }
 
-fn on_object_end<W: Write>(
-    idt_cell: &RefCell<IdTransform<'_, '_, W>>,
-) -> Result<(), &'static str> {
+fn on_object_end<W: Write>(idt_cell: &RefCell<IdTransform<'_, '_, W>>) -> Result<(), &'static str> {
     on_struct_end(b"}", idt_cell)
 }
 
