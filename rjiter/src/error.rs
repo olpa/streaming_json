@@ -10,7 +10,7 @@ use alloc::{format, string::String};
 pub type Result<T> = core::result::Result<T, Error>;
 
 /// Like `Jiter::JiterErrorType`, but also with `IoError`
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[allow(clippy::module_name_repetitions)]
 pub enum ErrorType {
     /// JSON parsing error from the underlying jiter.
@@ -43,7 +43,7 @@ impl core::fmt::Display for ErrorType {
 }
 
 /// An error from the `RJiter` iterator.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Error {
     /// The type of error that occurred.
     pub error_type: ErrorType,

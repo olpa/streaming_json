@@ -1,7 +1,7 @@
 //! Error types for JSON stream processing.
 
 /// Error types for the JSON stream processor
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Error {
     /// Error from the underlying `RJiter` JSON parser
     RJiterError(rjiter::Error),
