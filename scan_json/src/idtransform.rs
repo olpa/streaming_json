@@ -39,6 +39,16 @@ use embedded_io::{Error as EmbeddedError, Read, Write};
 
 use u8pool::U8Pool;
 
+/// Macro to write to the writer and store IO error on failure
+macro_rules! write_and_store_error {
+    ($idt:expr, $buf:expr, $msg:expr) => {
+        $idt.writer.write_all($buf).map_err(|e| {
+            $idt.io_error = Some(e.kind());
+            $msg
+        })
+    };
+}
+
 /// Type alias for the baton type used in idtransform
 type IdtBaton<'a, 'workbuf, W> = &'a RefCell<IdTransform<'a, 'workbuf, W>>;
 
@@ -117,6 +127,9 @@ struct IdTransform<'a, 'workbuf, W: Write> {
     // `seqpos`+`is_top_level` could be the own type `IdtFromMatcherToHandler`
     seqpos: IdtSequencePos<'workbuf>,
     is_top_level: bool,
+    io_error: Option<embedded_io::ErrorKind>,
+    rjiter_error: Option<rjiter::Error>,
+    scan_error: Option<ScanError>,
 }
 
 #[allow(clippy::elidable_lifetime_names)]
@@ -126,6 +139,9 @@ impl<'a, 'workbuf, W: Write> IdTransform<'a, 'workbuf, W> {
             writer,
             seqpos: IdtSequencePos::AtBeginning,
             is_top_level: true,
+            io_error: None,
+            rjiter_error: None,
+            scan_error: None,
         }
     }
 
@@ -145,35 +161,21 @@ impl<'a, 'workbuf, W: Write> IdTransform<'a, 'workbuf, W> {
             }
             IdtSequencePos::InMiddle => {
                 let seqpos = if self.is_top_level() { b" " } else { b"," };
-                self.writer
-                    .write_all(seqpos)
-                    .map_err(|_e| "IO error writing sequence position")?;
+                write_and_store_error!(self, seqpos, "IO error writing sequence position")?;
                 self.seqpos = IdtSequencePos::InMiddle;
                 Ok(())
             }
             IdtSequencePos::AtBeginningKey(key) => {
-                self.writer
-                    .write_all(b"\"")
-                    .map_err(|_e| "IO error writing key quote")?;
-                self.writer
-                    .write_all(key)
-                    .map_err(|_e| "IO error writing key")?;
-                self.writer
-                    .write_all(b"\":")
-                    .map_err(|_e| "IO error writing key suffix")?;
+                write_and_store_error!(self, b"\"", "IO error writing key quote")?;
+                write_and_store_error!(self, key, "IO error writing key")?;
+                write_and_store_error!(self, b"\":", "IO error writing key suffix")?;
                 self.seqpos = IdtSequencePos::InMiddle;
                 Ok(())
             }
             IdtSequencePos::InMiddleKey(key) => {
-                self.writer
-                    .write_all(b",\"")
-                    .map_err(|_e| "IO error writing key prefix")?;
-                self.writer
-                    .write_all(key)
-                    .map_err(|_e| "IO error writing key")?;
-                self.writer
-                    .write_all(b"\":")
-                    .map_err(|_e| "IO error writing key suffix")?;
+                write_and_store_error!(self, b",\"", "IO error writing key prefix")?;
+                write_and_store_error!(self, key, "IO error writing key")?;
+                write_and_store_error!(self, b"\":", "IO error writing key suffix")?;
                 self.seqpos = IdtSequencePos::InMiddle;
                 Ok(())
             }
@@ -253,7 +255,7 @@ fn on_key<R: Read, W: Write>(
     let mut idt = idt_cell.borrow_mut();
 
     if let Err(message) = idt.write_seqpos() {
-        return StreamOp::Error { code: 0, message };
+        return StreamOp::Error(message);
     }
     idt.seqpos = IdtSequencePos::AfterKey;
 
@@ -267,21 +269,41 @@ fn on_atom<R: Read, W: Write>(
     let mut idt = idt_cell.borrow_mut();
 
     if let Err(message) = idt.write_seqpos() {
-        return StreamOp::Error { code: 0, message };
+        return StreamOp::Error(message);
     }
 
     match rjiter.peek() {
         Ok(peeked) => match copy_atom(peeked, rjiter, idt.get_writer_mut()) {
             Ok(()) => StreamOp::ValueIsConsumed,
-            Err(_e) => StreamOp::Error {
-                code: 0,
-                message: "Error copying atom",
-            },
+            Err(e) => {
+                // Store the error for later retrieval
+                match e {
+                    ScanError::IOError(kind) => {
+                        idt.io_error = Some(kind);
+                    }
+                    ScanError::RJiterError(rjiter_error) => {
+                        // Store IO error kind if it's an IoError
+                        if let rjiter::error::ErrorType::IoError { kind } = rjiter_error.error_type
+                        {
+                            idt.io_error = Some(kind);
+                        }
+                        idt.rjiter_error = Some(rjiter_error);
+                    }
+                    other_error => {
+                        idt.scan_error = Some(other_error);
+                    }
+                }
+                StreamOp::Error("Error copying atom (stored in idt)")
+            }
         },
-        Err(_e) => StreamOp::Error {
-            code: 0,
-            message: "RJiter error",
-        },
+        Err(e) => {
+            // Store IO error kind if peek failed with an IO error
+            if let rjiter::error::ErrorType::IoError { kind } = e.error_type {
+                idt.io_error = Some(kind);
+            }
+            idt.rjiter_error = Some(e);
+            StreamOp::Error("RJiter error (stored in idt)")
+        }
     }
 }
 
@@ -290,14 +312,11 @@ fn on_struct<W: Write>(bytes: &[u8], idt_cell: &RefCell<IdTransform<'_, '_, W>>)
     let mut idt = idt_cell.borrow_mut();
 
     if let Err(message) = idt.write_seqpos() {
-        return StreamOp::Error { code: 0, message };
+        return StreamOp::Error(message);
     }
 
-    if let Err(_e) = idt.writer.write_all(bytes) {
-        return StreamOp::Error {
-            code: 0,
-            message: "IO error writing struct",
-        };
+    if let Err(message) = write_and_store_error!(idt, bytes, "IO error writing struct") {
+        return StreamOp::Error(message);
     }
     idt.seqpos = IdtSequencePos::AtBeginning;
     StreamOp::None
@@ -306,12 +325,10 @@ fn on_struct<W: Write>(bytes: &[u8], idt_cell: &RefCell<IdTransform<'_, '_, W>>)
 fn on_struct_end<W: Write>(
     bytes: &[u8],
     idt_cell: &RefCell<IdTransform<'_, '_, W>>,
-) -> Result<(), (i32, &'static str)> {
+) -> Result<(), &'static str> {
     let mut idt = idt_cell.borrow_mut();
     idt.seqpos = IdtSequencePos::InMiddle;
-    idt.writer
-        .write_all(bytes)
-        .map_err(|_e| (0, "IO error writing struct end"))?;
+    write_and_store_error!(idt, bytes, "IO error writing struct end")?;
     Ok(())
 }
 
@@ -322,9 +339,7 @@ fn on_array<R: Read, W: Write>(
     on_struct(b"[", idt_cell)
 }
 
-fn on_array_end<W: Write>(
-    idt_cell: &RefCell<IdTransform<'_, '_, W>>,
-) -> Result<(), (i32, &'static str)> {
+fn on_array_end<W: Write>(idt_cell: &RefCell<IdTransform<'_, '_, W>>) -> Result<(), &'static str> {
     on_struct_end(b"]", idt_cell)
 }
 
@@ -335,9 +350,7 @@ fn on_object<R: Read, W: Write>(
     on_struct(b"{", idt_cell)
 }
 
-fn on_object_end<W: Write>(
-    idt_cell: &RefCell<IdTransform<'_, '_, W>>,
-) -> Result<(), (i32, &'static str)> {
+fn on_object_end<W: Write>(idt_cell: &RefCell<IdTransform<'_, '_, W>>) -> Result<(), &'static str> {
     on_struct_end(b"}", idt_cell)
 }
 
@@ -367,7 +380,7 @@ pub fn idtransform<R: Read, W: Write>(
     let idt = IdTransform::new(writer);
     let idt_cell = RefCell::new(idt);
 
-    scan(
+    let scan_result = scan(
         find_action,
         find_end_action,
         rjiter,
@@ -377,5 +390,30 @@ pub fn idtransform<R: Read, W: Write>(
             sse_tokens: &[],
             stop_early: true,
         },
-    )
+    );
+
+    // Check if scan failed and if we have stored errors
+    if let Err(scan_error) = scan_result {
+        let idt = idt_cell.borrow();
+
+        // Priority 1: If we have stored an IO error kind, return it
+        if let Some(io_error_kind) = idt.io_error {
+            return Err(ScanError::IOError(io_error_kind));
+        }
+
+        // Priority 2: If we have stored a RJiter error, return it
+        if let Some(ref rjiter_error) = idt.rjiter_error {
+            return Err(ScanError::RJiterError(rjiter_error.clone()));
+        }
+
+        // Priority 3: If we have stored another scan error, return it
+        if let Some(ref stored_scan_error) = idt.scan_error {
+            return Err(stored_scan_error.clone());
+        }
+
+        // Priority 4: Return the original scan error (should not happen if all paths store errors)
+        return Err(scan_error);
+    }
+
+    Ok(())
 }

@@ -20,7 +20,7 @@ impl<I> embedded_io::ErrorType for OneByteReader<I>
 where
     I: Iterator<Item = u8>,
 {
-    type Error = rjiter::error::IoError;
+    type Error = embedded_io::ErrorKind;
 }
 
 impl<I> Read for OneByteReader<I>

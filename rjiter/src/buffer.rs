@@ -1,7 +1,7 @@
 use core::cmp::min;
-use embedded_io::Read;
+use embedded_io::{Error as _, Read};
 
-use crate::error::Result as RJiterResult;
+use crate::error::{Error, ErrorType, Result as RJiterResult};
 use crate::jiter::LinePosition;
 
 /// A buffer for reading JSON data.
@@ -45,8 +45,8 @@ impl<'buf, R: Read> Buffer<'buf, R> {
         let n_new_bytes = self
             .reader
             .read(&mut self.buf[self.n_bytes..])
-            .map_err(|_| crate::error::Error {
-                error_type: crate::error::ErrorType::IoError(crate::error::IoError),
+            .map_err(|e| Error {
+                error_type: ErrorType::IoError { kind: e.kind() },
                 index: self.n_bytes,
             })?;
         self.n_bytes += n_new_bytes;

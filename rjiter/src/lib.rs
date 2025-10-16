@@ -8,8 +8,8 @@ pub mod error;
 /// Streaming JSON parser implementation.
 pub mod rjiter;
 
+pub use error::Error;
 pub use error::Result;
-pub use error::{Error, IoError};
 pub use rjiter::RJiter;
 
 pub use jiter;

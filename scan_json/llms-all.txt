@@ -49,7 +49,9 @@ fn on_content(rjiter: &mut RJiter<&[u8]>, writer_cell: &RefCell<Vec<u8>>) -> Str
         .and_then(|_| rjiter.write_long_bytes(&mut *writer));
     match result {
         Ok(_) => StreamOp::ValueIsConsumed,
-        Err(_e) => StreamOp::Error { code: 0, message: "RJiter error" },
+        // This example discards detailed error info for simplicity.
+        // See `idtransform` for production-grade error handling.
+        Err(_e) => StreamOp::Error("RJiter error"),
     }
 }
 
@@ -98,7 +100,9 @@ fn on_content(rjiter: &mut RJiter<&[u8]>, writer_cell: &RefCell<Vec<u8>>) -> Str
         .and_then(|_| rjiter.write_long_bytes(&mut *writer));
     match result {
         Ok(_) => StreamOp::ValueIsConsumed,
-        Err(_e) => StreamOp::Error { code: 0, message: "RJiter error" },
+        // This example discards detailed error info for simplicity.
+        // See `idtransform` for production-grade error handling.
+        Err(_e) => StreamOp::Error("RJiter error"),
     }
 }
 
@@ -217,6 +221,14 @@ Actions receive two arguments:
   - **Simple baton**: Any `Copy` type (like `i32`, `bool`, `()`) passed by value for read-only or stateless operations
   - **`RefCell` baton**: `&RefCell<B>` for mutable state that needs to be shared across action calls
 
+**Error Handling in Actions:**
+
+When an action encounters an error, it returns `StreamOp::Error(message)` with a static string message. The `scan` function converts this to an `ActionError` with the message and position.
+
+If handlers need to preserve detailed errors (like IO error kinds from `embedded_io::ErrorKind` or specific RJiter error details), they must store them in their baton and retrieve them after `scan()` returns. The `StreamOp::Error` message is only a generic indicator that an error occurred.
+
+See the `idtransform` implementation for an example of storing detailed errors in the baton and retrieving them after `scan()` completes.
+
 **Working Buffer Sizing:**
 
 The working buffer should be sized based on expected nesting depth, average key length, and 8 bytes per context frame. A reasonable default for most applications:
@@ -311,7 +323,7 @@ The type parameter `B` represents the baton (state) type:
 **`EndAction<B>`**
 
 ```rust
-pub type EndAction<B> = fn(B) -> Result<(), (i32, &'static str)>;
+pub type EndAction<B> = fn(B) -> Result<(), &'static str>;
 ```
 
 Type alias for end action functions that are called when a matched key ends.
@@ -320,9 +332,7 @@ The type parameter `B` represents the baton (state) type:
 - For simple batons: `B` is a `Copy` type like `i32`, `bool`, `()`
 - For mutable state: `B` is `&RefCell<SomeType>` for shared mutable access
 
-Returns `Ok(())` on success, or `Err((code, message))` where:
-- `code` is a user-defined error code
-- `message` is a static error message
+Returns `Ok(())` on success, or `Err(message)` where `message` is a static error message
 
 ---
 
@@ -344,7 +354,7 @@ Type alias for Results with `scan_json` Error.
 pub enum StreamOp {
     None,
     ValueIsConsumed,
-    Error { code: i32, message: &'static str },
+    Error(&'static str),
 }
 ```
 
@@ -356,7 +366,7 @@ Variants:
   - Inside an object, the action consumed the key value, therefore the next event should be a key or an end-object
   - Inside an array, the action consumed the item, the next event should be a value or an end-array
   - At the top level, the action consumed the item, the next event should be a value or end-of-input
-- `Error`: An error with error code and message
+- `Error`: An error with a static error message
 
 ---
 
@@ -390,7 +400,7 @@ pub enum Error {
     UnbalancedJson(usize),
     InternalError { position: usize, message: &'static str },
     MaxNestingExceeded { position: usize, level: usize },
-    ActionError { message: &'static str, code: i32, position: usize },
+    ActionError { message: &'static str, position: usize },
     IOError(embedded_io::ErrorKind),
 }
 ```

@@ -9,25 +9,8 @@ use alloc::{format, string::String};
 /// Convenient type alias for `RJiter` results.
 pub type Result<T> = core::result::Result<T, Error>;
 
-/// Custom I/O error for `no_std` compatibility
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct IoError;
-
-#[cfg(any(feature = "std", feature = "display"))]
-impl core::fmt::Display for IoError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "I/O operation failed")
-    }
-}
-
-impl embedded_io::Error for IoError {
-    fn kind(&self) -> embedded_io::ErrorKind {
-        embedded_io::ErrorKind::Other
-    }
-}
-
 /// Like `Jiter::JiterErrorType`, but also with `IoError`
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[allow(clippy::module_name_repetitions)]
 pub enum ErrorType {
     /// JSON parsing error from the underlying jiter.
@@ -40,7 +23,10 @@ pub enum ErrorType {
         actual: JsonType,
     },
     /// I/O operation error.
-    IoError(IoError),
+    IoError {
+        /// The kind of I/O error that occurred.
+        kind: embedded_io::ErrorKind,
+    },
 }
 
 #[cfg(any(feature = "std", feature = "display"))]
@@ -51,13 +37,13 @@ impl core::fmt::Display for ErrorType {
             ErrorType::WrongType { expected, actual } => {
                 write!(f, "expected {} but found {}", expected, actual)
             }
-            ErrorType::IoError(err) => write!(f, "{}", err),
+            ErrorType::IoError { kind } => write!(f, "I/O operation failed: {:?}", kind),
         }
     }
 }
 
 /// An error from the `RJiter` iterator.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Error {
     /// The type of error that occurred.
     pub error_type: ErrorType,

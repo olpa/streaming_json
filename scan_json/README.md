@@ -50,7 +50,9 @@ fn on_content(rjiter: &mut RJiter<&[u8]>, writer_cell: &RefCell<Vec<u8>>) -> Str
         .and_then(|_| rjiter.write_long_bytes(&mut *writer));
     match result {
         Ok(_) => StreamOp::ValueIsConsumed,
-        Err(_e) => StreamOp::Error { code: 0, message: "RJiter error" },
+        // This example discards detailed error info for simplicity.
+        // See [`crate::idtransform()`] for production-grade error handling.
+        Err(_e) => StreamOp::Error("RJiter error"),
     }
 }
 
@@ -109,11 +111,13 @@ fn on_content(rjiter: &mut RJiter<&[u8]>, writer_cell: &RefCell<Vec<u8>>) -> Str
         .and_then(|_| rjiter.write_long_bytes(&mut *writer));
     match result {
         Ok(_) => StreamOp::ValueIsConsumed,
-        Err(_e) => StreamOp::Error { code: 0, message: "RJiter error" },
+        // This example discards detailed error info for simplicity.
+        // See [`crate::idtransform()`] for production-grade error handling.
+        Err(_e) => StreamOp::Error("RJiter error"),
     }
 }
 
-fn on_end_message(writer: &RefCell<Vec<u8>>) -> Result<(), (i32, &'static str)> {
+fn on_end_message(writer: &RefCell<Vec<u8>>) -> Result<(), &'static str> {
     writer.borrow_mut().write_all(b"\n").unwrap();
     Ok(())
 }

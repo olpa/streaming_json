@@ -1,7 +1,7 @@
 //! Error types for JSON stream processing.
 
 /// Error types for the JSON stream processor
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Error {
     /// Error from the underlying `RJiter` JSON parser
     RJiterError(rjiter::Error),
@@ -32,8 +32,6 @@ pub enum Error {
     ActionError {
         /// The error message from the user action
         message: &'static str,
-        /// User-defined error code
-        code: i32,
         /// The byte position where the error occurred
         position: usize,
     },
@@ -62,15 +60,9 @@ impl core::fmt::Display for Error {
                     position, level
                 )
             }
-            Error::ActionError {
-                message,
-                code,
-                position,
-            } => write!(
-                f,
-                "Action error: {} (code {}) at position {}",
-                message, code, position
-            ),
+            Error::ActionError { message, position } => {
+                write!(f, "Action error: {} at position {}", message, position)
+            }
             Error::IOError(kind) => write!(f, "IO error: {:?}", kind),
         }
     }
