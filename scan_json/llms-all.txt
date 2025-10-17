@@ -106,7 +106,7 @@ fn on_content(rjiter: &mut RJiter<&[u8]>, writer_cell: &RefCell<Vec<u8>>) -> Str
     }
 }
 
-fn on_end_message(writer: &RefCell<Vec<u8>>) -> Result<(), (i32, &'static str)> {
+fn on_end_message(writer: &RefCell<Vec<u8>>) -> Result<(), &'static str> {
     writer.borrow_mut().write_all(b"\n").unwrap();
     Ok(())
 }

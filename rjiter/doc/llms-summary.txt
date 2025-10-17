@@ -1,5 +1,0 @@
-RJiter - Streaming JSON Parser for Rust
-
-RJiter is a streaming JSON parser that processes large JSON files using a small buffer. It wraps the `J iter` library and adds streaming capabilities by automatically reading more data when needed. RJiter is `no_std` compatible and uses `embedded-io` traits.
-
-For more details, see `llms.txt`.
