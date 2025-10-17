@@ -1,2 +1,2 @@
-U8Pool: Uses preallocated memory to store byte slices, optionally with a companion `Sized` object. The interface is stack-based, with `Vec` and `Map` iterators.
+U8Pool: Uses preallocated memory to store byte slices, optionally with a companion `Sized` object. The interface is stack-based, with forward and reverse iterators.
 See "./README.md" for details.
