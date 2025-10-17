@@ -1,6 +1,7 @@
 # RJiter API Documentation
 
 See `llms-readme.txt` for `RJiter` description.
+For Jiter API documentation, see `jiter/llms-all.txt`.
 
 ## File: src/lib.rs
 

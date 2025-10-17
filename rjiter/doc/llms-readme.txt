@@ -103,3 +103,4 @@ rjiter.write_long_str(&mut output)?;  // Streams string content
 - Optional std feature provides additional convenience methods
 
 For complete API documentation with all method signatures, see `llms-all.txt`.
+For Jiter documentation, see `jiter/llms-readme.txt`.
