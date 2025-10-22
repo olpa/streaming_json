@@ -1,4 +1,4 @@
-## [1.2.0] - 2025-10-13
+## [1.2.0] - 2025-10-22
 
 - Support `no_std` environment
 - Use `embedded-io` instead of `std::io` traits
