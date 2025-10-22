@@ -1,6 +1,6 @@
 # React to elements in a JSON stream
 
-Parse JSON and execute callbacks based on patterns, even before the entire document is available.
+Parse JSON and execute callbacks based on patterns, even before the entire document is available. [llms.txt](https://raw.githubusercontent.com/olpa/streaming_json/refs/heads/master/scan_json/llms.txt).
 
 For a fast start,
 
