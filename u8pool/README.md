@@ -1,6 +1,6 @@
 # `U8Pool`
 
-Uses preallocated memory to store byte slices, optionally with a companion `Sized` object. The interface is stack-based, with forward and reverse iterators. The code is `no_std`, without dependencies.
+Uses preallocated memory to store byte slices, optionally with a companion `Sized` object. The interface is stack-based, with forward and reverse iterators. The code is `no_std`, without dependencies. [llms.txt](https://raw.githubusercontent.com/olpa/streaming_json/refs/heads/master/u8pool/llms.txt).
 
 ## Example
 
