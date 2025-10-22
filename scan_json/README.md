@@ -1,6 +1,6 @@
 # React to elements in a JSON stream
 
-Parse JSON and execute callbacks based on patterns, even before the entire document is available.
+Parse JSON and execute callbacks based on patterns, even before the entire document is available. [llms.txt](https://raw.githubusercontent.com/olpa/streaming_json/refs/heads/master/scan_json/llms.txt).
 
 For a fast start,
 
@@ -8,8 +8,7 @@ For a fast start,
 - then learn about [`crate::scan()`], and
 - about the context stack and matching by [`crate::iter_match()`].
 
-The goal of `1.2.0` rewrite is to bring zero allocation and `no_std` compatibility. For `1.1.x` branch README, visit the [documentation on docs.rs](https://docs.rs/scan_json/).
-
+`scan_json` is designed to support zero-allocation and `no_std` environments, but a transitive dependency through `jiter` currently requires `std`.
 
 ## Concepts
 
