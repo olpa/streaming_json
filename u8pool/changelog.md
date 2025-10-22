@@ -1,4 +1,4 @@
-## [1.1.2] - 2025-10-13
+## [1.1.2] - 2025-10-21
 
 - Store associated values
 - `push` returns a reference to the stored value

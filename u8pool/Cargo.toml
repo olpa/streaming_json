@@ -1,6 +1,6 @@
 [package]
 name = "u8pool"
-version = "1.0.0"
+version = "1.1.2"
 edition = "2021"
 description = "Stack for u8 slices in a client-provided buffers"
 license = "MIT"
