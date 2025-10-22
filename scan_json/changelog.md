@@ -1,4 +1,4 @@
-## [2.0.0] - 2025-10-xx
+## [2.0.0] - 2025-10-22
 
 - Rewrite for `no_std` support. Incompatible change of the API.
 
