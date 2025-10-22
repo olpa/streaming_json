@@ -1,0 +1,31 @@
+{
+  "Id": 103,
+  "Title": "Book 103 Title",
+  "ISBN": "333-3333333333",
+  "Authors": ["Author1", "Author2"],
+  "Publisher": {
+    "Name": "Tech Publishing House",
+    "City": "New York",
+    "Founded": 1995
+  },
+  "Price": 2000,
+  "PageCount": 600,
+  "Dimensions": "8.5 x 11.0 x 1.5",
+  "InPublication": false,
+  "ProductCategory": "Book",
+  "Tags": ["programming", "technology", "reference"],
+  "Ratings": [4.5, 4.8, 5.0, 4.2],
+  "Reviews": [
+    "Excellent reference material",
+    "Very comprehensive",
+    "Great for beginners"
+  ],
+  "Metadata": {
+    "CreatedAt": "2023-01-15T10:30:00Z",
+    "UpdatedAt": "2024-06-20T14:45:00Z",
+    "Version": 2
+  },
+  "Available": true,
+  "Description": null,
+  "CoverImage": "aVZCT1J3MEtHZ29BQUFBTlNVaEVVZ0FBQUFV"
+}
