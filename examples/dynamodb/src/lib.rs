@@ -276,6 +276,33 @@ fn is_type_descriptor_context(mut ctx: ContextIter) -> bool {
     }
 }
 
+/// Helper to count consecutive occurrences of a specific key in the context
+/// Returns the count of consecutive matches starting from the current position
+fn count_consecutive(mut ctx: ContextIter, key: &[u8]) -> usize {
+    let mut count = 0;
+    while let Some(next) = ctx.next() {
+        if next == key {
+            count += 1;
+        } else {
+            break;
+        }
+    }
+    count
+}
+
+/// Check if we're in a "rogue name" scenario where a field name matches a type descriptor
+/// For repeating keys like [M, M, M, ...], odd count = real type, even = field name
+fn is_real_type_context(first_key: &[u8], second_key: &[u8], ctx: ContextIter) -> bool {
+    if first_key == second_key {
+        // Repeating key - use parity: odd count = type, even = field
+        let total_count = 2 + count_consecutive(ctx, first_key);
+        total_count % 2 == 1
+    } else {
+        // Different keys - this is a real type descriptor
+        true
+    }
+}
+
 fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
     structural: StructuralPseudoname,
     context: ContextIter,
@@ -312,22 +339,13 @@ fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
                         }
                     }
                     // Field inside M type object
-                    // Need to distinguish from type keys inside a field named "M"
-                    // Count consecutive M's: [field, M, M, M, ...]
-                    // Even count of M's = innermost is a field name
-                    // Odd count of M's = innermost is a type marker
                     else if parent == b"M" {
-                        let mut m_count = 1;
+                        // Check for "rogue name" - is this inside a real M type or a field named "M"?
+                        // Context is now [data, Item, ...] after parent, so check next element
                         let mut ctx_check = ctx.clone();
-                        while let Some(next) = ctx_check.next() {
-                            if next == b"M" {
-                                m_count += 1;
-                            } else {
-                                break;
-                            }
-                        }
-                        // Odd number of M's means this is a real M type object
-                        if m_count % 2 == 1 {
+                        let grandparent = ctx_check.next().unwrap_or(b"");
+
+                        if is_real_type_context(b"M", grandparent, ctx_check) {
                             let mut conv = baton.borrow_mut();
                             #[allow(unsafe_code)]
                             let field_slice: &'workbuf [u8] =
@@ -462,40 +480,22 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
         let mut ctx = context.clone();
         if let Some(first) = ctx.next() {
             // Check if this is an M object ending
-            // An M type object has context: [M, fieldName, Item/M/L, ...]
-            // When we have [M, M, ...], need to count M's to determine
-            // Odd number of consecutive M's = M type object
-            // Even number = field named "M"
             if first == b"M" {
                 if let Some(second) = ctx.next() {
-                    if second == b"M" {
-                        // Count consecutive M's after the first one
-                        let mut m_count = 2; // first and second
-                        let mut ctx_check = ctx.clone();
-                        while let Some(next) = ctx_check.next() {
-                            if next == b"M" {
-                                m_count += 1;
-                            } else {
-                                break;
-                            }
-                        }
-                        // Odd count = M type object ending
-                        if m_count % 2 == 1 {
-                            return Some(on_map_end);
-                        }
-                        // Even count = field named "M", fall through
-                    } else if second == b"#array" {
+                    // Check special cases: array context or regular field
+                    let should_close = if second == b"#array" {
                         // M object inside an L array
-                        if let Some(parent) = ctx.next() {
-                            if parent == b"L" {
-                                return Some(on_map_end);
-                            }
-                        }
+                        ctx.next() == Some(b"L")
                     } else if second != b"#top" {
-                        // This is a real M type object ending
+                        // Check if this is a real M type or a field named "M"
+                        is_real_type_context(first, second, ctx.clone())
+                    } else {
+                        false
+                    };
+
+                    if should_close {
                         return Some(on_map_end);
                     }
-                    // Otherwise fall through to type_descriptor_end handling
                 }
             }
             // Type descriptor objects inside L arrays
