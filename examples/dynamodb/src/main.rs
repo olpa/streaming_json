@@ -1,6 +1,7 @@
 use clap::{Parser, ValueEnum};
 use ddb_convert::convert_ddb_to_normal;
-use std::io::{self, Read};
+use std::io;
+use embedded_io_adapters::std::FromStd;
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum ConversionMode {
@@ -34,44 +35,79 @@ struct Args {
 fn main() {
     let args = Args::parse();
 
-    // Read input
-    let input_data = match &args.input {
-        Some(path) => {
-            std::fs::read_to_string(path).expect("Failed to read input file")
-        }
-        None => {
-            let mut buffer = String::new();
-            io::stdin()
-                .read_to_string(&mut buffer)
-                .expect("Failed to read from stdin");
-            buffer
-        }
-    };
-
-    // Perform conversion
-    let output_data = match args.mode {
+    match args.mode {
         ConversionMode::DdbToNormal => {
-            match convert_ddb_to_normal(&input_data, args.pretty) {
-                Ok(result) => result,
-                Err(e) => {
-                    eprintln!("Conversion error: {}", e);
-                    std::process::exit(1);
+            // Create buffers for streaming conversion
+            let mut rjiter_buffer = vec![0u8; 4096];
+            let mut context_buffer = vec![0u8; 2048];
+
+            // Handle input - streaming from file or stdin
+            let result = if let Some(input_path) = &args.input {
+                // Stream from file
+                let input_file = std::fs::File::open(input_path)
+                    .expect("Failed to open input file");
+                let mut input_reader = FromStd::new(input_file);
+
+                // Handle output
+                if let Some(output_path) = &args.output {
+                    let output_file = std::fs::File::create(output_path)
+                        .expect("Failed to create output file");
+                    let mut output_writer = FromStd::new(output_file);
+                    convert_ddb_to_normal(
+                        &mut input_reader,
+                        &mut output_writer,
+                        &mut rjiter_buffer,
+                        &mut context_buffer,
+                        args.pretty,
+                    )
+                } else {
+                    let stdout = io::stdout();
+                    let mut output_writer = FromStd::new(stdout);
+                    convert_ddb_to_normal(
+                        &mut input_reader,
+                        &mut output_writer,
+                        &mut rjiter_buffer,
+                        &mut context_buffer,
+                        args.pretty,
+                    )
                 }
+            } else {
+                // Stream from stdin
+                let stdin = io::stdin();
+                let mut input_reader = FromStd::new(stdin);
+
+                if let Some(output_path) = &args.output {
+                    let output_file = std::fs::File::create(output_path)
+                        .expect("Failed to create output file");
+                    let mut output_writer = FromStd::new(output_file);
+                    convert_ddb_to_normal(
+                        &mut input_reader,
+                        &mut output_writer,
+                        &mut rjiter_buffer,
+                        &mut context_buffer,
+                        args.pretty,
+                    )
+                } else {
+                    let stdout = io::stdout();
+                    let mut output_writer = FromStd::new(stdout);
+                    convert_ddb_to_normal(
+                        &mut input_reader,
+                        &mut output_writer,
+                        &mut rjiter_buffer,
+                        &mut context_buffer,
+                        args.pretty,
+                    )
+                }
+            };
+
+            if let Err(e) = result {
+                eprintln!("Conversion error: {}", e);
+                std::process::exit(1);
             }
         }
         ConversionMode::NormalToDdb => {
             eprintln!("Normal to DDB conversion not yet implemented");
             std::process::exit(1);
-        }
-    };
-
-    // Write output
-    match &args.output {
-        Some(path) => {
-            std::fs::write(path, output_data).expect("Failed to write output file");
-        }
-        None => {
-            print!("{}", output_data);
         }
     }
 }

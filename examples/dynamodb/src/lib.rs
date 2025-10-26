@@ -1,10 +1,17 @@
-use embedded_io::Write as IoWrite;
+#![no_std]
+
+#[cfg(feature = "std")]
+extern crate std;
+
+extern crate alloc;
+
+use embedded_io::{Read as IoRead, Write as IoWrite};
 use rjiter::jiter::Peek;
 use rjiter::RJiter;
 use scan_json::{iter_match, scan, Action, EndAction, Options, StreamOp};
 use scan_json::matcher::StructuralPseudoname;
 use scan_json::stack::ContextIter;
-use std::cell::RefCell;
+use core::cell::RefCell;
 use u8pool::U8Pool;
 
 pub struct DdbConverter<'a, 'workbuf, W: IoWrite> {
@@ -404,20 +411,31 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
     None
 }
 
-pub fn convert_ddb_to_normal(input: &str, pretty: bool) -> Result<String, String> {
-    let mut reader = input.as_bytes();
-    let mut buffer = vec![0u8; 4096];
-    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+/// Convert DynamoDB JSON to normal JSON in a streaming, allocation-free manner.
+///
+/// # Arguments
+/// * `reader` - Input stream implementing `embedded_io::Read`
+/// * `writer` - Output stream implementing `embedded_io::Write`
+/// * `rjiter_buffer` - Buffer for rjiter to use (recommended: 4096 bytes)
+/// * `context_buffer` - Buffer for scan_json context tracking (recommended: 2048 bytes)
+/// * `pretty` - Whether to pretty-print the output
+///
+/// # Returns
+/// `Ok(())` on success, or an error message on failure
+pub fn convert_ddb_to_normal<R: IoRead, W: IoWrite>(
+    reader: &mut R,
+    writer: &mut W,
+    rjiter_buffer: &mut [u8],
+    context_buffer: &mut [u8],
+    pretty: bool,
+) -> Result<(), &'static str> {
+    let mut rjiter = RJiter::new(reader, rjiter_buffer);
 
-    // Use a large buffer for output - embedded_io::Write is implemented for &mut [u8]
-    let mut output_buffer = vec![0u8; 1024 * 1024]; // 1MB buffer
-    let mut output_slice = output_buffer.as_mut_slice();
-    let converter = DdbConverter::new(&mut output_slice, pretty);
+    let converter = DdbConverter::new(writer, pretty);
     let baton = RefCell::new(converter);
 
-    let mut working_buffer = [0u8; 2048];
-    let mut context = U8Pool::new(&mut working_buffer, 32)
-        .map_err(|e| format!("Failed to create context pool: {:?}", e))?;
+    let mut context = U8Pool::new(context_buffer, 32)
+        .map_err(|_| "Failed to create context pool")?;
 
     scan(
         find_action,
@@ -427,10 +445,5 @@ pub fn convert_ddb_to_normal(input: &str, pretty: bool) -> Result<String, String
         &mut context,
         &Options::new(),
     )
-    .map_err(|e| format!("Scan error: {:?}", e))?;
-
-    // Calculate how many bytes were written
-    let bytes_written = 1024 * 1024 - output_slice.len();
-    String::from_utf8(output_buffer[..bytes_written].to_vec())
-        .map_err(|e| format!("UTF-8 error: {}", e))
+    .map_err(|_| "Scan error")
 }

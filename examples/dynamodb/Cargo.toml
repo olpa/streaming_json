@@ -11,10 +11,23 @@ path = "src/lib.rs"
 name = "ddb_convert"
 path = "src/main.rs"
 
+[features]
+default = ["std"]
+std = []
+
 [dependencies]
 scan_json = { path = "../../scan_json" }
-rjiter = "1.2"
-u8pool = "1.1"
-embedded-io = "0.6"
+rjiter = { version = "1.2", default-features = false }
+u8pool = { version = "1.1", default-features = false }
+embedded-io = { version = "0.6", default-features = false }
+
+[dev-dependencies]
+# Test dependencies can use std
 clap = { version = "4.5", features = ["derive"] }
 serde_json = "1.0"
+
+# Binary-only dependencies
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+clap = { version = "4.5", features = ["derive"] }
+serde_json = "1.0"
+embedded-io-adapters = { version = "0.6", features = ["std"] }
