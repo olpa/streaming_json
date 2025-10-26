@@ -336,3 +336,20 @@ fn test_mixed_confusing_fields() {
     let expected = r#"{"test": {"M": "m","L": ["l"],"S": "s"}}"#;
     assert_eq!(result, expected);
 }
+
+// Tests for optional Item wrapper
+#[test]
+fn test_no_item_wrapper_simple() {
+    let ddb_json = r#"{"name": {"S": "Alice"}, "age": {"N": "30"}}"#;
+    let result = convert_test(ddb_json);
+    let expected = r#"{"name": "Alice","age": 30}"#;
+    assert_eq!(result, expected);
+}
+
+#[test]
+fn test_with_item_wrapper_simple() {
+    let ddb_json = r#"{"Item": {"name": {"S": "Alice"}, "age": {"N": "30"}}}"#;
+    let result = convert_test(ddb_json);
+    let expected = r#"{"name": "Alice","age": 30}"#;
+    assert_eq!(result, expected);
+}

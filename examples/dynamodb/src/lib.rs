@@ -20,6 +20,7 @@ pub struct DdbConverter<'a, 'workbuf, W: IoWrite> {
     pretty: bool,
     depth: usize,
     current_field: Option<&'workbuf [u8]>,
+    has_item_wrapper: Option<bool>, // None = unknown, Some(true) = has Item, Some(false) = no Item
 }
 
 impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
@@ -30,6 +31,7 @@ impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
             pretty,
             depth: 0,
             current_field: None,
+            has_item_wrapper: None,
         }
     }
 
@@ -69,6 +71,7 @@ fn on_item_begin<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, bato
     conv.newline();
     conv.depth = 1;
     conv.pending_comma = false;
+    conv.has_item_wrapper = Some(true);
     StreamOp::None
 }
 
@@ -88,6 +91,15 @@ fn on_item_field_key<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, 
     };
 
     let mut conv = baton.borrow_mut();
+
+    // If we haven't written anything yet and there's no Item wrapper, write opening brace
+    if conv.has_item_wrapper.is_none() {
+        conv.write(b"{");
+        conv.newline();
+        conv.depth = 1;
+        conv.has_item_wrapper = Some(false);
+    }
+
     conv.write_comma();
     conv.indent();
     conv.write(b"\"");
@@ -260,18 +272,29 @@ fn on_set_number_element<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R
 
 /// Helper to check if we're in a context where type descriptors appear
 /// Type descriptors can appear under:
-/// - Item (top level)
+/// - Item (top level with wrapper)
+/// - #top (top level without Item wrapper)
 /// - M (Map object values)
 /// - L (List array elements)
 fn is_type_descriptor_context(mut ctx: ContextIter) -> bool {
-    // Walk up the context to find if we're under Item, M, or L
+    // Walk up the context to find if we're under Item, M, L, or directly at #top
+    let first = ctx.next();
+    if first == Some(b"#top") {
+        // Directly at top level (no Item wrapper)
+        return true;
+    }
+
+    // Continue walking for Item, M, or L
+    let mut current = first;
     loop {
-        match ctx.next() {
+        match current {
             Some(b"Item") => return true,
             Some(b"M") => return true,
             Some(b"L") => return true,
             Some(b"#top") | None => return false,
-            Some(_) => continue,
+            Some(_) => {
+                current = ctx.next();
+            }
         }
     }
 }
@@ -308,12 +331,12 @@ fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
     context: ContextIter,
     baton: DdbBaton<'a, 'workbuf, W>,
 ) -> Option<Action<DdbBaton<'a, 'workbuf, W>, R>> {
-    // Match "Item" key at root
+    // Match "Item" key at root (optional wrapper)
     if iter_match(|| [b"Item", b"#top"], structural, context.clone()) {
         return Some(on_item_begin);
     }
 
-    // Match field keys - can be inside Item or inside M type objects
+    // Match field keys - can be inside Item, at top-level, or inside M type objects
     if structural == StructuralPseudoname::None {
         let mut ctx = context.clone();
         if let Some(field) = ctx.next() {
@@ -337,6 +360,15 @@ fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
                             // Otherwise, this might be a type key under a field named "Item"
                             // Fall through to type descriptor matching
                         }
+                    }
+                    // Field at top-level (no Item wrapper)
+                    else if parent == b"#top" {
+                        let mut conv = baton.borrow_mut();
+                        #[allow(unsafe_code)]
+                        let field_slice: &'workbuf [u8] =
+                            unsafe { core::mem::transmute::<&[u8], &'workbuf [u8]>(field) };
+                        conv.current_field = Some(field_slice);
+                        return Some(on_item_field_key);
                     }
                     // Field inside M type object
                     else if parent == b"M" {
@@ -363,10 +395,10 @@ fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
     if structural == StructuralPseudoname::Object {
         let mut ctx = context.clone();
         if let Some(first) = ctx.next() {
-            // Type descriptors under M or Item fields
+            // Type descriptors under M or Item fields, or at top-level (no Item wrapper)
             if first != b"#top" && first != b"#array" {
                 if let Some(parent) = ctx.next() {
-                    if parent == b"Item" || parent == b"M" {
+                    if parent == b"Item" || parent == b"M" || parent == b"#top" {
                         return Some(on_type_descriptor_object);
                     }
                 }
@@ -569,5 +601,14 @@ pub fn convert_ddb_to_normal<R: IoRead, W: IoWrite>(
         &mut context,
         &Options::new(),
     )
-    .map_err(|_| "Scan error")
+    .map_err(|_| "Scan error")?;
+
+    // If there was no Item wrapper, we need to close the root object
+    let conv = baton.borrow();
+    if conv.has_item_wrapper == Some(false) {
+        drop(conv); // Release borrow before calling end handler
+        on_item_end(&baton)?;
+    }
+
+    Ok(())
 }
