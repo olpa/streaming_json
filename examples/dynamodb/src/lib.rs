@@ -286,21 +286,45 @@ fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
         return Some(on_item_begin);
     }
 
-    // Match field keys - can be inside Item or inside M objects
+    // Match field keys - can be inside Item or inside M type objects
     if structural == StructuralPseudoname::None {
         let mut ctx = context.clone();
         if let Some(field) = ctx.next() {
             if field != b"#top" && field != b"#array" {
                 if let Some(parent) = ctx.next() {
-                    // Field inside Item or inside M
-                    if parent == b"Item" || parent == b"M" {
-                        // Store field name and prepare to write it
+                    // Field inside Item
+                    if parent == b"Item" {
                         let mut conv = baton.borrow_mut();
                         #[allow(unsafe_code)]
                         let field_slice: &'workbuf [u8] =
                             unsafe { core::mem::transmute::<&[u8], &'workbuf [u8]>(field) };
                         conv.current_field = Some(field_slice);
                         return Some(on_item_field_key);
+                    }
+                    // Field inside M type object
+                    // Need to distinguish from type keys inside a field named "M"
+                    // Count consecutive M's: [field, M, M, M, ...]
+                    // Even count of M's = innermost is a field name
+                    // Odd count of M's = innermost is a type marker
+                    else if parent == b"M" {
+                        let mut m_count = 1;
+                        let mut ctx_check = ctx.clone();
+                        while let Some(next) = ctx_check.next() {
+                            if next == b"M" {
+                                m_count += 1;
+                            } else {
+                                break;
+                            }
+                        }
+                        // Odd number of M's means this is a real M type object
+                        if m_count % 2 == 1 {
+                            let mut conv = baton.borrow_mut();
+                            #[allow(unsafe_code)]
+                            let field_slice: &'workbuf [u8] =
+                                unsafe { core::mem::transmute::<&[u8], &'workbuf [u8]>(field) };
+                            conv.current_field = Some(field_slice);
+                            return Some(on_item_field_key);
+                        }
                     }
                 }
             }
@@ -430,11 +454,22 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
         let mut ctx = context.clone();
         if let Some(first) = ctx.next() {
             // Check if this is an M object ending
+            // An M type object has context: [M, fieldName, Item/M/L, ...]
+            // A field named "M" has context: [M, M, ...]
+            // We need the second element to distinguish
             if first == b"M" {
-                return Some(on_map_end);
+                if let Some(second) = ctx.next() {
+                    // If second is also "M", this is a field named "M" inside an M type
+                    // If second is "Item" or a field name, this is a real M type object
+                    if second != b"M" && second != b"#top" && second != b"#array" {
+                        // This is a real M type object ending
+                        return Some(on_map_end);
+                    }
+                    // Otherwise fall through to type_descriptor_end handling
+                }
             }
             // Type descriptor objects inside L arrays
-            else if first == b"#array" {
+            if first == b"#array" {
                 if let Some(parent) = ctx.next() {
                     if parent == b"L" {
                         // This is an element in L array - need to handle comma
@@ -443,10 +478,10 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
                 }
             }
             // Match end of type descriptor objects (not inside arrays)
-            else if first == b"Item" {
+            if first == b"Item" {
                 // Already handled above
-            } else if first != b"#top" {
-                // This is a type descriptor object (like {"S": "..."})
+            } else if first != b"#top" && first != b"#array" {
+                // This is a type descriptor object (like {"S": "..."} or field named M/L)
                 return Some(on_type_descriptor_end);
             }
         }
