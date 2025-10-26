@@ -102,7 +102,31 @@ fn test_binary_set() {
 fn test_list_type() {
     let ddb_json = r#"{"Item": {"items": {"L": [{"S": "string"}, {"N": "123"}, {"BOOL": true}]}}}"#;
     let result = convert_test(ddb_json);
-    let expected = r#"{"items": []}"#; // TODO: L type needs nested type descriptor support
+    let expected = r#"{"items": ["string",123,true]}"#;
+    assert_eq!(result, expected);
+}
+
+#[test]
+fn test_list_with_maps() {
+    let ddb_json = r#"{"Item": {"users": {"L": [{"M": {"name": {"S": "Alice"}, "age": {"N": "30"}}}, {"M": {"name": {"S": "Bob"}, "age": {"N": "25"}}}]}}}"#;
+    let result = convert_test(ddb_json);
+    let expected = r#"{"users": [{"name": "Alice","age": 30},{"name": "Bob","age": 25}]}"#;
+    assert_eq!(result, expected);
+}
+
+#[test]
+fn test_nested_lists() {
+    let ddb_json = r#"{"Item": {"nested": {"L": [{"L": [{"S": "a"}, {"S": "b"}]}, {"L": [{"N": "1"}, {"N": "2"}]}]}}}"#;
+    let result = convert_test(ddb_json);
+    let expected = r#"{"nested": [["a","b"],[1,2]]}"#;
+    assert_eq!(result, expected);
+}
+
+#[test]
+fn test_empty_list() {
+    let ddb_json = r#"{"Item": {"empty": {"L": []}}}"#;
+    let result = convert_test(ddb_json);
+    let expected = r#"{"empty": []}"#;
     assert_eq!(result, expected);
 }
 
@@ -110,8 +134,31 @@ fn test_list_type() {
 fn test_map_type() {
     let ddb_json = r#"{"Item": {"metadata": {"M": {"key1": {"S": "value1"}, "key2": {"N": "999"}}}}}"#;
     let result = convert_test(ddb_json);
-    // TODO: M type is missing closing brace - this is a known bug
-    let expected = r#"{"metadata": {}"#;
+    let expected = r#"{"metadata": {"key1": "value1","key2": 999}}"#;
+    assert_eq!(result, expected);
+}
+
+#[test]
+fn test_nested_map() {
+    let ddb_json = r#"{"Item": {"outer": {"M": {"inner": {"M": {"deep": {"S": "nested"}}}}}}}"#;
+    let result = convert_test(ddb_json);
+    let expected = r#"{"outer": {"inner": {"deep": "nested"}}}"#;
+    assert_eq!(result, expected);
+}
+
+#[test]
+fn test_map_with_mixed_types() {
+    let ddb_json = r#"{"Item": {"data": {"M": {"str": {"S": "hello"}, "num": {"N": "123"}, "bool": {"BOOL": true}, "null": {"NULL": true}}}}}"#;
+    let result = convert_test(ddb_json);
+    let expected = r#"{"data": {"str": "hello","num": 123,"bool": true,"null": null}}"#;
+    assert_eq!(result, expected);
+}
+
+#[test]
+fn test_empty_map() {
+    let ddb_json = r#"{"Item": {"empty": {"M": {}}}}"#;
+    let result = convert_test(ddb_json);
+    let expected = r#"{"empty": {}}"#;
     assert_eq!(result, expected);
 }
 

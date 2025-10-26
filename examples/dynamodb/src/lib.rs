@@ -210,8 +210,11 @@ fn on_map_begin<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton
     StreamOp::None
 }
 
-fn on_type_descriptor_object<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, _baton: DdbBaton<'_, '_, W>) -> StreamOp {
-    // Type descriptor object - just let scan handle it, don't write anything yet
+fn on_type_descriptor_object<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
+    // Type descriptor object - just let scan handle it
+    // But if we're inside an L array, write comma before this element
+    let mut conv = baton.borrow_mut();
+    conv.write_comma();
     StreamOp::None
 }
 
@@ -255,6 +258,24 @@ fn on_set_number_element<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R
     StreamOp::ValueIsConsumed
 }
 
+/// Helper to check if we're in a context where type descriptors appear
+/// Type descriptors can appear under:
+/// - Item (top level)
+/// - M (Map object values)
+/// - L (List array elements)
+fn is_type_descriptor_context(mut ctx: ContextIter) -> bool {
+    // Walk up the context to find if we're under Item, M, or L
+    loop {
+        match ctx.next() {
+            Some(b"Item") => return true,
+            Some(b"M") => return true,
+            Some(b"L") => return true,
+            Some(b"#top") | None => return false,
+            Some(_) => continue,
+        }
+    }
+}
+
 fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
     structural: StructuralPseudoname,
     context: ContextIter,
@@ -265,14 +286,14 @@ fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
         return Some(on_item_begin);
     }
 
-    // Match fields inside Item - these will be type descriptor objects
+    // Match field keys - can be inside Item or inside M objects
     if structural == StructuralPseudoname::None {
         let mut ctx = context.clone();
         if let Some(field) = ctx.next() {
             if field != b"#top" && field != b"#array" {
                 if let Some(parent) = ctx.next() {
-                    if parent == b"Item" {
-                        // This is a field key inside Item
+                    // Field inside Item or inside M
+                    if parent == b"Item" || parent == b"M" {
                         // Store field name and prepare to write it
                         let mut conv = baton.borrow_mut();
                         #[allow(unsafe_code)]
@@ -286,14 +307,22 @@ fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
         }
     }
 
-    // Match type descriptor objects - these are Objects that are values of fields in Item
+    // Match type descriptor objects - Objects that are values of fields or array elements
     if structural == StructuralPseudoname::Object {
         let mut ctx = context.clone();
-        if let Some(field_name) = ctx.next() {
-            if field_name != b"#top" && field_name != b"#array" {
+        if let Some(first) = ctx.next() {
+            // Type descriptors under M or Item fields
+            if first != b"#top" && first != b"#array" {
                 if let Some(parent) = ctx.next() {
-                    if parent == b"Item" {
-                        // This is a type descriptor object - just let scan handle it
+                    if parent == b"Item" || parent == b"M" {
+                        return Some(on_type_descriptor_object);
+                    }
+                }
+            }
+            // Type descriptors inside L arrays: context is [#array, L, ...]
+            else if first == b"#array" {
+                if let Some(parent) = ctx.next() {
+                    if parent == b"L" {
                         return Some(on_type_descriptor_object);
                     }
                 }
@@ -301,28 +330,39 @@ fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
         }
     }
 
-    // Match type descriptor keys (N, S, SS, etc.) - these are keys inside the type descriptor object
+    // Match type descriptor keys (N, S, SS, M, L, etc.)
     if structural == StructuralPseudoname::None {
         let mut ctx = context.clone();
         if let Some(type_key) = ctx.next() {
-            if let Some(field_name) = ctx.next() {
-                if field_name != b"#top" && field_name != b"#array" {
+            if let Some(second) = ctx.next() {
+                // Type keys in normal fields: [typeKey, fieldName, Item/M, ...]
+                // Type keys in L arrays: [typeKey, #array, L, ...]
+                let in_type_descriptor_context = if second == b"#array" {
+                    // Inside an array - check if it's an L array
                     if let Some(parent) = ctx.next() {
-                        if parent == b"Item" {
-                            // This is a type descriptor key like "N", "S", etc.
-                            // Match specific types and return appropriate handlers
-                            match type_key {
-                                b"S" | b"B" => return Some(on_string_value),
-                                b"N" => return Some(on_number_value),
-                                b"BOOL" => return Some(on_bool_value),
-                                b"NULL" => return Some(on_null_value),
-                                b"SS" | b"BS" => return Some(on_string_set_begin),
-                                b"NS" => return Some(on_number_set_begin),
-                                b"L" => return Some(on_list_begin),
-                                b"M" => return Some(on_map_begin),
-                                _ => return None,
-                            }
-                        }
+                        parent == b"L"
+                    } else {
+                        false
+                    }
+                } else if second != b"#top" {
+                    // Normal field context
+                    is_type_descriptor_context(ctx.clone())
+                } else {
+                    false
+                };
+
+                if in_type_descriptor_context {
+                    // Match specific type keys and return handlers
+                    match type_key {
+                        b"S" | b"B" => return Some(on_string_value),
+                        b"N" => return Some(on_number_value),
+                        b"BOOL" => return Some(on_bool_value),
+                        b"NULL" => return Some(on_null_value),
+                        b"SS" | b"BS" => return Some(on_string_set_begin),
+                        b"NS" => return Some(on_number_set_begin),
+                        b"L" => return Some(on_list_begin),
+                        b"M" => return Some(on_map_begin),
+                        _ => return None,
                     }
                 }
             }
@@ -360,8 +400,18 @@ fn on_map_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str
     Ok(())
 }
 
-fn on_type_descriptor_end<W: IoWrite>(_baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
+fn on_type_descriptor_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     // Type descriptor object ended - nothing to write, value was already written
+    // But if it's inside an L array, we need to set pending_comma for the next element
+    let mut conv = baton.borrow_mut();
+    // The value handlers already set pending_comma, so we're good
+    Ok(())
+}
+
+fn on_list_element_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
+    // Element in L array ended - prepare comma for next element
+    let mut conv = baton.borrow_mut();
+    conv.pending_comma = true;
     Ok(())
 }
 
@@ -375,15 +425,28 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
         return Some(on_item_end);
     }
 
-    // Match end of type descriptor objects - any object that ends and isn't Item
+    // Match end of M objects (Map values inside type descriptors)
     if structural == StructuralPseudoname::Object {
         let mut ctx = context.clone();
         if let Some(first) = ctx.next() {
-            // If first element is "Item", it's the Item object ending
-            if first == b"Item" {
+            // Check if this is an M object ending
+            if first == b"M" {
+                return Some(on_map_end);
+            }
+            // Type descriptor objects inside L arrays
+            else if first == b"#array" {
+                if let Some(parent) = ctx.next() {
+                    if parent == b"L" {
+                        // This is an element in L array - need to handle comma
+                        return Some(on_list_element_end);
+                    }
+                }
+            }
+            // Match end of type descriptor objects (not inside arrays)
+            else if first == b"Item" {
                 // Already handled above
-            } else if first != b"#top" && first != b"#array" {
-                // This is some other object - likely a type descriptor
+            } else if first != b"#top" {
+                // This is a type descriptor object (like {"S": "..."})
                 return Some(on_type_descriptor_end);
             }
         }
@@ -394,7 +457,7 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
         let mut ctx = context.clone();
         if let Some(type_key) = ctx.next() {
             if let Some(_field_name) = ctx.next() {
-                if let Some(_parent) = ctx.next() {
+                if is_type_descriptor_context(ctx) {
                     match type_key {
                         b"SS" | b"BS" | b"NS" | b"L" => return Some(on_set_or_list_end),
                         _ => {}
@@ -403,10 +466,6 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
             }
         }
     }
-
-    // Match end of M (Map) - but this conflicts with type descriptor end above
-    // Actually M objects are inside type descriptors, so they have a different context
-    // Let me check the context more carefully...
 
     None
 }
