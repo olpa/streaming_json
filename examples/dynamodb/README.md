@@ -49,14 +49,14 @@ ddb_convert <MODE> [OPTIONS]
 ### Conversion Modes
 
 - `from-ddb` - Convert DynamoDB JSON to standard JSON
-- `to-ddb` - Convert standard JSON to DynamoDB JSON *(coming soon)*
+- `to-ddb` - Convert standard JSON to DynamoDB JSON
 
 ### Options
 
 - `-i, --input <FILE>` - Input file (reads from stdin if not specified)
 - `-o, --output <FILE>` - Output file (writes to stdout if not specified)
 - `-p, --pretty` - Pretty-print the output JSON
-- `--without-item` - Omit the top-level "Item" wrapper *(to-ddb mode only)*
+- `--without-item` - Omit the top-level "Item" wrapper (only for `to-ddb` mode)
 
 ## Examples
 
@@ -81,6 +81,36 @@ ddb_convert from-ddb -i book-dynamodb.json -p
 ```bash
 aws dynamodb get-item --table-name Books --key '{"Id":{"N":"103"}}' \
   | ddb_convert from-ddb -p
+```
+
+### Convert from Standard JSON to DynamoDB JSON
+
+**From file to file:**
+```bash
+ddb_convert to-ddb -i user.json -o user-dynamodb.json
+```
+
+**Using stdin/stdout:**
+```bash
+cat user.json | ddb_convert to-ddb > user-dynamodb.json
+```
+
+**Without the Item wrapper:**
+```bash
+# With Item wrapper (default)
+ddb_convert to-ddb -i user.json
+# Output: {"Item":{"name":{"S":"Alice"},"age":{"N":"30"}}}
+
+# Without Item wrapper
+ddb_convert to-ddb -i user.json --without-item
+# Output: {"name":{"S":"Alice"},"age":{"N":"30"}}
+```
+
+**Prepare data for DynamoDB PutItem:**
+```bash
+# Convert your JSON and pipe to AWS CLI
+cat mydata.json | ddb_convert to-ddb | \
+  aws dynamodb put-item --table-name MyTable --item file:///dev/stdin
 ```
 
 ### Type Conversions
@@ -145,10 +175,19 @@ The converter handles all DynamoDB data types:
 
 ## Common Use Cases
 
-1. **Export DynamoDB data to standard format** for use with other tools
+### From DynamoDB to Standard JSON (from-ddb)
+
+1. **Export DynamoDB data** to standard format for use with other tools
 2. **Debug DynamoDB responses** by converting to readable JSON
 3. **Batch process DynamoDB exports** using shell pipelines
 4. **Transform data** before importing into other databases
+
+### From Standard JSON to DynamoDB (to-ddb)
+
+1. **Prepare data for DynamoDB import** from existing JSON files
+2. **Generate test data** in DynamoDB format for testing
+3. **Convert application JSON** to DynamoDB format for API calls
+4. **Batch insert data** by converting JSON files to DynamoDB format
 
 ## Error Handling
 
@@ -176,5 +215,12 @@ Sample data files are available in the `fixture/` directory for testing:
 
 ## Limitations
 
-- Currently only supports `from-ddb` conversion (DynamoDB → Standard)
-- The `to-ddb` mode is planned for a future release
+### from-ddb mode
+- Fully functional for all DynamoDB types
+
+### to-ddb mode
+- Currently in development (77% of tests passing)
+- String, boolean, and null conversions: ✅ Fully working
+- Numbers: ⚠️ Known issue with number conversion
+- Arrays and nested structures: ⚠️ Partial support
+- Sets (SS, NS, BS): Currently converted as Lists (L) rather than native Set types

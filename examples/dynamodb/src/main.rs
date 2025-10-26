@@ -31,7 +31,10 @@ struct Args {
     #[arg(short, long, default_value_t = false)]
     pretty: bool,
 
-    /// Omit top-level "Item" wrapper when converting to DynamoDB format (to-ddb mode only)
+    /// Omit top-level "Item" wrapper (only applies to to-ddb mode)
+    ///
+    /// When converting normal JSON to DynamoDB format, the output is wrapped
+    /// in {"Item": {...}} by default. Use this flag to omit the wrapper.
     #[arg(long = "without-item", default_value_t = false)]
     without_item: bool,
 }
