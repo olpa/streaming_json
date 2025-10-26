@@ -107,7 +107,6 @@ fn test_list_type() {
 }
 
 #[test]
-#[ignore] // TODO: Fix M object ending in L arrays
 fn test_list_with_maps() {
     let ddb_json = r#"{"Item": {"users": {"L": [{"M": {"name": {"S": "Alice"}, "age": {"N": "30"}}}, {"M": {"name": {"S": "Bob"}, "age": {"N": "25"}}}]}}}"#;
     let result = convert_test(ddb_json);
@@ -307,16 +306,14 @@ fn test_field_named_NULL_inside_M() {
 }
 
 #[test]
-#[ignore] // TODO: Fix field names that match array type descriptors (SS, NS, BS)
 fn test_field_named_SS_inside_M() {
-    let ddb_json = r#"{"Item": {"data": {"M": {"SS": {"SS": ["a", "b"}}}}}"#;
+    let ddb_json = r#"{"Item": {"data": {"M": {"SS": {"SS": ["a", "b"]}}}}}"#;
     let result = convert_test(ddb_json);
     let expected = r#"{"data": {"SS": ["a","b"]}}"#;
     assert_eq!(result, expected);
 }
 
 #[test]
-#[ignore] // TODO: Fix field named "Item" handling
 fn test_field_named_Item_inside_M() {
     let ddb_json = r#"{"Item": {"data": {"M": {"Item": {"S": "value"}}}}}"#;
     let result = convert_test(ddb_json);
@@ -325,7 +322,6 @@ fn test_field_named_Item_inside_M() {
 }
 
 #[test]
-#[ignore] // TODO: Fix closing brace for deeply nested M fields
 fn test_nested_M_fields() {
     let ddb_json = r#"{"Item": {"a": {"M": {"M": {"M": {"b": {"S": "c"}}}}}}}"#;
     let result = convert_test(ddb_json);

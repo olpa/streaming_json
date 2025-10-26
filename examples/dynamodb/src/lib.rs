@@ -292,14 +292,24 @@ fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
         if let Some(field) = ctx.next() {
             if field != b"#top" && field != b"#array" {
                 if let Some(parent) = ctx.next() {
-                    // Field inside Item
+                    // Field inside top-level Item
                     if parent == b"Item" {
-                        let mut conv = baton.borrow_mut();
-                        #[allow(unsafe_code)]
-                        let field_slice: &'workbuf [u8] =
-                            unsafe { core::mem::transmute::<&[u8], &'workbuf [u8]>(field) };
-                        conv.current_field = Some(field_slice);
-                        return Some(on_item_field_key);
+                        // Check if this is really the top-level Item or a field named "Item"
+                        // Top-level Item has context [..., Item, #top]
+                        // Field named "Item" has context [..., Item, M, ...]
+                        if let Some(grandparent) = ctx.next() {
+                            if grandparent == b"#top" {
+                                // This is a field inside the top-level Item
+                                let mut conv = baton.borrow_mut();
+                                #[allow(unsafe_code)]
+                                let field_slice: &'workbuf [u8] =
+                                    unsafe { core::mem::transmute::<&[u8], &'workbuf [u8]>(field) };
+                                conv.current_field = Some(field_slice);
+                                return Some(on_item_field_key);
+                            }
+                            // Otherwise, this might be a type key under a field named "Item"
+                            // Fall through to type descriptor matching
+                        }
                     }
                     // Field inside M type object
                     // Need to distinguish from type keys inside a field named "M"
@@ -424,11 +434,9 @@ fn on_map_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str
     Ok(())
 }
 
-fn on_type_descriptor_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
+fn on_type_descriptor_end<W: IoWrite>(_baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     // Type descriptor object ended - nothing to write, value was already written
-    // But if it's inside an L array, we need to set pending_comma for the next element
-    let mut conv = baton.borrow_mut();
-    // The value handlers already set pending_comma, so we're good
+    // The value handlers already set pending_comma for the next element
     Ok(())
 }
 
@@ -455,13 +463,35 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
         if let Some(first) = ctx.next() {
             // Check if this is an M object ending
             // An M type object has context: [M, fieldName, Item/M/L, ...]
-            // A field named "M" has context: [M, M, ...]
-            // We need the second element to distinguish
+            // When we have [M, M, ...], need to count M's to determine
+            // Odd number of consecutive M's = M type object
+            // Even number = field named "M"
             if first == b"M" {
                 if let Some(second) = ctx.next() {
-                    // If second is also "M", this is a field named "M" inside an M type
-                    // If second is "Item" or a field name, this is a real M type object
-                    if second != b"M" && second != b"#top" && second != b"#array" {
+                    if second == b"M" {
+                        // Count consecutive M's after the first one
+                        let mut m_count = 2; // first and second
+                        let mut ctx_check = ctx.clone();
+                        while let Some(next) = ctx_check.next() {
+                            if next == b"M" {
+                                m_count += 1;
+                            } else {
+                                break;
+                            }
+                        }
+                        // Odd count = M type object ending
+                        if m_count % 2 == 1 {
+                            return Some(on_map_end);
+                        }
+                        // Even count = field named "M", fall through
+                    } else if second == b"#array" {
+                        // M object inside an L array
+                        if let Some(parent) = ctx.next() {
+                            if parent == b"L" {
+                                return Some(on_map_end);
+                            }
+                        }
+                    } else if second != b"#top" {
                         // This is a real M type object ending
                         return Some(on_map_end);
                     }
