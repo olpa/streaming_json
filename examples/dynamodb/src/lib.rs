@@ -14,6 +14,42 @@ use scan_json::stack::ContextIter;
 use core::cell::RefCell;
 use u8pool::U8Pool;
 
+/// Detailed error information for conversion errors
+#[derive(Debug, Clone)]
+pub enum ConversionError {
+    /// RJiter error with context
+    RJiterError {
+        kind: rjiter::error::ErrorType,
+        position: usize,
+        context: &'static str,
+    },
+    /// IO error with context
+    IOError {
+        kind: embedded_io::ErrorKind,
+        position: usize,
+        context: &'static str,
+    },
+    /// Scan error (from scan_json library)
+    ScanError(scan_json::Error),
+}
+
+#[cfg(feature = "std")]
+impl core::fmt::Display for ConversionError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            ConversionError::RJiterError { kind, position, context } => {
+                write!(f, "RJiter error at position {}: {:?} (while {})", position, kind, context)
+            }
+            ConversionError::IOError { kind, position, context } => {
+                write!(f, "IO error at position {}: {:?} (while {})", position, kind, context)
+            }
+            ConversionError::ScanError(err) => {
+                write!(f, "Scan error: {:?}", err)
+            }
+        }
+    }
+}
+
 pub struct DdbConverter<'a, 'workbuf, W: IoWrite> {
     writer: &'a mut W,
     pending_comma: bool,
@@ -21,6 +57,7 @@ pub struct DdbConverter<'a, 'workbuf, W: IoWrite> {
     depth: usize,
     current_field: Option<&'workbuf [u8]>,
     has_item_wrapper: Option<bool>, // None = unknown, Some(true) = has Item, Some(false) = no Item
+    last_error: Option<ConversionError>, // Stores detailed error information
 }
 
 impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
@@ -32,7 +69,24 @@ impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
             depth: 0,
             current_field: None,
             has_item_wrapper: None,
+            last_error: None,
         }
+    }
+
+    fn store_rjiter_error(&mut self, error: rjiter::Error, position: usize, context: &'static str) {
+        self.last_error = Some(ConversionError::RJiterError {
+            kind: error.error_type,
+            position,
+            context,
+        });
+    }
+
+    fn store_io_error(&mut self, kind: embedded_io::ErrorKind, position: usize, context: &'static str) {
+        self.last_error = Some(ConversionError::IOError {
+            kind,
+            position,
+            context,
+        });
     }
 
     fn write(&mut self, bytes: &[u8]) {
@@ -113,18 +167,23 @@ fn on_item_field_key<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, 
 // Type descriptor value handlers - these only use peek and write_long_bytes
 
 fn on_string_value<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
+    let position = rjiter.current_index();
     let peek = match rjiter.peek() {
         Ok(p) => p,
-        Err(_) => return StreamOp::Error("Failed to peek string"),
+        Err(e) => {
+            baton.borrow_mut().store_rjiter_error(e, position, "peeking S (string) type value");
+            return StreamOp::Error("Failed to peek string value");
+        }
     };
     if peek != Peek::String {
-        return StreamOp::Error("Expected string value");
+        return StreamOp::Error("Expected string value for S type");
     }
 
     let mut conv = baton.borrow_mut();
     conv.write(b"\"");
-    if let Err(_) = rjiter.write_long_bytes(conv.writer) {
-        return StreamOp::Error("Failed to write string");
+    if let Err(e) = rjiter.write_long_bytes(conv.writer) {
+        conv.store_rjiter_error(e, position, "writing S (string) type value");
+        return StreamOp::Error("Failed to write string value");
     }
     conv.write(b"\"");
     conv.pending_comma = true;
@@ -132,60 +191,76 @@ fn on_string_value<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, bat
 }
 
 fn on_number_value<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
+    let position = rjiter.current_index();
     let peek = match rjiter.peek() {
         Ok(p) => p,
-        Err(_) => return StreamOp::Error("Failed to peek number"),
+        Err(e) => {
+            baton.borrow_mut().store_rjiter_error(e, position, "peeking N (number) type value");
+            return StreamOp::Error("Failed to peek number value");
+        }
     };
     if peek != Peek::String {
-        return StreamOp::Error("Expected string value for number");
+        return StreamOp::Error("Expected string value for N (number) type");
     }
 
     let mut conv = baton.borrow_mut();
-    if let Err(_) = rjiter.write_long_bytes(conv.writer) {
-        return StreamOp::Error("Failed to write number");
+    if let Err(e) = rjiter.write_long_bytes(conv.writer) {
+        conv.store_rjiter_error(e, position, "writing N (number) type value");
+        return StreamOp::Error("Failed to write number value");
     }
     conv.pending_comma = true;
     StreamOp::ValueIsConsumed  // Tell scan we consumed the value
 }
 
 fn on_bool_value<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
+    let position = rjiter.current_index();
     // Peek to see if it's true or false
     let peek = match rjiter.peek() {
         Ok(p) => p,
-        Err(_) => return StreamOp::Error("Failed to peek bool"),
+        Err(e) => {
+            baton.borrow_mut().store_rjiter_error(e, position, "peeking BOOL type value");
+            return StreamOp::Error("Failed to peek boolean value");
+        }
     };
 
     let mut conv = baton.borrow_mut();
     match peek {
         Peek::True => {
-            if rjiter.known_bool(peek).is_err() {
-                return StreamOp::Error("Failed to consume true");
+            if let Err(e) = rjiter.known_bool(peek) {
+                conv.store_rjiter_error(e, position, "consuming BOOL type value (true)");
+                return StreamOp::Error("Failed to consume true value");
             }
             conv.write(b"true");
         }
         Peek::False => {
-            if rjiter.known_bool(peek).is_err() {
-                return StreamOp::Error("Failed to consume false");
+            if let Err(e) = rjiter.known_bool(peek) {
+                conv.store_rjiter_error(e, position, "consuming BOOL type value (false)");
+                return StreamOp::Error("Failed to consume false value");
             }
             conv.write(b"false");
         }
-        _ => return StreamOp::Error("Expected boolean value"),
+        _ => return StreamOp::Error("Expected boolean value for BOOL type"),
     }
     conv.pending_comma = true;
     StreamOp::ValueIsConsumed
 }
 
 fn on_null_value<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
+    let position = rjiter.current_index();
     // NULL value in DDB is {"NULL": true}
     let peek = match rjiter.peek() {
         Ok(p) => p,
-        Err(_) => return StreamOp::Error("Failed to peek null"),
+        Err(e) => {
+            baton.borrow_mut().store_rjiter_error(e, position, "peeking NULL type value");
+            return StreamOp::Error("Failed to peek NULL value");
+        }
     };
     if peek != Peek::True {
-        return StreamOp::Error("Expected true for NULL");
+        return StreamOp::Error("Expected true for NULL type");
     }
-    if rjiter.known_bool(peek).is_err() {
-        return StreamOp::Error("Failed to consume null");
+    if let Err(e) = rjiter.known_bool(peek) {
+        baton.borrow_mut().store_rjiter_error(e, position, "consuming NULL type value");
+        return StreamOp::Error("Failed to consume NULL value");
     }
 
     let mut conv = baton.borrow_mut();
@@ -231,20 +306,25 @@ fn on_type_descriptor_object<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJi
 }
 
 fn on_set_string_element<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
+    let position = rjiter.current_index();
     // String element in SS/BS set - write with quotes and comma
     let peek = match rjiter.peek() {
         Ok(p) => p,
-        Err(_) => return StreamOp::Error("Failed to peek set string"),
+        Err(e) => {
+            baton.borrow_mut().store_rjiter_error(e, position, "peeking SS/BS (string set) element");
+            return StreamOp::Error("Failed to peek string set element");
+        }
     };
     if peek != Peek::String {
-        return StreamOp::Error("Expected string in set");
+        return StreamOp::Error("Expected string in SS/BS set");
     }
 
     let mut conv = baton.borrow_mut();
     conv.write_comma();
     conv.write(b"\"");
-    if let Err(_) = rjiter.write_long_bytes(conv.writer) {
-        return StreamOp::Error("Failed to write set string");
+    if let Err(e) = rjiter.write_long_bytes(conv.writer) {
+        conv.store_rjiter_error(e, position, "writing SS/BS (string set) element");
+        return StreamOp::Error("Failed to write string set element");
     }
     conv.write(b"\"");
     conv.pending_comma = true;
@@ -252,19 +332,24 @@ fn on_set_string_element<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R
 }
 
 fn on_set_number_element<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
+    let position = rjiter.current_index();
     // Number element in NS set - write without quotes but with comma
     let peek = match rjiter.peek() {
         Ok(p) => p,
-        Err(_) => return StreamOp::Error("Failed to peek set number"),
+        Err(e) => {
+            baton.borrow_mut().store_rjiter_error(e, position, "peeking NS (number set) element");
+            return StreamOp::Error("Failed to peek number set element");
+        }
     };
     if peek != Peek::String {
-        return StreamOp::Error("Expected string (number) in set");
+        return StreamOp::Error("Expected string (number) in NS set");
     }
 
     let mut conv = baton.borrow_mut();
     conv.write_comma();
-    if let Err(_) = rjiter.write_long_bytes(conv.writer) {
-        return StreamOp::Error("Failed to write set number");
+    if let Err(e) = rjiter.write_long_bytes(conv.writer) {
+        conv.store_rjiter_error(e, position, "writing NS (number set) element");
+        return StreamOp::Error("Failed to write number set element");
     }
     conv.pending_comma = true;
     StreamOp::ValueIsConsumed
@@ -577,37 +662,54 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
 /// * `pretty` - Whether to pretty-print the output
 ///
 /// # Returns
-/// `Ok(())` on success, or an error message on failure
+/// `Ok(())` on success, or `Err(ConversionError)` with detailed error information on failure
 pub fn convert_ddb_to_normal<R: IoRead, W: IoWrite>(
     reader: &mut R,
     writer: &mut W,
     rjiter_buffer: &mut [u8],
     context_buffer: &mut [u8],
     pretty: bool,
-) -> Result<(), &'static str> {
+) -> Result<(), ConversionError> {
     let mut rjiter = RJiter::new(reader, rjiter_buffer);
 
     let converter = DdbConverter::new(writer, pretty);
     let baton = RefCell::new(converter);
 
     let mut context = U8Pool::new(context_buffer, 32)
-        .map_err(|_| "Failed to create context pool")?;
+        .map_err(|_| ConversionError::ScanError(
+            scan_json::Error::InternalError {
+                position: 0,
+                message: "Failed to create context pool"
+            }
+        ))?;
 
-    scan(
+    if let Err(e) = scan(
         find_action,
         find_end_action,
         &mut rjiter,
         &baton,
         &mut context,
         &Options::new(),
-    )
-    .map_err(|_| "Scan error")?;
+    ) {
+        // Check if there's a stored detailed error in the baton
+        let stored_error = baton.borrow().last_error.clone();
+        if let Some(err) = stored_error {
+            return Err(err);
+        }
+        // Otherwise return the scan error
+        return Err(ConversionError::ScanError(e));
+    }
 
     // If there was no Item wrapper, we need to close the root object
     let conv = baton.borrow();
     if conv.has_item_wrapper == Some(false) {
         drop(conv); // Release borrow before calling end handler
-        on_item_end(&baton)?;
+        on_item_end(&baton).map_err(|msg| ConversionError::ScanError(
+            scan_json::Error::InternalError {
+                position: rjiter.current_index(),
+                message: msg,
+            }
+        ))?;
     }
 
     Ok(())

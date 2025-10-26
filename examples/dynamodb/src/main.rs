@@ -1,5 +1,5 @@
 use clap::{Parser, ValueEnum};
-use ddb_convert::convert_ddb_to_normal;
+use ddb_convert::{convert_ddb_to_normal, ConversionError};
 use std::io;
 use embedded_io_adapters::std::FromStd;
 
@@ -102,6 +102,27 @@ fn main() {
 
             if let Err(e) = result {
                 eprintln!("Conversion error: {}", e);
+
+                // Provide additional context based on error type
+                match &e {
+                    ConversionError::RJiterError { kind, position, context } => {
+                        eprintln!("  Error type: RJiter parsing error");
+                        eprintln!("  Position in input: {} bytes", position);
+                        eprintln!("  Context: {}", context);
+                        eprintln!("  Details: {:?}", kind);
+                    }
+                    ConversionError::IOError { kind, position, context } => {
+                        eprintln!("  Error type: IO error");
+                        eprintln!("  Position in input: {} bytes", position);
+                        eprintln!("  Context: {}", context);
+                        eprintln!("  Details: {:?}", kind);
+                    }
+                    ConversionError::ScanError(scan_err) => {
+                        eprintln!("  Error type: JSON scanning error");
+                        eprintln!("  Details: {:?}", scan_err);
+                    }
+                }
+
                 std::process::exit(1);
             }
         }
