@@ -3,6 +3,14 @@ name = "ddb_convert"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "ddb_convert"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ddb_convert"
+path = "src/main.rs"
+
 [dependencies]
 scan_json = { path = "../../scan_json" }
 rjiter = "1.2"
