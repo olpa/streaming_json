@@ -129,12 +129,11 @@ fn on_item_begin<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, bato
     StreamOp::None
 }
 
-/// Handle the end of Item object - write closing brace and newline for JSONL format
+/// Handle the end of Item object - write closing brace
 fn on_item_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     let mut conv = baton.borrow_mut();
     conv.newline();
     conv.write(b"}");
-    conv.write(b"\n");  // Always write newline after each JSON object for JSONL format
     Ok(())
 }
 
@@ -712,6 +711,431 @@ pub fn convert_ddb_to_normal<R: IoRead, W: IoWrite>(
             }
         ))?;
     }
+
+    Ok(())
+}
+
+// ============================================================================
+// Normal JSON to DynamoDB JSON conversion
+// ============================================================================
+
+pub struct NormalToDdbConverter<'a, 'workbuf, W: IoWrite> {
+    writer: &'a mut W,
+    pending_comma: bool,
+    with_item_wrapper: bool,
+    is_first_object: bool,
+    current_field: Option<&'workbuf [u8]>,
+}
+
+impl<'a, 'workbuf, W: IoWrite> NormalToDdbConverter<'a, 'workbuf, W> {
+    fn new(writer: &'a mut W, with_item_wrapper: bool) -> Self {
+        Self {
+            writer,
+            pending_comma: false,
+            with_item_wrapper,
+            is_first_object: true,
+            current_field: None,
+        }
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        let _ = self.writer.write_all(bytes);
+    }
+
+    fn write_comma(&mut self) {
+        if self.pending_comma {
+            self.write(b",");
+            self.pending_comma = false;
+        }
+    }
+}
+
+type NormalToDdbBaton<'a, 'workbuf, W> = &'a RefCell<NormalToDdbConverter<'a, 'workbuf, W>>;
+
+fn on_root_object_begin<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: NormalToDdbBaton<'_, '_, W>) -> StreamOp {
+    let mut conv = baton.borrow_mut();
+    if conv.with_item_wrapper {
+        conv.write(b"{\"Item\":{");
+    } else {
+        conv.write(b"{");
+    }
+    conv.pending_comma = false;
+    conv.is_first_object = false;
+    StreamOp::None
+}
+
+fn on_root_field_key<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: NormalToDdbBaton<'_, '_, W>) -> StreamOp {
+    let field_name = {
+        let conv = baton.borrow();
+        conv.current_field.expect("current_field should be set").to_vec()
+    };
+
+    let mut conv = baton.borrow_mut();
+    conv.write_comma();
+    conv.write(b"\"");
+    conv.write(&field_name);
+    conv.write(b"\":{");
+    conv.pending_comma = false;
+    StreamOp::None
+}
+
+fn on_nested_field_key<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: NormalToDdbBaton<'_, '_, W>) -> StreamOp {
+    let field_name = {
+        let conv = baton.borrow();
+        conv.current_field.expect("current_field should be set").to_vec()
+    };
+
+    let mut conv = baton.borrow_mut();
+    conv.write_comma();
+    conv.write(b"\"");
+    conv.write(&field_name);
+    conv.write(b"\":{");
+    conv.pending_comma = false;
+    StreamOp::None
+}
+
+fn on_string_value_toddb<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: NormalToDdbBaton<'_, '_, W>) -> StreamOp {
+    let mut conv = baton.borrow_mut();
+    conv.write(b"\"S\":\"");
+    let _ = rjiter.write_long_bytes(conv.writer);
+    conv.write(b"\"}");
+    conv.pending_comma = true;
+    StreamOp::ValueIsConsumed
+}
+
+fn on_number_value_toddb<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: NormalToDdbBaton<'_, '_, W>) -> StreamOp {
+    // For numbers, we need to read the value and write it as a string
+    // First, get the number as a string from the JSON
+    let number_bytes = match rjiter.known_bytes() {
+        Ok(bytes) => bytes.to_vec(),
+        Err(_) => return StreamOp::Error("Failed to read number bytes"),
+    };
+
+    let mut conv = baton.borrow_mut();
+    conv.write(b"\"N\":\"");
+    conv.write(&number_bytes);
+    conv.write(b"\"}");
+    conv.pending_comma = true;
+    StreamOp::ValueIsConsumed
+}
+
+fn on_bool_value_toddb<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: NormalToDdbBaton<'_, '_, W>) -> StreamOp {
+    let peek = match rjiter.peek() {
+        Ok(p) => p,
+        Err(_) => return StreamOp::Error("Failed to peek boolean value"),
+    };
+
+    let mut conv = baton.borrow_mut();
+    match peek {
+        Peek::True => {
+            let _ = rjiter.known_bool(peek);
+            conv.write(b"\"BOOL\":true}");
+        }
+        Peek::False => {
+            let _ = rjiter.known_bool(peek);
+            conv.write(b"\"BOOL\":false}");
+        }
+        _ => return StreamOp::Error("Expected boolean value"),
+    }
+    conv.pending_comma = true;
+    StreamOp::ValueIsConsumed
+}
+
+fn on_null_value_toddb<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: NormalToDdbBaton<'_, '_, W>) -> StreamOp {
+    let peek = match rjiter.peek() {
+        Ok(p) => p,
+        Err(_) => return StreamOp::Error("Failed to peek null value"),
+    };
+    if peek != Peek::Null {
+        return StreamOp::Error("Expected null value");
+    }
+    let _ = rjiter.known_null();
+
+    let mut conv = baton.borrow_mut();
+    conv.write(b"\"NULL\":true}");
+    conv.pending_comma = true;
+    StreamOp::ValueIsConsumed
+}
+
+fn on_atom_value_toddb<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: NormalToDdbBaton<'_, '_, W>) -> StreamOp {
+    // Peek to determine the actual type
+    let peek = match rjiter.peek() {
+        Ok(p) => p,
+        Err(_) => return StreamOp::Error("Failed to peek atom value"),
+    };
+
+    match peek {
+        Peek::String => on_string_value_toddb(rjiter, baton),
+        Peek::True | Peek::False => on_bool_value_toddb(rjiter, baton),
+        Peek::Null => on_null_value_toddb(rjiter, baton),
+        // Numbers come through as different peek types depending on format
+        _ => on_number_value_toddb(rjiter, baton),
+    }
+}
+
+fn on_array_begin_toddb<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: NormalToDdbBaton<'_, '_, W>) -> StreamOp {
+    let mut conv = baton.borrow_mut();
+    conv.write(b"\"L\":[");
+    conv.pending_comma = false;
+    StreamOp::None
+}
+
+fn on_array_element_toddb<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: NormalToDdbBaton<'_, '_, W>) -> StreamOp {
+    let mut conv = baton.borrow_mut();
+    conv.write_comma();
+    conv.write(b"{");
+    conv.pending_comma = false;
+    StreamOp::None
+}
+
+fn on_nested_object_begin_toddb<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: NormalToDdbBaton<'_, '_, W>) -> StreamOp {
+    let mut conv = baton.borrow_mut();
+    conv.write(b"\"M\":{");
+    conv.pending_comma = false;
+    StreamOp::None
+}
+
+fn on_root_object_end<W: IoWrite>(baton: NormalToDdbBaton<'_, '_, W>) -> Result<(), &'static str> {
+    let mut conv = baton.borrow_mut();
+    if conv.with_item_wrapper {
+        conv.write(b"}}");
+    } else {
+        conv.write(b"}");
+    }
+    Ok(())
+}
+
+fn on_nested_object_end<W: IoWrite>(baton: NormalToDdbBaton<'_, '_, W>) -> Result<(), &'static str> {
+    let mut conv = baton.borrow_mut();
+    conv.write(b"}}");
+    conv.pending_comma = true;
+    Ok(())
+}
+
+fn on_array_end_toddb<W: IoWrite>(baton: NormalToDdbBaton<'_, '_, W>) -> Result<(), &'static str> {
+    let mut conv = baton.borrow_mut();
+    conv.write(b"]}");
+    conv.pending_comma = true;
+    Ok(())
+}
+
+fn on_array_element_end_toddb<W: IoWrite>(_baton: NormalToDdbBaton<'_, '_, W>) -> Result<(), &'static str> {
+    // Element wrapper already closed in value handlers
+    Ok(())
+}
+
+fn find_action_toddb<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
+    structural: StructuralPseudoname,
+    context: ContextIter,
+    baton: NormalToDdbBaton<'a, 'workbuf, W>,
+) -> Option<Action<NormalToDdbBaton<'a, 'workbuf, W>, R>> {
+    // Match root object
+    if structural == StructuralPseudoname::Object {
+        let mut ctx = context.clone();
+        if let Some(first) = ctx.next() {
+            if first == b"#top" {
+                // This is the root object
+                return Some(on_root_object_begin);
+            }
+        }
+    }
+
+    // Match field keys at root level
+    if structural == StructuralPseudoname::None {
+        let mut ctx = context.clone();
+        if let Some(field) = ctx.next() {
+            if let Some(parent) = ctx.next() {
+                if parent == b"#top" {
+                    // Root-level field - store field name in converter
+                    let mut conv = baton.borrow_mut();
+                    #[allow(unsafe_code)]
+                    let field_slice: &'workbuf [u8] =
+                        unsafe { core::mem::transmute::<&[u8], &'workbuf [u8]>(field) };
+                    conv.current_field = Some(field_slice);
+                    return Some(on_root_field_key);
+                } else if parent == b"M" {
+                    // Field inside M type
+                    let mut conv = baton.borrow_mut();
+                    #[allow(unsafe_code)]
+                    let field_slice: &'workbuf [u8] =
+                        unsafe { core::mem::transmute::<&[u8], &'workbuf [u8]>(field) };
+                    conv.current_field = Some(field_slice);
+                    return Some(on_nested_field_key);
+                }
+            }
+        }
+    }
+
+    // Match values at root or nested level - Atom represents all primitives
+    if structural == StructuralPseudoname::Atom {
+        let mut ctx = context.clone();
+        if let Some(first) = ctx.next() {
+            // Check if we're in an array context
+            if first == b"#array" {
+                if let Some(parent) = ctx.next() {
+                    if parent == b"L" {
+                        // Array element - need to wrap in type descriptor
+                        return Some(on_array_element_toddb);
+                    }
+                }
+            }
+            // Otherwise, this is a field value - need to determine its type
+            // The type-specific handlers will peek to determine the actual type
+        }
+        // Return a handler that will determine the type based on peek
+        return Some(on_atom_value_toddb);
+    }
+
+    // Match arrays (convert to L type)
+    if structural == StructuralPseudoname::Array {
+        let mut ctx = context.clone();
+        if let Some(first) = ctx.next() {
+            // Not in array context means this is a field value
+            if first != b"#array" {
+                return Some(on_array_begin_toddb);
+            }
+            // Inside an array means this is an array element
+            if first == b"#array" {
+                if let Some(parent) = ctx.next() {
+                    if parent == b"L" {
+                        // This is an array inside an L array
+                        return Some(on_array_element_toddb);
+                    }
+                }
+            }
+        }
+    }
+
+    // Match nested objects (convert to M type)
+    if structural == StructuralPseudoname::Object {
+        let mut ctx = context.clone();
+        if let Some(first) = ctx.next() {
+            // Not at top level and not in array
+            if first != b"#top" && first != b"#array" {
+                return Some(on_nested_object_begin_toddb);
+            }
+            // Object inside an array
+            if first == b"#array" {
+                if let Some(parent) = ctx.next() {
+                    if parent == b"L" {
+                        return Some(on_array_element_toddb);
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
+fn find_end_action_toddb<'a, 'workbuf, W: IoWrite>(
+    structural: StructuralPseudoname,
+    context: ContextIter,
+    _baton: NormalToDdbBaton<'a, 'workbuf, W>,
+) -> Option<EndAction<NormalToDdbBaton<'a, 'workbuf, W>>> {
+    // Match end of root object
+    if structural == StructuralPseudoname::Object {
+        let mut ctx = context.clone();
+        if let Some(first) = ctx.next() {
+            if first == b"#top" {
+                return Some(on_root_object_end);
+            }
+            // Nested objects
+            if first != b"#array" && first != b"#top" {
+                if let Some(parent) = ctx.next() {
+                    if parent == b"M" || parent == b"#top" {
+                        return Some(on_nested_object_end);
+                    }
+                }
+            }
+            // Objects in arrays
+            if first == b"#array" {
+                if let Some(parent) = ctx.next() {
+                    if parent == b"L" {
+                        return Some(on_array_element_end_toddb);
+                    }
+                }
+            }
+        }
+    }
+
+    // Match end of arrays
+    if structural == StructuralPseudoname::Array {
+        let mut ctx = context.clone();
+        if let Some(first) = ctx.next() {
+            // Root-level or nested array (not inside another array)
+            if first != b"#array" {
+                return Some(on_array_end_toddb);
+            }
+            // Array inside an array
+            if first == b"#array" {
+                if let Some(parent) = ctx.next() {
+                    if parent == b"L" {
+                        return Some(on_array_element_end_toddb);
+                    }
+                }
+            }
+        }
+    }
+
+    // Match end of array elements (primitives)
+    if structural == StructuralPseudoname::Atom {
+        let mut ctx = context.clone();
+        if let Some(first) = ctx.next() {
+            if first == b"#array" {
+                if let Some(parent) = ctx.next() {
+                    if parent == b"L" {
+                        return Some(on_array_element_end_toddb);
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
+/// Convert normal JSON to DynamoDB JSON in a streaming manner.
+///
+/// # Arguments
+/// * `reader` - Input stream implementing `embedded_io::Read`
+/// * `writer` - Output stream implementing `embedded_io::Write`
+/// * `rjiter_buffer` - Buffer for rjiter to use (recommended: 4096 bytes)
+/// * `context_buffer` - Buffer for scan_json context tracking (recommended: 2048 bytes)
+/// * `pretty` - Whether to pretty-print the output (currently unused, may be added later)
+/// * `with_item_wrapper` - Whether to wrap the output in an "Item" key
+///
+/// # Returns
+/// `Ok(())` on success, or `Err(ConversionError)` with detailed error information on failure
+pub fn convert_normal_to_ddb<R: IoRead, W: IoWrite>(
+    reader: &mut R,
+    writer: &mut W,
+    rjiter_buffer: &mut [u8],
+    context_buffer: &mut [u8],
+    _pretty: bool,
+    with_item_wrapper: bool,
+) -> Result<(), ConversionError> {
+    let mut rjiter = RJiter::new(reader, rjiter_buffer);
+
+    let converter = NormalToDdbConverter::new(writer, with_item_wrapper);
+    let baton = RefCell::new(converter);
+
+    let mut context = U8Pool::new(context_buffer, 32)
+        .map_err(|_| ConversionError::ScanError(
+            scan_json::Error::InternalError {
+                position: 0,
+                message: "Failed to create context pool"
+            }
+        ))?;
+
+    scan(
+        find_action_toddb,
+        find_end_action_toddb,
+        &mut rjiter,
+        &baton,
+        &mut context,
+        &Options::new(),
+    ).map_err(ConversionError::ScanError)?;
 
     Ok(())
 }
