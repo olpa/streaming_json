@@ -6,9 +6,9 @@ use embedded_io_adapters::std::FromStd;
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum ConversionMode {
     /// Convert DynamoDB JSON to normal JSON
-    DdbToNormal,
+    FromDdb,
     /// Convert normal JSON to DynamoDB JSON
-    NormalToDdb,
+    ToDdb,
 }
 
 #[derive(Parser, Debug)]
@@ -30,13 +30,17 @@ struct Args {
     /// Pretty print output JSON
     #[arg(short, long, default_value_t = false)]
     pretty: bool,
+
+    /// Omit top-level "Item" wrapper when converting to DynamoDB format (to-ddb mode only)
+    #[arg(long = "without-item", default_value_t = false)]
+    without_item: bool,
 }
 
 fn main() {
     let args = Args::parse();
 
     match args.mode {
-        ConversionMode::DdbToNormal => {
+        ConversionMode::FromDdb => {
             // Create buffers for streaming conversion
             let mut rjiter_buffer = vec![0u8; 4096];
             let mut context_buffer = vec![0u8; 2048];
@@ -126,7 +130,7 @@ fn main() {
                 std::process::exit(1);
             }
         }
-        ConversionMode::NormalToDdb => {
+        ConversionMode::ToDdb => {
             eprintln!("Normal to DDB conversion not yet implemented");
             std::process::exit(1);
         }

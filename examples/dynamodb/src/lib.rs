@@ -129,11 +129,12 @@ fn on_item_begin<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, bato
     StreamOp::None
 }
 
-/// Handle the end of Item object - write closing brace
+/// Handle the end of Item object - write closing brace and newline for JSONL format
 fn on_item_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     let mut conv = baton.borrow_mut();
     conv.newline();
     conv.write(b"}");
+    conv.write(b"\n");  // Always write newline after each JSON object for JSONL format
     Ok(())
 }
 
