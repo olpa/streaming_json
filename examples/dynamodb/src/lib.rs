@@ -130,11 +130,12 @@ fn on_item_begin<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, bato
     StreamOp::None
 }
 
-/// Handle the end of Item object - write closing brace
+/// Handle the end of Item object - write closing brace and newline for JSONL
 fn on_item_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     let mut conv = baton.borrow_mut();
     conv.newline();
     conv.write(b"}");
+    conv.write(b"\n");
     Ok(())
 }
 
@@ -159,7 +160,7 @@ fn on_item_field_key<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, 
     conv.indent();
     conv.write(b"\"");
     conv.write(&field_name);
-    conv.write(b"\": ");
+    conv.write(b"\":");
     conv.pending_comma = false;
 
     StreamOp::None
@@ -654,6 +655,7 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
 }
 
 /// Convert DynamoDB JSON to normal JSON in a streaming, allocation-free manner.
+/// Supports JSONL format (newline-delimited JSON) - processes multiple JSON objects.
 ///
 /// # Arguments
 /// * `reader` - Input stream implementing `embedded_io::Read`
@@ -946,6 +948,7 @@ fn on_root_object_end<W: IoWrite>(baton: NormalToDdbBaton<'_, '_, W>) -> Result<
     } else {
         conv.write(b"}");
     }
+    conv.write(b"\n");
     Ok(())
 }
 
@@ -1130,6 +1133,7 @@ fn find_end_action_toddb<'a, 'workbuf, W: IoWrite>(
 }
 
 /// Convert normal JSON to DynamoDB JSON in a streaming manner.
+/// Supports JSONL format (newline-delimited JSON) - processes multiple JSON objects.
 ///
 /// # Arguments
 /// * `reader` - Input stream implementing `embedded_io::Read`
