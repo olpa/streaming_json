@@ -43,7 +43,7 @@ pub enum Error {
 impl core::fmt::Display for Error {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Error::RJiterError(err) => write!(f, "RJiter error: {:?}", err),
+            Error::RJiterError(err) => write!(f, "{}", err),
             Error::UnhandledPeek { peek, position } => {
                 write!(f, "UnhandledPeek: {:?} at position {}", peek, position)
             }

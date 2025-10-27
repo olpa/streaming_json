@@ -44,7 +44,7 @@ impl core::fmt::Display for ConversionError {
                 write!(f, "IO error at position {}: {:?} (while {})", position, kind, context)
             }
             ConversionError::ScanError(err) => {
-                write!(f, "Scan error: {:?}", err)
+                write!(f, "{}", err)
             }
         }
     }

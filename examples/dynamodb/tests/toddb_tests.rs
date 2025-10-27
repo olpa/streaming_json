@@ -271,3 +271,40 @@ fn test_to_ddb_nested_object_pretty_indentation() {
 "#;
     assert_eq!(result, expected);
 }
+
+// Error handling tests
+#[test]
+fn test_error_incomplete_json_to_ddb() {
+    let normal_json = r#"{"name": "Alice""#;  // Missing closing brace
+    let mut reader = normal_json.as_bytes();
+    let mut output = vec![0u8; 4096];
+    let mut output_slice = output.as_mut_slice();
+    let mut rjiter_buffer = [0u8; 4096];
+    let mut context_buffer = [0u8; 2048];
+
+    let result = ddb_convert::convert_normal_to_ddb(
+        &mut reader,
+        &mut output_slice,
+        &mut rjiter_buffer,
+        &mut context_buffer,
+        false,
+        true,
+    );
+
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    let err_msg = format!("{}", err);
+
+    // Verify the error message is clean and informative
+    // Should contain position/index information and describe the error
+    assert!(err_msg.contains("index") || err_msg.contains("position"),
+            "Error message should contain position: {}", err_msg);
+    assert!(err_msg.contains("EOF") || err_msg.contains("parsing") || err_msg.contains("expected"),
+            "Error message should describe the error: {}", err_msg);
+
+    // Verify the message doesn't contain noisy debug output
+    assert!(!err_msg.contains("Error {"),
+            "Error message should not contain debug format: {}", err_msg);
+    assert!(!err_msg.contains("error_type:"),
+            "Error message should not contain debug format: {}", err_msg);
+}
