@@ -804,9 +804,9 @@ fn on_string_value_toddb<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R
 }
 
 fn on_number_value_toddb<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: NormalToDdbBaton<'_, '_, W>) -> StreamOp {
-    // For numbers, we need to read the value and write it as a string
-    // First, get the number as a string from the JSON
-    let number_bytes = match rjiter.known_bytes() {
+    // For numbers in JSON, we need to read them and convert to DynamoDB's string format
+    // Use next_bytes to get the raw number bytes from the JSON
+    let number_bytes = match rjiter.next_bytes() {
         Ok(bytes) => bytes.to_vec(),
         Err(_) => return StreamOp::Error("Failed to read number bytes"),
     };
@@ -858,6 +858,15 @@ fn on_null_value_toddb<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>,
 }
 
 fn on_atom_value_toddb<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: NormalToDdbBaton<'_, '_, W>) -> StreamOp {
+    // For atoms, we need to write {type:value} wrapper
+    // The opening { is written here, closing } is written by type handlers
+    {
+        let mut conv = baton.borrow_mut();
+        conv.write_comma();
+        // Note: field handlers already wrote the opening {, so we don't write it for field values
+        // But for array elements, we need it
+    }
+
     // Peek to determine the actual type
     let peek = match rjiter.peek() {
         Ok(p) => p,
@@ -868,8 +877,30 @@ fn on_atom_value_toddb<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>,
         Peek::String => on_string_value_toddb(rjiter, baton),
         Peek::True | Peek::False => on_bool_value_toddb(rjiter, baton),
         Peek::Null => on_null_value_toddb(rjiter, baton),
-        // Numbers come through as different peek types depending on format
-        _ => on_number_value_toddb(rjiter, baton),
+        // Numbers: Int, Float, or any numeric peek type
+        _ => {
+            use alloc::format;
+            use rjiter::jiter::NumberInt;
+
+            // Try to parse as int first, then float
+            let number_str = if let Ok(num) = rjiter.next_int() {
+                match num {
+                    NumberInt::Int(i) => format!("{}", i),
+                    NumberInt::BigInt(bi) => format!("{}", bi),
+                }
+            } else if let Ok(num) = rjiter.next_float() {
+                format!("{}", num)
+            } else {
+                return StreamOp::Error("Failed to parse number");
+            };
+
+            let mut conv = baton.borrow_mut();
+            conv.write(b"\"N\":\"");
+            conv.write(number_str.as_bytes());
+            conv.write(b"\"}");
+            conv.pending_comma = true;
+            StreamOp::ValueIsConsumed
+        }
     }
 }
 
@@ -880,12 +911,40 @@ fn on_array_begin_toddb<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R
     StreamOp::None
 }
 
-fn on_array_element_toddb<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: NormalToDdbBaton<'_, '_, W>) -> StreamOp {
-    let mut conv = baton.borrow_mut();
-    conv.write_comma();
-    conv.write(b"{");
-    conv.pending_comma = false;
-    StreamOp::None
+fn on_array_element_atom<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: NormalToDdbBaton<'_, '_, W>) -> StreamOp {
+    // Write opening brace for array element type wrapper, then handle the atom value
+    {
+        let mut conv = baton.borrow_mut();
+        conv.write_comma();
+        conv.write(b"{");
+        conv.pending_comma = false;
+    }
+
+    on_atom_value_toddb(rjiter, baton)
+}
+
+fn on_array_element_array<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: NormalToDdbBaton<'_, '_, W>) -> StreamOp {
+    // Array inside array - write element wrapper and L type
+    {
+        let mut conv = baton.borrow_mut();
+        conv.write_comma();
+        conv.write(b"{");
+        conv.pending_comma = false;
+    }
+
+    on_array_begin_toddb(_rjiter, baton)
+}
+
+fn on_array_element_object<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: NormalToDdbBaton<'_, '_, W>) -> StreamOp {
+    // Object inside array - write element wrapper and M type
+    {
+        let mut conv = baton.borrow_mut();
+        conv.write_comma();
+        conv.write(b"{");
+        conv.pending_comma = false;
+    }
+
+    on_nested_object_begin_toddb(_rjiter, baton)
 }
 
 fn on_nested_object_begin_toddb<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: NormalToDdbBaton<'_, '_, W>) -> StreamOp {
@@ -919,8 +978,27 @@ fn on_array_end_toddb<W: IoWrite>(baton: NormalToDdbBaton<'_, '_, W>) -> Result<
     Ok(())
 }
 
-fn on_array_element_end_toddb<W: IoWrite>(_baton: NormalToDdbBaton<'_, '_, W>) -> Result<(), &'static str> {
-    // Element wrapper already closed in value handlers
+fn on_array_element_end_toddb<W: IoWrite>(baton: NormalToDdbBaton<'_, '_, W>) -> Result<(), &'static str> {
+    // Close the element wrapper with } (for atoms only)
+    let mut conv = baton.borrow_mut();
+    conv.write(b"}");
+    conv.pending_comma = true;
+    Ok(())
+}
+
+fn on_object_in_array_end<W: IoWrite>(baton: NormalToDdbBaton<'_, '_, W>) -> Result<(), &'static str> {
+    // Close the M object with } and then close the element wrapper with }
+    let mut conv = baton.borrow_mut();
+    conv.write(b"}}");
+    conv.pending_comma = true;
+    Ok(())
+}
+
+fn on_array_in_array_end<W: IoWrite>(baton: NormalToDdbBaton<'_, '_, W>) -> Result<(), &'static str> {
+    // Close the L array with ] and the element wrapper with }
+    let mut conv = baton.borrow_mut();
+    conv.write(b"]}");
+    conv.pending_comma = true;
     Ok(())
 }
 
@@ -940,47 +1018,42 @@ fn find_action_toddb<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
         }
     }
 
-    // Match field keys at root level
+    // Match field keys
     if structural == StructuralPseudoname::None {
         let mut ctx = context.clone();
         if let Some(field) = ctx.next() {
+            // Store the field name
+            let mut conv = baton.borrow_mut();
+            #[allow(unsafe_code)]
+            let field_slice: &'workbuf [u8] =
+                unsafe { core::mem::transmute::<&[u8], &'workbuf [u8]>(field) };
+            conv.current_field = Some(field_slice);
+
             if let Some(parent) = ctx.next() {
                 if parent == b"#top" {
-                    // Root-level field - store field name in converter
-                    let mut conv = baton.borrow_mut();
-                    #[allow(unsafe_code)]
-                    let field_slice: &'workbuf [u8] =
-                        unsafe { core::mem::transmute::<&[u8], &'workbuf [u8]>(field) };
-                    conv.current_field = Some(field_slice);
+                    // Root-level field
                     return Some(on_root_field_key);
-                } else if parent == b"M" {
-                    // Field inside M type
-                    let mut conv = baton.borrow_mut();
-                    #[allow(unsafe_code)]
-                    let field_slice: &'workbuf [u8] =
-                        unsafe { core::mem::transmute::<&[u8], &'workbuf [u8]>(field) };
-                    conv.current_field = Some(field_slice);
+                } else {
+                    // Nested field (inside any object)
                     return Some(on_nested_field_key);
                 }
             }
         }
     }
 
+    // Check if we're in an array context first
+    let mut ctx_check = context.clone();
+    let in_array = if let Some(first) = ctx_check.next() {
+        first == b"#array"
+    } else {
+        false
+    };
+
     // Match values at root or nested level - Atom represents all primitives
     if structural == StructuralPseudoname::Atom {
-        let mut ctx = context.clone();
-        if let Some(first) = ctx.next() {
-            // Check if we're in an array context
-            if first == b"#array" {
-                if let Some(parent) = ctx.next() {
-                    if parent == b"L" {
-                        // Array element - need to wrap in type descriptor
-                        return Some(on_array_element_toddb);
-                    }
-                }
-            }
-            // Otherwise, this is a field value - need to determine its type
-            // The type-specific handlers will peek to determine the actual type
+        if in_array {
+            // Array element - write opening brace first
+            return Some(on_array_element_atom);
         }
         // Return a handler that will determine the type based on peek
         return Some(on_atom_value_toddb);
@@ -988,39 +1061,27 @@ fn find_action_toddb<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
 
     // Match arrays (convert to L type)
     if structural == StructuralPseudoname::Array {
-        let mut ctx = context.clone();
-        if let Some(first) = ctx.next() {
-            // Not in array context means this is a field value
-            if first != b"#array" {
-                return Some(on_array_begin_toddb);
-            }
-            // Inside an array means this is an array element
-            if first == b"#array" {
-                if let Some(parent) = ctx.next() {
-                    if parent == b"L" {
-                        // This is an array inside an L array
-                        return Some(on_array_element_toddb);
-                    }
-                }
-            }
+        if in_array {
+            // Nested array - write element wrapper
+            return Some(on_array_element_array);
         }
+        // Field value that's an array
+        return Some(on_array_begin_toddb);
     }
 
     // Match nested objects (convert to M type)
     if structural == StructuralPseudoname::Object {
         let mut ctx = context.clone();
         if let Some(first) = ctx.next() {
-            // Not at top level and not in array
-            if first != b"#top" && first != b"#array" {
+            if first == b"#top" {
+                // Root object
+                return None;
+            } else if first == b"#array" {
+                // Object in array - write element wrapper
+                return Some(on_array_element_object);
+            } else {
+                // Object as a field value - write M type wrapper
                 return Some(on_nested_object_begin_toddb);
-            }
-            // Object inside an array
-            if first == b"#array" {
-                if let Some(parent) = ctx.next() {
-                    if parent == b"L" {
-                        return Some(on_array_element_toddb);
-                    }
-                }
             }
         }
     }
@@ -1040,21 +1101,14 @@ fn find_end_action_toddb<'a, 'workbuf, W: IoWrite>(
             if first == b"#top" {
                 return Some(on_root_object_end);
             }
-            // Nested objects
-            if first != b"#array" && first != b"#top" {
-                if let Some(parent) = ctx.next() {
-                    if parent == b"M" || parent == b"#top" {
-                        return Some(on_nested_object_end);
-                    }
-                }
-            }
-            // Objects in arrays
+            // Objects in arrays - need to close both object and element wrapper
             if first == b"#array" {
-                if let Some(parent) = ctx.next() {
-                    if parent == b"L" {
-                        return Some(on_array_element_end_toddb);
-                    }
-                }
+                return Some(on_object_in_array_end);
+            }
+            // Nested objects (not in arrays)
+            if first != b"#array" && first != b"#top" {
+                // Any object that's not at the root and not in an array is a nested object
+                return Some(on_nested_object_end);
             }
         }
     }
@@ -1063,17 +1117,12 @@ fn find_end_action_toddb<'a, 'workbuf, W: IoWrite>(
     if structural == StructuralPseudoname::Array {
         let mut ctx = context.clone();
         if let Some(first) = ctx.next() {
-            // Root-level or nested array (not inside another array)
-            if first != b"#array" {
-                return Some(on_array_end_toddb);
-            }
-            // Array inside an array
             if first == b"#array" {
-                if let Some(parent) = ctx.next() {
-                    if parent == b"L" {
-                        return Some(on_array_element_end_toddb);
-                    }
-                }
+                // Array inside another array - close with ]} and element wrapper }
+                return Some(on_array_in_array_end);
+            } else {
+                // Root-level or field value array - close with ]}
+                return Some(on_array_end_toddb);
             }
         }
     }

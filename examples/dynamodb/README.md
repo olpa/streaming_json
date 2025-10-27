@@ -219,8 +219,7 @@ Sample data files are available in the `fixture/` directory for testing:
 - Fully functional for all DynamoDB types
 
 ### to-ddb mode
-- Currently in development (77% of tests passing)
-- String, boolean, and null conversions: ✅ Fully working
-- Numbers: ⚠️ Known issue with number conversion
-- Arrays and nested structures: ⚠️ Partial support
-- Sets (SS, NS, BS): Currently converted as Lists (L) rather than native Set types
+- ✅ Fully functional (100% of tests passing)
+- All basic types supported: strings, numbers, booleans, null
+- All nested structures supported: arrays, objects, deeply nested combinations
+- Sets (SS, NS, BS): Not currently supported, use Lists (L) instead
