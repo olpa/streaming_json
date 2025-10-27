@@ -1,5 +1,10 @@
 /// Helper function to convert normal JSON to DDB JSON for testing
 fn convert_to_ddb_test(normal_json: &str, with_item_wrapper: bool) -> String {
+    convert_to_ddb_test_with_pretty(normal_json, with_item_wrapper, false)
+}
+
+/// Helper function to convert normal JSON to DDB JSON with optional pretty printing
+fn convert_to_ddb_test_with_pretty(normal_json: &str, with_item_wrapper: bool, pretty: bool) -> String {
     let mut reader = normal_json.as_bytes();
     let mut output = vec![0u8; 8192];
     let mut output_slice = output.as_mut_slice();
@@ -11,7 +16,7 @@ fn convert_to_ddb_test(normal_json: &str, with_item_wrapper: bool) -> String {
         &mut output_slice,
         &mut rjiter_buffer,
         &mut context_buffer,
-        false,
+        pretty,
         with_item_wrapper,
     ).unwrap();
 
@@ -231,6 +236,38 @@ fn test_to_ddb_large_number() {
     let normal_json = r#"{"bigNum": 123456789012345678901234567890}"#;
     let result = convert_to_ddb_test(normal_json, true);
     let expected = r#"{"Item":{"bigNum":{"N":"123456789012345678901234567890"}}}
+"#;
+    assert_eq!(result, expected);
+}
+
+#[test]
+fn test_to_ddb_nested_object_pretty_indentation() {
+    let normal_json = r#"{"name":"Test","settings":{"theme":"dark","notifications":{"email":true,"push":false}}}"#;
+    let result = convert_to_ddb_test_with_pretty(normal_json, true, true);
+    let expected = r#"{
+  "Item":{
+    "name":{
+      "S":"Test"
+    },
+    "settings":{
+      "M":{
+        "theme":{
+          "S":"dark"
+        },
+        "notifications":{
+          "M":{
+            "email":{
+              "BOOL":true
+            },
+            "push":{
+              "BOOL":false
+            }
+          }
+        }
+      }
+    }
+  }
+}
 "#;
     assert_eq!(result, expected);
 }

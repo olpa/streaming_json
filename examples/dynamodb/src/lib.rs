@@ -295,6 +295,8 @@ fn on_list_begin<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, bato
 fn on_map_begin<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
     let mut conv = baton.borrow_mut();
     conv.write(b"{");
+    conv.newline();
+    conv.depth += 1;
     conv.pending_comma = false;
     StreamOp::None
 }
@@ -566,6 +568,9 @@ fn on_set_or_list_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'st
 
 fn on_map_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     let mut conv = baton.borrow_mut();
+    conv.newline();
+    conv.depth -= 1;
+    conv.indent();
     conv.write(b"}");
     conv.pending_comma = true;
     Ok(())
@@ -728,16 +733,20 @@ pub struct NormalToDdbConverter<'a, 'workbuf, W: IoWrite> {
     with_item_wrapper: bool,
     is_first_object: bool,
     current_field: Option<&'workbuf [u8]>,
+    pretty: bool,
+    depth: usize,
 }
 
 impl<'a, 'workbuf, W: IoWrite> NormalToDdbConverter<'a, 'workbuf, W> {
-    fn new(writer: &'a mut W, with_item_wrapper: bool) -> Self {
+    fn new(writer: &'a mut W, with_item_wrapper: bool, pretty: bool) -> Self {
         Self {
             writer,
             pending_comma: false,
             with_item_wrapper,
             is_first_object: true,
             current_field: None,
+            pretty,
+            depth: 0,
         }
     }
 
@@ -748,7 +757,22 @@ impl<'a, 'workbuf, W: IoWrite> NormalToDdbConverter<'a, 'workbuf, W> {
     fn write_comma(&mut self) {
         if self.pending_comma {
             self.write(b",");
+            self.newline();
             self.pending_comma = false;
+        }
+    }
+
+    fn newline(&mut self) {
+        if self.pretty {
+            self.write(b"\n");
+        }
+    }
+
+    fn indent(&mut self) {
+        if self.pretty {
+            for _ in 0..self.depth {
+                self.write(b"  ");
+            }
         }
     }
 }
@@ -758,9 +782,17 @@ type NormalToDdbBaton<'a, 'workbuf, W> = &'a RefCell<NormalToDdbConverter<'a, 'w
 fn on_root_object_begin<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: NormalToDdbBaton<'_, '_, W>) -> StreamOp {
     let mut conv = baton.borrow_mut();
     if conv.with_item_wrapper {
-        conv.write(b"{\"Item\":{");
+        conv.write(b"{");
+        conv.newline();
+        conv.depth += 1;
+        conv.indent();
+        conv.write(b"\"Item\":{");
+        conv.newline();
+        conv.depth += 1;
     } else {
         conv.write(b"{");
+        conv.newline();
+        conv.depth += 1;
     }
     conv.pending_comma = false;
     conv.is_first_object = false;
@@ -775,9 +807,12 @@ fn on_root_field_key<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, 
 
     let mut conv = baton.borrow_mut();
     conv.write_comma();
+    conv.indent();
     conv.write(b"\"");
     conv.write(&field_name);
     conv.write(b"\":{");
+    conv.newline();
+    conv.depth += 1;
     conv.pending_comma = false;
     StreamOp::None
 }
@@ -790,18 +825,26 @@ fn on_nested_field_key<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>
 
     let mut conv = baton.borrow_mut();
     conv.write_comma();
+    conv.indent();
     conv.write(b"\"");
     conv.write(&field_name);
     conv.write(b"\":{");
+    conv.newline();
+    conv.depth += 1;
     conv.pending_comma = false;
     StreamOp::None
 }
 
 fn on_string_value_toddb<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: NormalToDdbBaton<'_, '_, W>) -> StreamOp {
     let mut conv = baton.borrow_mut();
+    conv.indent();
     conv.write(b"\"S\":\"");
     let _ = rjiter.write_long_bytes(conv.writer);
-    conv.write(b"\"}");
+    conv.write(b"\"");
+    conv.newline();
+    conv.depth -= 1;
+    conv.indent();
+    conv.write(b"}");
     conv.pending_comma = true;
     StreamOp::ValueIsConsumed
 }
@@ -813,17 +856,22 @@ fn on_bool_value_toddb<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>,
     };
 
     let mut conv = baton.borrow_mut();
+    conv.indent();
     match peek {
         Peek::True => {
             let _ = rjiter.known_bool(peek);
-            conv.write(b"\"BOOL\":true}");
+            conv.write(b"\"BOOL\":true");
         }
         Peek::False => {
             let _ = rjiter.known_bool(peek);
-            conv.write(b"\"BOOL\":false}");
+            conv.write(b"\"BOOL\":false");
         }
         _ => return StreamOp::Error("Expected boolean value"),
     }
+    conv.newline();
+    conv.depth -= 1;
+    conv.indent();
+    conv.write(b"}");
     conv.pending_comma = true;
     StreamOp::ValueIsConsumed
 }
@@ -839,7 +887,12 @@ fn on_null_value_toddb<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>,
     let _ = rjiter.known_null();
 
     let mut conv = baton.borrow_mut();
-    conv.write(b"\"NULL\":true}");
+    conv.indent();
+    conv.write(b"\"NULL\":true");
+    conv.newline();
+    conv.depth -= 1;
+    conv.indent();
+    conv.write(b"}");
     conv.pending_comma = true;
     StreamOp::ValueIsConsumed
 }
@@ -882,9 +935,14 @@ fn on_atom_value_toddb<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>,
             };
 
             let mut conv = baton.borrow_mut();
+            conv.indent();
             conv.write(b"\"N\":\"");
             conv.write(number_str.as_bytes());
-            conv.write(b"\"}");
+            conv.write(b"\"");
+            conv.newline();
+            conv.depth -= 1;
+            conv.indent();
+            conv.write(b"}");
             conv.pending_comma = true;
             StreamOp::ValueIsConsumed
         }
@@ -893,7 +951,9 @@ fn on_atom_value_toddb<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>,
 
 fn on_array_begin_toddb<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: NormalToDdbBaton<'_, '_, W>) -> StreamOp {
     let mut conv = baton.borrow_mut();
+    conv.indent();
     conv.write(b"\"L\":[");
+    conv.newline();
     conv.pending_comma = false;
     StreamOp::None
 }
@@ -904,6 +964,8 @@ fn on_array_element_atom<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R
         let mut conv = baton.borrow_mut();
         conv.write_comma();
         conv.write(b"{");
+        conv.newline();
+        conv.depth += 1;
         conv.pending_comma = false;
     }
 
@@ -916,6 +978,8 @@ fn on_array_element_array<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter
         let mut conv = baton.borrow_mut();
         conv.write_comma();
         conv.write(b"{");
+        conv.newline();
+        conv.depth += 1;
         conv.pending_comma = false;
     }
 
@@ -928,6 +992,8 @@ fn on_array_element_object<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJite
         let mut conv = baton.borrow_mut();
         conv.write_comma();
         conv.write(b"{");
+        conv.newline();
+        conv.depth += 1;
         conv.pending_comma = false;
     }
 
@@ -936,15 +1002,25 @@ fn on_array_element_object<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJite
 
 fn on_nested_object_begin_toddb<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: NormalToDdbBaton<'_, '_, W>) -> StreamOp {
     let mut conv = baton.borrow_mut();
+    conv.indent();
     conv.write(b"\"M\":{");
+    conv.newline();
+    conv.depth += 1;
     conv.pending_comma = false;
     StreamOp::None
 }
 
 fn on_root_object_end<W: IoWrite>(baton: NormalToDdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     let mut conv = baton.borrow_mut();
+    conv.newline();
+    conv.depth -= 1;
+    conv.indent();
     if conv.with_item_wrapper {
-        conv.write(b"}}");
+        conv.write(b"}");
+        conv.newline();
+        conv.depth -= 1;
+        conv.indent();
+        conv.write(b"}");
     } else {
         conv.write(b"}");
     }
@@ -954,30 +1030,50 @@ fn on_root_object_end<W: IoWrite>(baton: NormalToDdbBaton<'_, '_, W>) -> Result<
 
 fn on_nested_object_end<W: IoWrite>(baton: NormalToDdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     let mut conv = baton.borrow_mut();
-    conv.write(b"}}");
+    conv.newline();
+    conv.depth -= 1;
+    conv.indent();
+    conv.write(b"}");
+    conv.newline();
+    conv.depth -= 1;
+    conv.indent();
+    conv.write(b"}");
     conv.pending_comma = true;
     Ok(())
 }
 
 fn on_array_end_toddb<W: IoWrite>(baton: NormalToDdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     let mut conv = baton.borrow_mut();
-    conv.write(b"]}");
+    conv.newline();
+    conv.indent();
+    conv.write(b"]");
+    conv.newline();
+    conv.depth -= 1;
+    conv.indent();
+    conv.write(b"}");
     conv.pending_comma = true;
     Ok(())
 }
 
 fn on_array_element_end_toddb<W: IoWrite>(baton: NormalToDdbBaton<'_, '_, W>) -> Result<(), &'static str> {
-    // Close the element wrapper with } (for atoms only)
+    // Close the element wrapper with } (for atoms only) - note that the value handler already closed and decreased depth
     let mut conv = baton.borrow_mut();
-    conv.write(b"}");
-    conv.pending_comma = true;
+    // Value handler already wrote the closing } and decreased depth
+    // Nothing more to do here
     Ok(())
 }
 
 fn on_object_in_array_end<W: IoWrite>(baton: NormalToDdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     // Close the M object with } and then close the element wrapper with }
     let mut conv = baton.borrow_mut();
-    conv.write(b"}}");
+    conv.newline();
+    conv.depth -= 1;
+    conv.indent();
+    conv.write(b"}");
+    conv.newline();
+    conv.depth -= 1;
+    conv.indent();
+    conv.write(b"}");
     conv.pending_comma = true;
     Ok(())
 }
@@ -985,7 +1081,13 @@ fn on_object_in_array_end<W: IoWrite>(baton: NormalToDdbBaton<'_, '_, W>) -> Res
 fn on_array_in_array_end<W: IoWrite>(baton: NormalToDdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     // Close the L array with ] and the element wrapper with }
     let mut conv = baton.borrow_mut();
-    conv.write(b"]}");
+    conv.newline();
+    conv.indent();
+    conv.write(b"]");
+    conv.newline();
+    conv.depth -= 1;
+    conv.indent();
+    conv.write(b"}");
     conv.pending_comma = true;
     Ok(())
 }
@@ -1150,12 +1252,12 @@ pub fn convert_normal_to_ddb<R: IoRead, W: IoWrite>(
     writer: &mut W,
     rjiter_buffer: &mut [u8],
     context_buffer: &mut [u8],
-    _pretty: bool,
+    pretty: bool,
     with_item_wrapper: bool,
 ) -> Result<(), ConversionError> {
     let mut rjiter = RJiter::new(reader, rjiter_buffer);
 
-    let converter = NormalToDdbConverter::new(writer, with_item_wrapper);
+    let converter = NormalToDdbConverter::new(writer, with_item_wrapper, pretty);
     let baton = RefCell::new(converter);
 
     let mut context = U8Pool::new(context_buffer, 32)

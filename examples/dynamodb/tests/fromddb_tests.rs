@@ -1,5 +1,10 @@
 /// Helper function to convert DDB JSON to normal JSON for testing
 fn convert_test(ddb_json: &str) -> String {
+    convert_test_with_pretty(ddb_json, false)
+}
+
+/// Helper function to convert DDB JSON to normal JSON with optional pretty printing
+fn convert_test_with_pretty(ddb_json: &str, pretty: bool) -> String {
     let mut reader = ddb_json.as_bytes();
     let mut output = vec![0u8; 4096];
     let mut output_slice = output.as_mut_slice();
@@ -11,7 +16,7 @@ fn convert_test(ddb_json: &str) -> String {
         &mut output_slice,
         &mut rjiter_buffer,
         &mut context_buffer,
-        false,
+        pretty,
     ).unwrap();
 
     let bytes_written = 4096 - output_slice.len();
@@ -391,6 +396,24 @@ fn test_with_item_wrapper_simple() {
     let ddb_json = r#"{"Item":{"name": {"S": "Alice"}, "age": {"N": "30"}}}"#;
     let result = convert_test(ddb_json);
     let expected = r#"{"name":"Alice","age":30}
+"#;
+    assert_eq!(result, expected);
+}
+
+#[test]
+fn test_nested_object_pretty_indentation() {
+    let ddb_json = r#"{"Item":{"name":{"S":"Test"},"settings":{"M":{"theme":{"S":"dark"},"notifications":{"M":{"email":{"BOOL":true},"push":{"BOOL":false}}}}}}}"#;
+    let result = convert_test_with_pretty(ddb_json, true);
+    let expected = r#"{
+  "name":"Test",
+  "settings":{
+    "theme":"dark",
+    "notifications":{
+      "email":true,
+      "push":false
+    }
+  }
+}
 "#;
     assert_eq!(result, expected);
 }
