@@ -81,6 +81,7 @@ impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
         });
     }
 
+    #[allow(dead_code)]
     fn store_io_error(&mut self, kind: embedded_io::ErrorKind, position: usize, context: &'static str) {
         self.last_error = Some(ConversionError::IOError {
             kind,
@@ -798,22 +799,6 @@ fn on_string_value_toddb<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R
     let mut conv = baton.borrow_mut();
     conv.write(b"\"S\":\"");
     let _ = rjiter.write_long_bytes(conv.writer);
-    conv.write(b"\"}");
-    conv.pending_comma = true;
-    StreamOp::ValueIsConsumed
-}
-
-fn on_number_value_toddb<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: NormalToDdbBaton<'_, '_, W>) -> StreamOp {
-    // For numbers in JSON, we need to read them and convert to DynamoDB's string format
-    // Use next_bytes to get the raw number bytes from the JSON
-    let number_bytes = match rjiter.next_bytes() {
-        Ok(bytes) => bytes.to_vec(),
-        Err(_) => return StreamOp::Error("Failed to read number bytes"),
-    };
-
-    let mut conv = baton.borrow_mut();
-    conv.write(b"\"N\":\"");
-    conv.write(&number_bytes);
     conv.write(b"\"}");
     conv.pending_comma = true;
     StreamOp::ValueIsConsumed
