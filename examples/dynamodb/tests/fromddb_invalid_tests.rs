@@ -115,6 +115,100 @@ fn test_string_type_with_object_value() {
 }
 
 // ============================================================================
+// Issue #4: Invalid Binary (B) Values
+// ============================================================================
+
+#[test]
+fn test_binary_type_with_number_value() {
+    // B type must have a string value, not a number
+    let ddb_json = r#"{"Item":{"Field": {"B": 123}}}"#;
+    let error = convert_test_expect_error(ddb_json);
+
+    let error_message = format!("{:?}", error);
+    assert!(
+        error_message.contains("Expected string") || error_message.contains("B"),
+        "Error message should explain that B type expects a string value, got: {}",
+        error_message
+    );
+}
+
+#[test]
+fn test_binary_type_with_boolean_value() {
+    // B type must have a string value, not a boolean
+    let ddb_json = r#"{"Item":{"Field": {"B": true}}}"#;
+    let error = convert_test_expect_error(ddb_json);
+
+    let error_message = format!("{:?}", error);
+    assert!(
+        error_message.contains("Expected string") || error_message.contains("B"),
+        "Error message should explain that B type expects a string value, got: {}",
+        error_message
+    );
+}
+
+#[test]
+fn test_binary_type_with_null_value() {
+    // B type must have a string value, not null
+    let ddb_json = r#"{"Item":{"Field": {"B": null}}}"#;
+    let error = convert_test_expect_error(ddb_json);
+
+    let error_message = format!("{:?}", error);
+    assert!(
+        error_message.contains("Expected string") || error_message.contains("B"),
+        "Error message should explain that B type expects a string value, got: {}",
+        error_message
+    );
+}
+
+#[test]
+fn test_binary_type_with_array_value() {
+    // B type must have a string value, not an array
+    let ddb_json = r#"{"Item":{"Field": {"B": ["dGVzdA=="]}}}"#;
+    let error = convert_test_expect_error(ddb_json);
+
+    let error_message = format!("{:?}", error);
+    assert!(
+        error_message.contains("Expected string") || error_message.contains("B"),
+        "Error message should explain that B type expects a string value, got: {}",
+        error_message
+    );
+}
+
+#[test]
+fn test_binary_type_with_object_value() {
+    // B type must have a string value, not an object
+    let ddb_json = r#"{"Item":{"Field": {"B": {"data": "dGVzdA=="}}}}"#;
+    let error = convert_test_expect_error(ddb_json);
+
+    let error_message = format!("{:?}", error);
+    assert!(
+        error_message.contains("Expected string") || error_message.contains("B"),
+        "Error message should explain that B type expects a string value, got: {}",
+        error_message
+    );
+}
+
+// COMMENTED OUT: We do not validate that B type strings contain valid base64.
+// Rationale: For conversion efficiency, we copy the attribute value as-is without
+// modification or validation. This allows for faster streaming conversion without
+// needing to decode and validate base64 strings. Invalid base64 will be caught
+// by the database when the data is used.
+//
+// #[test]
+// fn test_binary_type_with_invalid_base64() {
+//     // B type must have a valid base64 string
+//     let ddb_json = r#"{"Item":{"Field": {"B": "not-base64!!!"}}}"#;
+//     let error = convert_test_expect_error(ddb_json);
+//
+//     let error_message = format!("{:?}", error);
+//     assert!(
+//         error_message.contains("base64") || error_message.contains("B") || error_message.contains("invalid"),
+//         "Error message should explain that B type string must be valid base64, got: {}",
+//         error_message
+//     );
+// }
+
+// ============================================================================
 // Issue #3: Invalid Number (N) Values
 // ============================================================================
 
