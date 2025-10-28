@@ -272,6 +272,81 @@ fn test_to_ddb_nested_object_pretty_indentation() {
     assert_eq!(result, expected);
 }
 
+// Roundtrip conversion tests
+#[test]
+fn test_roundtrip_int_like_float() {
+    // Test that int-like floats (e.g., "4.0") are preserved during roundtrip conversion
+    let normal_json = r#"{"value": 4.0}"#;
+
+    // Convert normal JSON to DDB JSON
+    let ddb_result = convert_to_ddb_test(normal_json, true);
+
+    // Convert back from DDB JSON to normal JSON
+    let mut reader = ddb_result.as_bytes();
+    let mut output = vec![0u8; 4096];
+    let mut output_slice = output.as_mut_slice();
+    let mut rjiter_buffer = [0u8; 4096];
+    let mut context_buffer = [0u8; 2048];
+
+    ddb_convert::convert_ddb_to_normal(
+        &mut reader,
+        &mut output_slice,
+        &mut rjiter_buffer,
+        &mut context_buffer,
+        false,
+    ).unwrap();
+
+    let bytes_written = 4096 - output_slice.len();
+    let roundtrip_result = std::str::from_utf8(&output[..bytes_written]).unwrap();
+
+    // Should preserve the float format "4.0", not convert to int "4"
+    let expected = r#"{"value":4.0}
+"#;
+    assert_eq!(roundtrip_result, expected,
+        "Int-like floats should be preserved during roundtrip conversion");
+}
+
+#[test]
+fn test_roundtrip_various_int_like_floats() {
+    // Test various int-like float values
+    let test_cases = vec![
+        (r#"{"val": 1.0}"#, r#"{"val":1.0}
+"#),
+        (r#"{"val": 0.0}"#, r#"{"val":0.0}
+"#),
+        (r#"{"val": -5.0}"#, r#"{"val":-5.0}
+"#),
+        (r#"{"val": 100.0}"#, r#"{"val":100.0}
+"#),
+    ];
+
+    for (input, expected) in test_cases {
+        // Convert normal JSON to DDB JSON
+        let ddb_result = convert_to_ddb_test(input, true);
+
+        // Convert back from DDB JSON to normal JSON
+        let mut reader = ddb_result.as_bytes();
+        let mut output = vec![0u8; 4096];
+        let mut output_slice = output.as_mut_slice();
+        let mut rjiter_buffer = [0u8; 4096];
+        let mut context_buffer = [0u8; 2048];
+
+        ddb_convert::convert_ddb_to_normal(
+            &mut reader,
+            &mut output_slice,
+            &mut rjiter_buffer,
+            &mut context_buffer,
+            false,
+        ).unwrap();
+
+        let bytes_written = 4096 - output_slice.len();
+        let roundtrip_result = std::str::from_utf8(&output[..bytes_written]).unwrap();
+
+        assert_eq!(roundtrip_result, expected,
+            "Failed for input: {}", input);
+    }
+}
+
 // Error handling tests
 #[test]
 fn test_error_incomplete_json_to_ddb() {

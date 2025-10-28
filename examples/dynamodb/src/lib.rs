@@ -919,25 +919,17 @@ fn on_atom_value_toddb<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>,
         Peek::Null => on_null_value_toddb(rjiter, baton),
         // Numbers: Int, Float, or any numeric peek type
         _ => {
-            use alloc::format;
-            use rjiter::jiter::NumberInt;
-
-            // Try to parse as int first, then float
-            let number_str = if let Ok(num) = rjiter.next_int() {
-                match num {
-                    NumberInt::Int(i) => format!("{}", i),
-                    NumberInt::BigInt(bi) => format!("{}", bi),
-                }
-            } else if let Ok(num) = rjiter.next_float() {
-                format!("{}", num)
-            } else {
-                return StreamOp::Error("Failed to parse number");
+            // Use next_number_bytes to preserve the exact string representation
+            // This ensures "4.0" stays as "4.0" and doesn't become "4"
+            let number_bytes = match rjiter.next_number_bytes() {
+                Ok(bytes) => bytes,
+                Err(_) => return StreamOp::Error("Failed to parse number"),
             };
 
             let mut conv = baton.borrow_mut();
             conv.indent();
             conv.write(b"\"N\":\"");
-            conv.write(number_str.as_bytes());
+            conv.write(number_bytes);
             conv.write(b"\"");
             conv.newline();
             conv.depth -= 1;
