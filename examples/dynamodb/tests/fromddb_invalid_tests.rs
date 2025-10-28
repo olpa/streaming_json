@@ -516,3 +516,98 @@ fn test_map_type_with_array_value() {
 //         error_message
 //     );
 // }
+
+// ============================================================================
+// Issue #8: Invalid List (L) Values
+// ============================================================================
+
+#[test]
+fn test_list_type_with_string_value() {
+    // L type must have an array value, not a string
+    let ddb_json = r#"{"Item":{"Field": {"L": "not-an-array"}}}"#;
+    let error = convert_test_expect_error(ddb_json);
+
+    let error_message = format!("{:?}", error);
+    assert!(
+        error_message.contains("array") || error_message.contains("L") || error_message.contains("Expected"),
+        "Error message should explain that L type expects an array value, got: {}",
+        error_message
+    );
+}
+
+#[test]
+fn test_list_type_with_number_value() {
+    // L type must have an array value, not a number
+    let ddb_json = r#"{"Item":{"Field": {"L": 123}}}"#;
+    let error = convert_test_expect_error(ddb_json);
+
+    let error_message = format!("{:?}", error);
+    assert!(
+        error_message.contains("array") || error_message.contains("L") || error_message.contains("Expected"),
+        "Error message should explain that L type expects an array value, got: {}",
+        error_message
+    );
+}
+
+#[test]
+fn test_list_type_with_boolean_value() {
+    // L type must have an array value, not a boolean
+    let ddb_json = r#"{"Item":{"Field": {"L": true}}}"#;
+    let error = convert_test_expect_error(ddb_json);
+
+    let error_message = format!("{:?}", error);
+    assert!(
+        error_message.contains("array") || error_message.contains("L") || error_message.contains("Expected"),
+        "Error message should explain that L type expects an array value, got: {}",
+        error_message
+    );
+}
+
+#[test]
+fn test_list_type_with_null_value() {
+    // L type must have an array value, not null
+    let ddb_json = r#"{"Item":{"Field": {"L": null}}}"#;
+    let error = convert_test_expect_error(ddb_json);
+
+    let error_message = format!("{:?}", error);
+    assert!(
+        error_message.contains("array") || error_message.contains("L") || error_message.contains("Expected"),
+        "Error message should explain that L type expects an array value, got: {}",
+        error_message
+    );
+}
+
+#[test]
+fn test_list_type_with_object_value() {
+    // L type must have an array value, not an object
+    let ddb_json = r#"{"Item":{"Field": {"L": {"S": "value"}}}}"#;
+    let error = convert_test_expect_error(ddb_json);
+
+    let error_message = format!("{:?}", error);
+    assert!(
+        error_message.contains("array") || error_message.contains("L") || error_message.contains("Expected"),
+        "Error message should explain that L type expects an array value, got: {}",
+        error_message
+    );
+}
+
+// COMMENTED OUT: We do not validate that array elements inside L follow DynamoDB JSON format.
+// Rationale: Validating nested structure would require tracking state through the entire L array
+// to ensure all elements are type descriptor objects. This adds complexity and would require
+// deeper integration with scan_json's state machine. For now, we only validate that L has an
+// array value. Malformed nested structures will produce invalid output that can be caught by
+// downstream consumers.
+//
+// #[test]
+// fn test_list_type_with_elements_missing_type_descriptor() {
+//     // L type array elements must follow DynamoDB JSON format (have type descriptors)
+//     let ddb_json = r#"{"Item":{"Field": {"L": ["raw-value"]}}}"#;
+//     let error = convert_test_expect_error(ddb_json);
+//
+//     let error_message = format!("{:?}", error);
+//     assert!(
+//         error_message.contains("type descriptor") || error_message.contains("unknown") || error_message.contains("Invalid"),
+//         "Error message should explain that array elements need type descriptors, got: {}",
+//         error_message
+//     );
+// }
