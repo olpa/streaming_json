@@ -611,3 +611,238 @@ fn test_list_type_with_object_value() {
 //         error_message
 //     );
 // }
+
+// ============================================================================
+// Issue #9: Invalid String Set (SS) Values
+// ============================================================================
+
+#[test]
+fn test_string_set_with_string_value() {
+    // SS type must have an array value, not a string
+    let ddb_json = r#"{"Item":{"Field": {"SS": "not-an-array"}}}"#;
+    let error = convert_test_expect_error(ddb_json);
+
+    let error_message = format!("{:?}", error);
+    assert!(
+        error_message.contains("array") || error_message.contains("SS") || error_message.contains("Expected"),
+        "Error message should explain that SS type expects an array value, got: {}",
+        error_message
+    );
+}
+
+#[test]
+fn test_string_set_with_number_value() {
+    // SS type must have an array value, not a number
+    let ddb_json = r#"{"Item":{"Field": {"SS": 123}}}"#;
+    let error = convert_test_expect_error(ddb_json);
+
+    let error_message = format!("{:?}", error);
+    assert!(
+        error_message.contains("array") || error_message.contains("SS") || error_message.contains("Expected"),
+        "Error message should explain that SS type expects an array value, got: {}",
+        error_message
+    );
+}
+
+#[test]
+fn test_string_set_with_array_of_numbers() {
+    // SS array elements must be strings, not numbers
+    let ddb_json = r#"{"Item":{"Field": {"SS": [123, 456]}}}"#;
+    let error = convert_test_expect_error(ddb_json);
+
+    let error_message = format!("{:?}", error);
+    assert!(
+        error_message.contains("string") || error_message.contains("SS") || error_message.contains("Expected"),
+        "Error message should explain that SS array elements must be strings, got: {}",
+        error_message
+    );
+}
+
+// COMMENTED OUT: We do not validate that SS arrays contain duplicate values.
+// Rationale: Validating duplicates would require tracking all values seen in the array,
+// which adds memory overhead and complexity. For conversion efficiency, we process elements
+// as-is without validation. Duplicate values will be caught by the database when the data is used.
+//
+// #[test]
+// fn test_string_set_with_duplicates() {
+//     // SS type must not contain duplicate values
+//     let ddb_json = r#"{"Item":{"Field": {"SS": ["a", "a"]}}}"#;
+//     let error = convert_test_expect_error(ddb_json);
+//
+//     let error_message = format!("{:?}", error);
+//     assert!(
+//         error_message.contains("duplicate") || error_message.contains("SS"),
+//         "Error message should explain that SS cannot have duplicates, got: {}",
+//         error_message
+//     );
+// }
+
+// ============================================================================
+// Issue #10: Invalid Number Set (NS) Values
+// ============================================================================
+
+#[test]
+fn test_number_set_with_string_value() {
+    // NS type must have an array value, not a string
+    let ddb_json = r#"{"Item":{"Field": {"NS": "not-an-array"}}}"#;
+    let error = convert_test_expect_error(ddb_json);
+
+    let error_message = format!("{:?}", error);
+    assert!(
+        error_message.contains("array") || error_message.contains("NS") || error_message.contains("Expected"),
+        "Error message should explain that NS type expects an array value, got: {}",
+        error_message
+    );
+}
+
+#[test]
+fn test_number_set_with_number_value() {
+    // NS type must have an array value, not a number
+    let ddb_json = r#"{"Item":{"Field": {"NS": 123}}}"#;
+    let error = convert_test_expect_error(ddb_json);
+
+    let error_message = format!("{:?}", error);
+    assert!(
+        error_message.contains("array") || error_message.contains("NS") || error_message.contains("Expected"),
+        "Error message should explain that NS type expects an array value, got: {}",
+        error_message
+    );
+}
+
+#[test]
+fn test_number_set_with_array_of_numbers() {
+    // NS array elements must be strings (numbers transmitted as strings), not bare numbers
+    let ddb_json = r#"{"Item":{"Field": {"NS": [1, 2]}}}"#;
+    let error = convert_test_expect_error(ddb_json);
+
+    let error_message = format!("{:?}", error);
+    assert!(
+        error_message.contains("string") || error_message.contains("NS") || error_message.contains("Expected"),
+        "Error message should explain that NS array elements must be strings, got: {}",
+        error_message
+    );
+}
+
+// COMMENTED OUT: We do not validate that NS array strings contain valid numbers.
+// Rationale: For conversion efficiency, we copy the attribute values as-is without
+// modification or validation. This allows for faster streaming conversion without
+// needing to parse and validate numeric strings. Invalid numbers will be caught
+// by the database when the data is used.
+//
+// #[test]
+// fn test_number_set_with_non_numeric_strings() {
+//     // NS array strings must represent valid numbers
+//     let ddb_json = r#"{"Item":{"Field": {"NS": ["abc"]}}}"#;
+//     let error = convert_test_expect_error(ddb_json);
+//
+//     let error_message = format!("{:?}", error);
+//     assert!(
+//         error_message.contains("number") || error_message.contains("NS") || error_message.contains("invalid"),
+//         "Error message should explain that NS strings must be valid numbers, got: {}",
+//         error_message
+//     );
+// }
+
+// COMMENTED OUT: We do not validate that NS arrays contain duplicate values.
+// Rationale: Validating duplicates would require tracking all values seen in the array,
+// which adds memory overhead and complexity. For conversion efficiency, we process elements
+// as-is without validation. Duplicate values will be caught by the database when the data is used.
+//
+// #[test]
+// fn test_number_set_with_duplicates() {
+//     // NS type must not contain duplicate values
+//     let ddb_json = r#"{"Item":{"Field": {"NS": ["1", "1"]}}}"#;
+//     let error = convert_test_expect_error(ddb_json);
+//
+//     let error_message = format!("{:?}", error);
+//     assert!(
+//         error_message.contains("duplicate") || error_message.contains("NS"),
+//         "Error message should explain that NS cannot have duplicates, got: {}",
+//         error_message
+//     );
+// }
+
+// ============================================================================
+// Issue #11: Invalid Binary Set (BS) Values
+// ============================================================================
+
+#[test]
+fn test_binary_set_with_string_value() {
+    // BS type must have an array value, not a string
+    let ddb_json = r#"{"Item":{"Field": {"BS": "not-an-array"}}}"#;
+    let error = convert_test_expect_error(ddb_json);
+
+    let error_message = format!("{:?}", error);
+    assert!(
+        error_message.contains("array") || error_message.contains("BS") || error_message.contains("Expected"),
+        "Error message should explain that BS type expects an array value, got: {}",
+        error_message
+    );
+}
+
+#[test]
+fn test_binary_set_with_number_value() {
+    // BS type must have an array value, not a number
+    let ddb_json = r#"{"Item":{"Field": {"BS": 123}}}"#;
+    let error = convert_test_expect_error(ddb_json);
+
+    let error_message = format!("{:?}", error);
+    assert!(
+        error_message.contains("array") || error_message.contains("BS") || error_message.contains("Expected"),
+        "Error message should explain that BS type expects an array value, got: {}",
+        error_message
+    );
+}
+
+#[test]
+fn test_binary_set_with_array_of_numbers() {
+    // BS array elements must be strings, not numbers
+    let ddb_json = r#"{"Item":{"Field": {"BS": [123, 456]}}}"#;
+    let error = convert_test_expect_error(ddb_json);
+
+    let error_message = format!("{:?}", error);
+    assert!(
+        error_message.contains("string") || error_message.contains("BS") || error_message.contains("Expected"),
+        "Error message should explain that BS array elements must be strings, got: {}",
+        error_message
+    );
+}
+
+// COMMENTED OUT: We do not validate that BS array strings contain valid base64.
+// Rationale: For conversion efficiency, we copy the attribute values as-is without
+// modification or validation. This allows for faster streaming conversion without
+// needing to decode and validate base64 strings. Invalid base64 will be caught
+// by the database when the data is used.
+//
+// #[test]
+// fn test_binary_set_with_invalid_base64() {
+//     // BS array strings must be valid base64
+//     let ddb_json = r#"{"Item":{"Field": {"BS": ["not-base64!!!"]}}}"#;
+//     let error = convert_test_expect_error(ddb_json);
+//
+//     let error_message = format!("{:?}", error);
+//     assert!(
+//         error_message.contains("base64") || error_message.contains("BS") || error_message.contains("invalid"),
+//         "Error message should explain that BS strings must be valid base64, got: {}",
+//         error_message
+//     );
+// }
+
+// COMMENTED OUT: We do not validate that BS arrays contain duplicate values.
+// Rationale: Validating duplicates would require tracking all values seen in the array,
+// which adds memory overhead and complexity. For conversion efficiency, we process elements
+// as-is without validation. Duplicate values will be caught by the database when the data is used.
+//
+// #[test]
+// fn test_binary_set_with_duplicates() {
+//     // BS type must not contain duplicate values
+//     let ddb_json = r#"{"Item":{"Field": {"BS": ["dGVzdA==", "dGVzdA=="]}}}"#;
+//     let error = convert_test_expect_error(ddb_json);
+//
+//     let error_message = format!("{:?}", error);
+//     assert!(
+//         error_message.contains("duplicate") || error_message.contains("BS"),
+//         "Error message should explain that BS cannot have duplicates, got: {}",
+//         error_message
+//     );
+// }

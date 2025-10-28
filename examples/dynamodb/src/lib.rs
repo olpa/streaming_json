@@ -303,14 +303,52 @@ fn on_null_value<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton
     StreamOp::ValueIsConsumed
 }
 
-fn on_string_set_begin<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
+fn on_string_set_begin<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
+    // Validate that the value is actually an array
+    let position = rjiter.current_index();
+    let peek = match rjiter.peek() {
+        Ok(p) => p,
+        Err(e) => {
+            baton.borrow_mut().store_rjiter_error(e, position, "peeking SS/BS (string set) type value");
+            return StreamOp::Error("Failed to peek string set value");
+        }
+    };
+    if peek != Peek::Array {
+        let mut conv = baton.borrow_mut();
+        conv.store_parse_error(
+            position,
+            "Invalid DynamoDB JSON format: SS/BS type expects an array value",
+            None,
+        );
+        return StreamOp::Error("Expected array value for SS/BS type");
+    }
+
     let mut conv = baton.borrow_mut();
     conv.write(b"[");
     conv.pending_comma = false;
     StreamOp::None
 }
 
-fn on_number_set_begin<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
+fn on_number_set_begin<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
+    // Validate that the value is actually an array
+    let position = rjiter.current_index();
+    let peek = match rjiter.peek() {
+        Ok(p) => p,
+        Err(e) => {
+            baton.borrow_mut().store_rjiter_error(e, position, "peeking NS (number set) type value");
+            return StreamOp::Error("Failed to peek number set value");
+        }
+    };
+    if peek != Peek::Array {
+        let mut conv = baton.borrow_mut();
+        conv.store_parse_error(
+            position,
+            "Invalid DynamoDB JSON format: NS type expects an array value",
+            None,
+        );
+        return StreamOp::Error("Expected array value for NS type");
+    }
+
     let mut conv = baton.borrow_mut();
     conv.write(b"[");
     conv.pending_comma = false;
