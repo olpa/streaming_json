@@ -39,3 +39,291 @@ fn test_unknown_type_descriptor_lowercase_s() {
         error_message
     );
 }
+
+// ============================================================================
+// Issue #2: Invalid String (S) Values
+// ============================================================================
+
+#[test]
+fn test_string_type_with_number_value() {
+    // S type must have a string value, not a number
+    let ddb_json = r#"{"Item":{"Field": {"S": 123}}}"#;
+    let error = convert_test_expect_error(ddb_json);
+
+    let error_message = format!("{:?}", error);
+    assert!(
+        error_message.contains("Expected string") || error_message.contains("S"),
+        "Error message should explain that S type expects a string value, got: {}",
+        error_message
+    );
+}
+
+#[test]
+fn test_string_type_with_boolean_value() {
+    // S type must have a string value, not a boolean
+    let ddb_json = r#"{"Item":{"Field": {"S": true}}}"#;
+    let error = convert_test_expect_error(ddb_json);
+
+    let error_message = format!("{:?}", error);
+    assert!(
+        error_message.contains("Expected string") || error_message.contains("S"),
+        "Error message should explain that S type expects a string value, got: {}",
+        error_message
+    );
+}
+
+#[test]
+fn test_string_type_with_null_value() {
+    // S type must have a string value, not null
+    let ddb_json = r#"{"Item":{"Field": {"S": null}}}"#;
+    let error = convert_test_expect_error(ddb_json);
+
+    let error_message = format!("{:?}", error);
+    assert!(
+        error_message.contains("Expected string") || error_message.contains("S"),
+        "Error message should explain that S type expects a string value, got: {}",
+        error_message
+    );
+}
+
+#[test]
+fn test_string_type_with_array_value() {
+    // S type must have a string value, not an array
+    let ddb_json = r#"{"Item":{"Field": {"S": ["value"]}}}"#;
+    let error = convert_test_expect_error(ddb_json);
+
+    let error_message = format!("{:?}", error);
+    assert!(
+        error_message.contains("Expected string") || error_message.contains("S"),
+        "Error message should explain that S type expects a string value, got: {}",
+        error_message
+    );
+}
+
+#[test]
+fn test_string_type_with_object_value() {
+    // S type must have a string value, not an object
+    let ddb_json = r#"{"Item":{"Field": {"S": {"nested": "value"}}}}"#;
+    let error = convert_test_expect_error(ddb_json);
+
+    let error_message = format!("{:?}", error);
+    assert!(
+        error_message.contains("Expected string") || error_message.contains("S"),
+        "Error message should explain that S type expects a string value, got: {}",
+        error_message
+    );
+}
+
+// ============================================================================
+// Issue #3: Invalid Number (N) Values
+// ============================================================================
+
+#[test]
+fn test_number_type_with_number_value() {
+    // N type must have a string value, not a number (numbers are transmitted as strings)
+    let ddb_json = r#"{"Item":{"Field": {"N": 123}}}"#;
+    let error = convert_test_expect_error(ddb_json);
+
+    let error_message = format!("{:?}", error);
+    assert!(
+        error_message.contains("Expected string") || error_message.contains("N"),
+        "Error message should explain that N type expects a string value, got: {}",
+        error_message
+    );
+}
+
+#[test]
+fn test_number_type_with_boolean_value() {
+    // N type must have a string value, not a boolean
+    let ddb_json = r#"{"Item":{"Field": {"N": true}}}"#;
+    let error = convert_test_expect_error(ddb_json);
+
+    let error_message = format!("{:?}", error);
+    assert!(
+        error_message.contains("Expected string") || error_message.contains("N"),
+        "Error message should explain that N type expects a string value, got: {}",
+        error_message
+    );
+}
+
+// COMMENTED OUT: We do not validate that N type strings contain valid numbers.
+// Rationale: For conversion efficiency, we copy the attribute value as-is without
+// modification or validation. This allows for faster streaming conversion without
+// needing to parse and validate numeric strings. Invalid numbers will be caught
+// by the database when the data is used.
+//
+// #[test]
+// fn test_number_type_with_non_numeric_string() {
+//     // N type must have a string that represents a valid number
+//     let ddb_json = r#"{"Item":{"Field": {"N": "abc"}}}"#;
+//     let error = convert_test_expect_error(ddb_json);
+//
+//     let error_message = format!("{:?}", error);
+//     assert!(
+//         error_message.contains("number") || error_message.contains("N") || error_message.contains("invalid"),
+//         "Error message should explain that N type string must be a valid number, got: {}",
+//         error_message
+//     );
+// }
+
+#[test]
+fn test_number_type_with_null_value() {
+    // N type must have a string value, not null
+    let ddb_json = r#"{"Item":{"Field": {"N": null}}}"#;
+    let error = convert_test_expect_error(ddb_json);
+
+    let error_message = format!("{:?}", error);
+    assert!(
+        error_message.contains("Expected string") || error_message.contains("N"),
+        "Error message should explain that N type expects a string value, got: {}",
+        error_message
+    );
+}
+
+#[test]
+fn test_number_type_with_array_value() {
+    // N type must have a string value, not an array
+    let ddb_json = r#"{"Item":{"Field": {"N": ["123"]}}}"#;
+    let error = convert_test_expect_error(ddb_json);
+
+    let error_message = format!("{:?}", error);
+    assert!(
+        error_message.contains("Expected string") || error_message.contains("N"),
+        "Error message should explain that N type expects a string value, got: {}",
+        error_message
+    );
+}
+
+// ============================================================================
+// Issue #5: Invalid Boolean (BOOL) Values
+// ============================================================================
+
+#[test]
+fn test_bool_type_with_string_true() {
+    // BOOL type must have a boolean value, not a string
+    let ddb_json = r#"{"Item":{"Field": {"BOOL": "true"}}}"#;
+    let error = convert_test_expect_error(ddb_json);
+
+    let error_message = format!("{:?}", error);
+    assert!(
+        error_message.contains("boolean") || error_message.contains("BOOL"),
+        "Error message should explain that BOOL type expects a boolean value, got: {}",
+        error_message
+    );
+}
+
+#[test]
+fn test_bool_type_with_string_false() {
+    // BOOL type must have a boolean value, not a string
+    let ddb_json = r#"{"Item":{"Field": {"BOOL": "false"}}}"#;
+    let error = convert_test_expect_error(ddb_json);
+
+    let error_message = format!("{:?}", error);
+    assert!(
+        error_message.contains("boolean") || error_message.contains("BOOL"),
+        "Error message should explain that BOOL type expects a boolean value, got: {}",
+        error_message
+    );
+}
+
+#[test]
+fn test_bool_type_with_number_zero() {
+    // BOOL type must have a boolean value, not a number
+    let ddb_json = r#"{"Item":{"Field": {"BOOL": 0}}}"#;
+    let error = convert_test_expect_error(ddb_json);
+
+    let error_message = format!("{:?}", error);
+    assert!(
+        error_message.contains("boolean") || error_message.contains("BOOL"),
+        "Error message should explain that BOOL type expects a boolean value, got: {}",
+        error_message
+    );
+}
+
+#[test]
+fn test_bool_type_with_number_one() {
+    // BOOL type must have a boolean value, not a number
+    let ddb_json = r#"{"Item":{"Field": {"BOOL": 1}}}"#;
+    let error = convert_test_expect_error(ddb_json);
+
+    let error_message = format!("{:?}", error);
+    assert!(
+        error_message.contains("boolean") || error_message.contains("BOOL"),
+        "Error message should explain that BOOL type expects a boolean value, got: {}",
+        error_message
+    );
+}
+
+#[test]
+fn test_bool_type_with_null_value() {
+    // BOOL type must have a boolean value, not null
+    let ddb_json = r#"{"Item":{"Field": {"BOOL": null}}}"#;
+    let error = convert_test_expect_error(ddb_json);
+
+    let error_message = format!("{:?}", error);
+    assert!(
+        error_message.contains("boolean") || error_message.contains("BOOL"),
+        "Error message should explain that BOOL type expects a boolean value, got: {}",
+        error_message
+    );
+}
+
+// ============================================================================
+// Issue #6: Invalid Null (NULL) Values
+// ============================================================================
+
+#[test]
+fn test_null_type_with_false_value() {
+    // NULL type must have the value true (not false)
+    let ddb_json = r#"{"Item":{"Field": {"NULL": false}}}"#;
+    let error = convert_test_expect_error(ddb_json);
+
+    let error_message = format!("{:?}", error);
+    assert!(
+        error_message.contains("true") || error_message.contains("NULL"),
+        "Error message should explain that NULL type expects true value, got: {}",
+        error_message
+    );
+}
+
+#[test]
+fn test_null_type_with_null_value() {
+    // NULL type must have the value true (not null itself)
+    let ddb_json = r#"{"Item":{"Field": {"NULL": null}}}"#;
+    let error = convert_test_expect_error(ddb_json);
+
+    let error_message = format!("{:?}", error);
+    assert!(
+        error_message.contains("true") || error_message.contains("NULL") || error_message.contains("True"),
+        "Error message should explain that NULL type expects true value, got: {}",
+        error_message
+    );
+}
+
+#[test]
+fn test_null_type_with_string_value() {
+    // NULL type must have the value true, not a string
+    let ddb_json = r#"{"Item":{"Field": {"NULL": "true"}}}"#;
+    let error = convert_test_expect_error(ddb_json);
+
+    let error_message = format!("{:?}", error);
+    assert!(
+        error_message.contains("true") || error_message.contains("NULL") || error_message.contains("True"),
+        "Error message should explain that NULL type expects true value, got: {}",
+        error_message
+    );
+}
+
+#[test]
+fn test_null_type_with_number_value() {
+    // NULL type must have the value true, not a number
+    let ddb_json = r#"{"Item":{"Field": {"NULL": 1}}}"#;
+    let error = convert_test_expect_error(ddb_json);
+
+    let error_message = format!("{:?}", error);
+    assert!(
+        error_message.contains("true") || error_message.contains("NULL") || error_message.contains("True"),
+        "Error message should explain that NULL type expects true value, got: {}",
+        error_message
+    );
+}
