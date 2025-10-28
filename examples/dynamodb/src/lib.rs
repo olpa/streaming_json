@@ -317,14 +317,52 @@ fn on_number_set_begin<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>
     StreamOp::None
 }
 
-fn on_list_begin<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
+fn on_list_begin<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
+    // Validate that the value is actually an array
+    let position = rjiter.current_index();
+    let peek = match rjiter.peek() {
+        Ok(p) => p,
+        Err(e) => {
+            baton.borrow_mut().store_rjiter_error(e, position, "peeking L (list) type value");
+            return StreamOp::Error("Failed to peek list value");
+        }
+    };
+    if peek != Peek::Array {
+        let mut conv = baton.borrow_mut();
+        conv.store_parse_error(
+            position,
+            "Invalid DynamoDB JSON format: L type expects an array value",
+            None,
+        );
+        return StreamOp::Error("Expected array value for L type");
+    }
+
     let mut conv = baton.borrow_mut();
     conv.write(b"[");
     conv.pending_comma = false;
     StreamOp::None
 }
 
-fn on_map_begin<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
+fn on_map_begin<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
+    // Validate that the value is actually an object
+    let position = rjiter.current_index();
+    let peek = match rjiter.peek() {
+        Ok(p) => p,
+        Err(e) => {
+            baton.borrow_mut().store_rjiter_error(e, position, "peeking M (map) type value");
+            return StreamOp::Error("Failed to peek map value");
+        }
+    };
+    if peek != Peek::Object {
+        let mut conv = baton.borrow_mut();
+        conv.store_parse_error(
+            position,
+            "Invalid DynamoDB JSON format: M type expects an object value",
+            None,
+        );
+        return StreamOp::Error("Expected object value for M type");
+    }
+
     let mut conv = baton.borrow_mut();
     conv.write(b"{");
     conv.newline();
