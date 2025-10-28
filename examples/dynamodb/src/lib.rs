@@ -29,6 +29,13 @@ pub enum ConversionError {
         position: usize,
         context: &'static str,
     },
+    /// Parse error (invalid DynamoDB JSON format)
+    ParseError {
+        position: usize,
+        context: &'static str,
+        /// Unknown type descriptor bytes (buffer, actual length used)
+        unknown_type: Option<([u8; 32], usize)>,
+    },
     /// Scan error (from scan_json library)
     ScanError(scan_json::Error),
 }
@@ -42,6 +49,14 @@ impl core::fmt::Display for ConversionError {
             }
             ConversionError::IOError { kind, position, context } => {
                 write!(f, "IO error at position {}: {:?} (while {})", position, kind, context)
+            }
+            ConversionError::ParseError { position, context, unknown_type } => {
+                if let Some((bytes, len)) = unknown_type {
+                    let type_str = std::string::String::from_utf8_lossy(&bytes[..*len]);
+                    write!(f, "Parse error at position {}: {} (unknown type descriptor '{}')", position, context, type_str)
+                } else {
+                    write!(f, "Parse error at position {}: {}", position, context)
+                }
             }
             ConversionError::ScanError(err) => {
                 write!(f, "{}", err)
@@ -87,6 +102,23 @@ impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
             kind,
             position,
             context,
+        });
+    }
+
+    fn store_parse_error(&mut self, position: usize, context: &'static str, unknown_type_bytes: Option<&[u8]>) {
+        let unknown_type = if let Some(bytes) = unknown_type_bytes {
+            let len = bytes.len().min(32);
+            let mut buffer = [0u8; 32];
+            buffer[..len].copy_from_slice(&bytes[..len]);
+            Some((buffer, len))
+        } else {
+            None
+        };
+
+        self.last_error = Some(ConversionError::ParseError {
+            position,
+            context,
+            unknown_type,
         });
     }
 
@@ -359,6 +391,11 @@ fn on_set_number_element<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R
     StreamOp::ValueIsConsumed
 }
 
+fn on_ddb_format_error<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, _baton: DdbBaton<'_, '_, W>) -> StreamOp {
+    // Error was already stored in last_error when the format error was detected
+    StreamOp::Error("DynamoDB format validation error")
+}
+
 /// Helper to check if we're in a context where type descriptors appear
 /// Type descriptors can appear under:
 /// - Item (top level with wrapper)
@@ -535,7 +572,16 @@ fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
                         b"NS" => return Some(on_number_set_begin),
                         b"L" => return Some(on_list_begin),
                         b"M" => return Some(on_map_begin),
-                        _ => return None,
+                        _ => {
+                            // Unknown type descriptor - store error and return error handler
+                            let mut conv = baton.borrow_mut();
+                            conv.store_parse_error(
+                                0, // Position not available here, will be set in handler
+                                "Invalid DynamoDB JSON format: unknown type descriptor",
+                                Some(type_key),
+                            );
+                            return Some(on_ddb_format_error);
+                        }
                     }
                 }
             }
