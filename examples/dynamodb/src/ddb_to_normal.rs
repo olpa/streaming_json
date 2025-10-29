@@ -1,12 +1,33 @@
 use embedded_io::{Read as IoRead, Write as IoWrite};
 use rjiter::jiter::Peek;
 use rjiter::RJiter;
-use scan_json::{iter_match, scan, Action, EndAction, Options, StreamOp};
+use scan_json::{scan, Action, EndAction, Options, StreamOp};
 use scan_json::matcher::StructuralPseudoname;
 use scan_json::stack::ContextIter;
 use core::cell::RefCell;
 use u8pool::U8Pool;
 use crate::ConversionError;
+use alloc::vec::Vec;
+
+/// Parse mode representing what we're currently expecting
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum ParseMode {
+    Root,              // At root level, expecting "Item" key or field names
+    FieldNames,        // Expecting field names (inside Item or at root without wrapper)
+    TypeDescriptor,    // Inside type descriptor object, expecting type key
+    InS,              // Inside S type descriptor, expecting string value
+    InN,              // Inside N type descriptor, expecting string value (number)
+    InBool,           // Inside BOOL type descriptor, expecting boolean value
+    InNull,           // Inside NULL type descriptor, expecting true value
+    ExpectSSArray,    // Expecting array for SS/BS type
+    ExpectNSArray,    // Expecting array for NS type
+    ExpectLArray,     // Expecting array for L type
+    ExpectMObject,    // Expecting object for M type
+    InSS,             // Inside SS/BS array, expecting string elements
+    InNS,             // Inside NS array, expecting string (number) elements
+    InL,              // Inside L array, expecting type descriptor elements
+    InM,              // Inside M object, expecting field names
+}
 
 pub struct DdbConverter<'a, 'workbuf, W: IoWrite> {
     writer: &'a mut W,
@@ -16,6 +37,8 @@ pub struct DdbConverter<'a, 'workbuf, W: IoWrite> {
     current_field: Option<&'workbuf [u8]>,
     has_item_wrapper: Option<bool>, // None = unknown, Some(true) = has Item, Some(false) = no Item
     last_error: Option<ConversionError>, // Stores detailed error information
+    mode_stack: Vec<ParseMode>, // Stack of parse modes
+    skip_next_object: bool, // Skip treating next object as type descriptor (for Item value)
 }
 
 impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
@@ -28,7 +51,21 @@ impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
             current_field: None,
             has_item_wrapper: None,
             last_error: None,
+            mode_stack: Vec::from([ParseMode::Root]),
+            skip_next_object: false,
         }
+    }
+
+    fn current_mode(&self) -> ParseMode {
+        *self.mode_stack.last().unwrap_or(&ParseMode::Root)
+    }
+
+    fn push_mode(&mut self, mode: ParseMode) {
+        self.mode_stack.push(mode);
+    }
+
+    fn pop_mode(&mut self) {
+        self.mode_stack.pop();
     }
 
     fn store_rjiter_error(&mut self, error: rjiter::Error, position: usize, context: &'static str) {
@@ -94,14 +131,29 @@ impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
 
 type DdbBaton<'a, 'workbuf, W> = &'a RefCell<DdbConverter<'a, 'workbuf, W>>;
 
-/// Handle the start of Item object - write opening brace
-fn on_item_begin<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
+/// Handle the root object - just enter it, don't write anything yet
+fn on_root_object_begin<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
+    // Don't write anything - we'll write when we know if there's an Item wrapper
+    let _conv = baton.borrow();
+    StreamOp::None
+}
+
+/// Handle the "Item" key at root - prepare for Item value object
+fn on_item_key<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
+    let mut conv = baton.borrow_mut();
+    conv.has_item_wrapper = Some(true);
+    conv.skip_next_object = true; // Next object is the Item value, not a type descriptor
+    StreamOp::None
+}
+
+/// Handle the start of Item value object - write opening brace and enter FieldNames mode
+fn on_item_value_object_begin<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
     let mut conv = baton.borrow_mut();
     conv.write(b"{");
     conv.newline();
     conv.depth = 1;
     conv.pending_comma = false;
-    conv.has_item_wrapper = Some(true);
+    conv.push_mode(ParseMode::FieldNames);
     StreamOp::None
 }
 
@@ -111,11 +163,12 @@ fn on_item_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static st
     conv.newline();
     conv.write(b"}");
     conv.write(b"\n");
+    conv.pop_mode(); // Pop FieldNames
     Ok(())
 }
 
-/// Handle a field key inside Item - write the field name
-fn on_item_field_key<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
+/// Handle a field key - write the field name and prepare for type descriptor
+fn on_field_key<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
     let field_name = {
         let conv = baton.borrow();
         conv.current_field.expect("current_field should be set").to_vec()
@@ -123,12 +176,14 @@ fn on_item_field_key<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, 
 
     let mut conv = baton.borrow_mut();
 
-    // If we haven't written anything yet and there's no Item wrapper, write opening brace
-    if conv.has_item_wrapper.is_none() {
+    // If we're in Root mode (no Item wrapper), write opening brace on first field
+    if conv.current_mode() == ParseMode::Root {
         conv.write(b"{");
         conv.newline();
         conv.depth = 1;
         conv.has_item_wrapper = Some(false);
+        conv.pop_mode(); // Pop Root
+        conv.push_mode(ParseMode::FieldNames);
     }
 
     conv.write_comma();
@@ -141,7 +196,51 @@ fn on_item_field_key<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, 
     StreamOp::None
 }
 
-// Type descriptor value handlers - these only use peek and write_long_bytes
+/// Handle the start of a type descriptor object
+fn on_type_descriptor_begin<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
+    let mut conv = baton.borrow_mut();
+
+    // In L arrays, write comma before element
+    if conv.current_mode() == ParseMode::InL {
+        conv.write_comma();
+    }
+
+    conv.push_mode(ParseMode::TypeDescriptor);
+    StreamOp::None
+}
+
+/// Handle a type key and transition to appropriate mode
+fn on_type_key<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
+    let type_key = {
+        let conv = baton.borrow();
+        conv.current_field.expect("current_field should be set for type key").to_vec()
+    };
+
+    let mut conv = baton.borrow_mut();
+
+    match type_key.as_slice() {
+        b"S" | b"B" => conv.push_mode(ParseMode::InS),
+        b"N" => conv.push_mode(ParseMode::InN),
+        b"BOOL" => conv.push_mode(ParseMode::InBool),
+        b"NULL" => conv.push_mode(ParseMode::InNull),
+        b"SS" | b"BS" => conv.push_mode(ParseMode::ExpectSSArray),
+        b"NS" => conv.push_mode(ParseMode::ExpectNSArray),
+        b"L" => conv.push_mode(ParseMode::ExpectLArray),
+        b"M" => conv.push_mode(ParseMode::ExpectMObject),
+        _ => {
+            conv.store_parse_error(
+                0,
+                "Invalid DynamoDB JSON format: unknown type descriptor",
+                Some(&type_key),
+            );
+            return StreamOp::Error("Unknown type descriptor");
+        }
+    }
+
+    StreamOp::None
+}
+
+// Type descriptor value handlers
 
 fn on_string_value<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
     let position = rjiter.current_index();
@@ -164,7 +263,8 @@ fn on_string_value<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, bat
     }
     conv.write(b"\"");
     conv.pending_comma = true;
-    StreamOp::ValueIsConsumed  // Tell scan we consumed the value
+    conv.pop_mode(); // Pop InS
+    StreamOp::ValueIsConsumed
 }
 
 fn on_number_value<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
@@ -186,12 +286,12 @@ fn on_number_value<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, bat
         return StreamOp::Error("Failed to write number value");
     }
     conv.pending_comma = true;
-    StreamOp::ValueIsConsumed  // Tell scan we consumed the value
+    conv.pop_mode(); // Pop InN
+    StreamOp::ValueIsConsumed
 }
 
 fn on_bool_value<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
     let position = rjiter.current_index();
-    // Peek to see if it's true or false
     let peek = match rjiter.peek() {
         Ok(p) => p,
         Err(e) => {
@@ -219,12 +319,12 @@ fn on_bool_value<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton
         _ => return StreamOp::Error("Expected boolean value for BOOL type"),
     }
     conv.pending_comma = true;
+    conv.pop_mode(); // Pop InBool
     StreamOp::ValueIsConsumed
 }
 
 fn on_null_value<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
     let position = rjiter.current_index();
-    // NULL value in DDB is {"NULL": true}
     let peek = match rjiter.peek() {
         Ok(p) => p,
         Err(e) => {
@@ -243,11 +343,11 @@ fn on_null_value<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton
     let mut conv = baton.borrow_mut();
     conv.write(b"null");
     conv.pending_comma = true;
+    conv.pop_mode(); // Pop InNull
     StreamOp::ValueIsConsumed
 }
 
 fn on_string_set_begin<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
-    // Validate that the value is actually an array
     let position = rjiter.current_index();
     let peek = match rjiter.peek() {
         Ok(p) => p,
@@ -267,13 +367,14 @@ fn on_string_set_begin<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>,
     }
 
     let mut conv = baton.borrow_mut();
+    conv.pop_mode(); // Pop ExpectSSArray
+    conv.push_mode(ParseMode::InSS);
     conv.write(b"[");
     conv.pending_comma = false;
     StreamOp::None
 }
 
 fn on_number_set_begin<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
-    // Validate that the value is actually an array
     let position = rjiter.current_index();
     let peek = match rjiter.peek() {
         Ok(p) => p,
@@ -293,13 +394,14 @@ fn on_number_set_begin<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>,
     }
 
     let mut conv = baton.borrow_mut();
+    conv.pop_mode(); // Pop ExpectNSArray
+    conv.push_mode(ParseMode::InNS);
     conv.write(b"[");
     conv.pending_comma = false;
     StreamOp::None
 }
 
 fn on_list_begin<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
-    // Validate that the value is actually an array
     let position = rjiter.current_index();
     let peek = match rjiter.peek() {
         Ok(p) => p,
@@ -319,13 +421,14 @@ fn on_list_begin<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton
     }
 
     let mut conv = baton.borrow_mut();
+    conv.pop_mode(); // Pop ExpectLArray
+    conv.push_mode(ParseMode::InL);
     conv.write(b"[");
     conv.pending_comma = false;
     StreamOp::None
 }
 
 fn on_map_begin<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
-    // Validate that the value is actually an object
     let position = rjiter.current_index();
     let peek = match rjiter.peek() {
         Ok(p) => p,
@@ -345,6 +448,8 @@ fn on_map_begin<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton:
     }
 
     let mut conv = baton.borrow_mut();
+    conv.pop_mode(); // Pop ExpectMObject
+    conv.push_mode(ParseMode::InM);
     conv.write(b"{");
     conv.newline();
     conv.depth += 1;
@@ -352,17 +457,8 @@ fn on_map_begin<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton:
     StreamOp::None
 }
 
-fn on_type_descriptor_object<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
-    // Type descriptor object - just let scan handle it
-    // But if we're inside an L array, write comma before this element
-    let mut conv = baton.borrow_mut();
-    conv.write_comma();
-    StreamOp::None
-}
-
 fn on_set_string_element<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
     let position = rjiter.current_index();
-    // String element in SS/BS set - write with quotes and comma
     let peek = match rjiter.peek() {
         Ok(p) => p,
         Err(e) => {
@@ -388,7 +484,6 @@ fn on_set_string_element<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R
 
 fn on_set_number_element<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
     let position = rjiter.current_index();
-    // Number element in NS set - write without quotes but with comma
     let peek = match rjiter.peek() {
         Ok(p) => p,
         Err(e) => {
@@ -410,224 +505,197 @@ fn on_set_number_element<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R
     StreamOp::ValueIsConsumed
 }
 
-fn on_ddb_format_error<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, _baton: DdbBaton<'_, '_, W>) -> StreamOp {
-    // Error was already stored in last_error when the format error was detected
-    StreamOp::Error("DynamoDB format validation error")
-}
-
-/// Helper to check if we're in a context where type descriptors appear
-/// Type descriptors can appear under:
-/// - Item (top level with wrapper)
-/// - #top (top level without Item wrapper)
-/// - M (Map object values)
-/// - L (List array elements)
-fn is_type_descriptor_context(mut ctx: ContextIter) -> bool {
-    // Walk up the context to find if we're under Item, M, L, or directly at #top
-    let first = ctx.next();
-    if first == Some(b"#top") {
-        // Directly at top level (no Item wrapper)
-        return true;
-    }
-
-    // Continue walking for Item, M, or L
-    let mut current = first;
-    loop {
-        match current {
-            Some(b"Item") => return true,
-            Some(b"M") => return true,
-            Some(b"L") => return true,
-            Some(b"#top") | None => return false,
-            Some(_) => {
-                current = ctx.next();
-            }
-        }
-    }
-}
-
-/// Helper to count consecutive occurrences of a specific key in the context
-/// Returns the count of consecutive matches starting from the current position
-fn count_consecutive(mut ctx: ContextIter, key: &[u8]) -> usize {
-    let mut count = 0;
-    while let Some(next) = ctx.next() {
-        if next == key {
-            count += 1;
-        } else {
-            break;
-        }
-    }
-    count
-}
-
-/// Check if we're in a "rogue name" scenario where a field name matches a type descriptor
-/// For repeating keys like [M, M, M, ...], odd count = real type, even = field name
-fn is_real_type_context(first_key: &[u8], second_key: &[u8], ctx: ContextIter) -> bool {
-    if first_key == second_key {
-        // Repeating key - use parity: odd count = type, even = field
-        let total_count = 2 + count_consecutive(ctx, first_key);
-        total_count % 2 == 1
-    } else {
-        // Different keys - this is a real type descriptor
-        true
-    }
-}
-
 fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
     structural: StructuralPseudoname,
     context: ContextIter,
     baton: DdbBaton<'a, 'workbuf, W>,
 ) -> Option<Action<DdbBaton<'a, 'workbuf, W>, R>> {
-    // Match "Item" key at root (optional wrapper)
-    if iter_match(|| [b"Item", b"#top"], structural, context.clone()) {
-        return Some(on_item_begin);
-    }
+    let mode = baton.borrow().current_mode();
 
-    // Match field keys - can be inside Item, at top-level, or inside M type objects
-    if structural == StructuralPseudoname::None {
-        let mut ctx = context.clone();
-        if let Some(field) = ctx.next() {
-            if field != b"#top" && field != b"#array" {
-                if let Some(parent) = ctx.next() {
-                    // Field inside top-level Item
-                    if parent == b"Item" {
-                        // Check if this is really the top-level Item or a field named "Item"
-                        // Top-level Item has context [..., Item, #top]
-                        // Field named "Item" has context [..., Item, M, ...]
-                        if let Some(grandparent) = ctx.next() {
-                            if grandparent == b"#top" {
-                                // This is a field inside the top-level Item
-                                let mut conv = baton.borrow_mut();
-                                #[allow(unsafe_code)]
-                                let field_slice: &'workbuf [u8] =
-                                    unsafe { core::mem::transmute::<&[u8], &'workbuf [u8]>(field) };
-                                conv.current_field = Some(field_slice);
-                                return Some(on_item_field_key);
-                            }
-                            // Otherwise, this might be a type key under a field named "Item"
-                            // Fall through to type descriptor matching
-                        }
-                    }
-                    // Field at top-level (no Item wrapper)
-                    else if parent == b"#top" {
-                        let mut conv = baton.borrow_mut();
-                        #[allow(unsafe_code)]
-                        let field_slice: &'workbuf [u8] =
-                            unsafe { core::mem::transmute::<&[u8], &'workbuf [u8]>(field) };
-                        conv.current_field = Some(field_slice);
-                        return Some(on_item_field_key);
-                    }
-                    // Field inside M type object
-                    else if parent == b"M" {
-                        // Check for "rogue name" - is this inside a real M type or a field named "M"?
-                        // Context is now [data, Item, ...] after parent, so check next element
-                        let mut ctx_check = ctx.clone();
-                        let grandparent = ctx_check.next().unwrap_or(b"");
-
-                        if is_real_type_context(b"M", grandparent, ctx_check) {
-                            let mut conv = baton.borrow_mut();
-                            #[allow(unsafe_code)]
-                            let field_slice: &'workbuf [u8] =
-                                unsafe { core::mem::transmute::<&[u8], &'workbuf [u8]>(field) };
-                            conv.current_field = Some(field_slice);
-                            return Some(on_item_field_key);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Match type descriptor objects - Objects that are values of fields or array elements
-    if structural == StructuralPseudoname::Object {
+    // Match the root object - special case
+    if structural == StructuralPseudoname::Object && mode == ParseMode::Root {
         let mut ctx = context.clone();
         if let Some(first) = ctx.next() {
-            // Type descriptors under M or Item fields, or at top-level (no Item wrapper)
-            if first != b"#top" && first != b"#array" {
-                if let Some(parent) = ctx.next() {
-                    if parent == b"Item" || parent == b"M" || parent == b"#top" {
-                        return Some(on_type_descriptor_object);
-                    }
-                }
-            }
-            // Type descriptors inside L arrays: context is [#array, L, ...]
-            else if first == b"#array" {
-                if let Some(parent) = ctx.next() {
-                    if parent == b"L" {
-                        return Some(on_type_descriptor_object);
-                    }
-                }
+            if first == b"#top" {
+                // This is the root object - don't treat it as a type descriptor
+                return Some(on_root_object_begin);
             }
         }
     }
 
-    // Match type descriptor keys (N, S, SS, M, L, etc.)
+    // Match keys (field names or type keys)
     if structural == StructuralPseudoname::None {
         let mut ctx = context.clone();
-        if let Some(type_key) = ctx.next() {
-            if let Some(second) = ctx.next() {
-                // Type keys in normal fields: [typeKey, fieldName, Item/M, ...]
-                // Type keys in L arrays: [typeKey, #array, L, ...]
-                let in_type_descriptor_context = if second == b"#array" {
-                    // Inside an array - check if it's an L array
-                    if let Some(parent) = ctx.next() {
-                        parent == b"L"
-                    } else {
-                        false
-                    }
-                } else if second != b"#top" {
-                    // Normal field context
-                    is_type_descriptor_context(ctx.clone())
-                } else {
-                    false
-                };
-
-                if in_type_descriptor_context {
-                    // Match specific type keys and return handlers
-                    match type_key {
-                        b"S" | b"B" => return Some(on_string_value),
-                        b"N" => return Some(on_number_value),
-                        b"BOOL" => return Some(on_bool_value),
-                        b"NULL" => return Some(on_null_value),
-                        b"SS" | b"BS" => return Some(on_string_set_begin),
-                        b"NS" => return Some(on_number_set_begin),
-                        b"L" => return Some(on_list_begin),
-                        b"M" => return Some(on_map_begin),
-                        _ => {
-                            // Unknown type descriptor - store error and return error handler
-                            let mut conv = baton.borrow_mut();
-                            conv.store_parse_error(
-                                0, // Position not available here, will be set in handler
-                                "Invalid DynamoDB JSON format: unknown type descriptor",
-                                Some(type_key),
-                            );
-                            return Some(on_ddb_format_error);
-                        }
+        if let Some(key) = ctx.next() {
+            // Check if this is "Item" key at root level
+            if key == b"Item" && mode == ParseMode::Root {
+                // Verify parent is #top
+                if let Some(parent) = ctx.next() {
+                    if parent == b"#top" {
+                        let mut conv = baton.borrow_mut();
+                        #[allow(unsafe_code)]
+                        let key_slice: &'workbuf [u8] =
+                            unsafe { core::mem::transmute::<&[u8], &'workbuf [u8]>(key) };
+                        conv.current_field = Some(key_slice);
+                        drop(conv);
+                        return Some(on_item_key);
                     }
                 }
+            }
+
+            // Store the key
+            let mut conv = baton.borrow_mut();
+            #[allow(unsafe_code)]
+            let key_slice: &'workbuf [u8] =
+                unsafe { core::mem::transmute::<&[u8], &'workbuf [u8]>(key) };
+            conv.current_field = Some(key_slice);
+            drop(conv);
+
+            match mode {
+                ParseMode::Root | ParseMode::FieldNames | ParseMode::InM => {
+                    // Regular field name
+                    return Some(on_field_key);
+                }
+                ParseMode::TypeDescriptor => {
+                    // Type key inside type descriptor
+                    return Some(on_type_key);
+                }
+                _ => {}
             }
         }
     }
 
-    // Match array elements inside SS/BS/NS sets
-    if structural == StructuralPseudoname::Atom {
-        let mut ctx = context.clone();
-        if let Some(_array_marker) = ctx.next() {  // #array
-            if let Some(type_key) = ctx.next() {
-                match type_key {
-                    b"SS" | b"BS" => return Some(on_set_string_element),
-                    b"NS" => return Some(on_set_number_element),
-                    _ => {}
-                }
+    // Match objects
+    if structural == StructuralPseudoname::Object {
+        // Check if this is the Item value object
+        let mut conv = baton.borrow_mut();
+        if conv.skip_next_object {
+            conv.skip_next_object = false;
+            drop(conv);
+            return Some(on_item_value_object_begin);
+        }
+        drop(conv);
+
+        match mode {
+            ParseMode::FieldNames | ParseMode::InM | ParseMode::InL => {
+                // Type descriptor object
+                return Some(on_type_descriptor_begin);
             }
+            _ => {}
+        }
+    }
+
+    // Match arrays
+    if structural == StructuralPseudoname::Array {
+        match mode {
+            ParseMode::ExpectSSArray => return Some(on_string_set_begin),
+            ParseMode::ExpectNSArray => return Some(on_number_set_begin),
+            ParseMode::ExpectLArray => return Some(on_list_begin),
+            // Validation: if we're expecting an object but got an array, it's an error
+            ParseMode::ExpectMObject => {
+                return Some(on_invalid_type_value_not_object);
+            }
+            // Validation: if we're expecting an atom but got an array, it's an error
+            ParseMode::InS | ParseMode::InN | ParseMode::InBool | ParseMode::InNull => {
+                return Some(on_invalid_type_value_not_atom);
+            }
+            _ => {}
+        }
+    }
+
+    // Match objects for M type
+    if structural == StructuralPseudoname::Object {
+        // Skip the check from earlier since we're checking mode again
+        if mode == ParseMode::ExpectMObject {
+            return Some(on_map_begin);
+        }
+        // Validation: if we're expecting an array but got an object, it's an error
+        match mode {
+            ParseMode::ExpectSSArray | ParseMode::ExpectNSArray | ParseMode::ExpectLArray => {
+                return Some(on_invalid_type_value_not_array);
+            }
+            // Validation: if we're expecting an atom but got an object, it's an error
+            ParseMode::InS | ParseMode::InN | ParseMode::InBool | ParseMode::InNull => {
+                return Some(on_invalid_type_value_not_atom);
+            }
+            _ => {}
+        }
+    }
+
+    // Match atom values
+    if structural == StructuralPseudoname::Atom {
+        match mode {
+            ParseMode::InS => return Some(on_string_value),
+            ParseMode::InN => return Some(on_number_value),
+            ParseMode::InBool => return Some(on_bool_value),
+            ParseMode::InNull => return Some(on_null_value),
+            ParseMode::InSS => return Some(on_set_string_element),
+            ParseMode::InNS => return Some(on_set_number_element),
+            // Validation: if we're expecting an array but got an atom, it's an error
+            ParseMode::ExpectSSArray | ParseMode::ExpectNSArray | ParseMode::ExpectLArray => {
+                return Some(on_invalid_type_value_not_array);
+            }
+            // Validation: if we're expecting an object but got an atom, it's an error
+            ParseMode::ExpectMObject => {
+                return Some(on_invalid_type_value_not_object);
+            }
+            _ => {}
         }
     }
 
     None
 }
 
+fn on_invalid_type_value_not_array<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
+    let mut conv = baton.borrow_mut();
+    let mode = conv.current_mode();
+    let type_name = match mode {
+        ParseMode::ExpectSSArray => "SS/BS",
+        ParseMode::ExpectNSArray => "NS",
+        ParseMode::ExpectLArray => "L",
+        _ => "unknown",
+    };
+    conv.store_parse_error(
+        0,
+        "Invalid DynamoDB JSON format: type expects an array value",
+        Some(type_name.as_bytes()),
+    );
+    StreamOp::Error("Expected array value for type")
+}
+
+fn on_invalid_type_value_not_object<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
+    let mut conv = baton.borrow_mut();
+    conv.store_parse_error(
+        0,
+        "Invalid DynamoDB JSON format: M type expects an object value",
+        Some(b"M"),
+    );
+    StreamOp::Error("Expected object value for M type")
+}
+
+fn on_invalid_type_value_not_atom<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
+    let mut conv = baton.borrow_mut();
+    let mode = conv.current_mode();
+    let type_name = match mode {
+        ParseMode::InS => "S",
+        ParseMode::InN => "N",
+        ParseMode::InBool => "BOOL",
+        ParseMode::InNull => "NULL",
+        _ => "unknown",
+    };
+    conv.store_parse_error(
+        0,
+        "Invalid DynamoDB JSON format: type expects a primitive value",
+        Some(type_name.as_bytes()),
+    );
+    StreamOp::Error("Expected primitive value for type")
+}
+
 fn on_set_or_list_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     let mut conv = baton.borrow_mut();
     conv.write(b"]");
     conv.pending_comma = true;
+    conv.pop_mode(); // Pop InSS/InNS/InL
     Ok(())
 }
 
@@ -638,85 +706,87 @@ fn on_map_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str
     conv.indent();
     conv.write(b"}");
     conv.pending_comma = true;
+    conv.pop_mode(); // Pop InM
     Ok(())
 }
 
-fn on_type_descriptor_end<W: IoWrite>(_baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
-    // Type descriptor object ended - nothing to write, value was already written
-    // The value handlers already set pending_comma for the next element
+fn on_type_descriptor_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
+    let mut conv = baton.borrow_mut();
+    conv.pop_mode(); // Pop TypeDescriptor
     Ok(())
 }
 
 fn on_list_element_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
-    // Element in L array ended - prepare comma for next element
     let mut conv = baton.borrow_mut();
     conv.pending_comma = true;
+    Ok(())
+}
+
+fn on_root_object_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
+    let conv = baton.borrow();
+    // If there was no Item wrapper, the root object IS the record, so close it
+    if conv.has_item_wrapper == Some(false) {
+        drop(conv);
+        on_item_end(baton)?;
+    }
+    // If there was an Item wrapper, the root object just wraps "Item", nothing to write
     Ok(())
 }
 
 fn find_end_action<'a, 'workbuf, W: IoWrite>(
     structural: StructuralPseudoname,
     context: ContextIter,
-    _baton: DdbBaton<'a, 'workbuf, W>,
+    baton: DdbBaton<'a, 'workbuf, W>,
 ) -> Option<EndAction<DdbBaton<'a, 'workbuf, W>>> {
-    // Match end of "Item"
-    if iter_match(|| [b"Item", b"#top"], structural, context.clone()) {
-        return Some(on_item_end);
-    }
+    let mode = baton.borrow().current_mode();
 
-    // Match end of M objects (Map values inside type descriptors)
-    if structural == StructuralPseudoname::Object {
+    // Match end of root object
+    if structural == StructuralPseudoname::Object && mode == ParseMode::Root {
         let mut ctx = context.clone();
         if let Some(first) = ctx.next() {
-            // Check if this is an M object ending
-            if first == b"M" {
-                if let Some(second) = ctx.next() {
-                    // Check special cases: array context or regular field
-                    let should_close = if second == b"#array" {
-                        // M object inside an L array
-                        ctx.next() == Some(b"L")
-                    } else if second != b"#top" {
-                        // Check if this is a real M type or a field named "M"
-                        is_real_type_context(first, second, ctx.clone())
-                    } else {
-                        false
-                    };
-
-                    if should_close {
-                        return Some(on_map_end);
-                    }
-                }
-            }
-            // Type descriptor objects inside L arrays
-            if first == b"#array" {
-                if let Some(parent) = ctx.next() {
-                    if parent == b"L" {
-                        // This is an element in L array - need to handle comma
-                        return Some(on_list_element_end);
-                    }
-                }
-            }
-            // Match end of type descriptor objects (not inside arrays)
-            if first == b"Item" {
-                // Already handled above
-            } else if first != b"#top" && first != b"#array" {
-                // This is a type descriptor object (like {"S": "..."} or field named M/L)
-                return Some(on_type_descriptor_end);
+            if first == b"#top" {
+                return Some(on_root_object_end);
             }
         }
     }
 
-    // Match end of SS, NS, BS, L arrays
-    if structural == StructuralPseudoname::Array {
-        let mut ctx = context.clone();
-        if let Some(type_key) = ctx.next() {
-            if let Some(_field_name) = ctx.next() {
-                if is_type_descriptor_context(ctx) {
-                    match type_key {
-                        b"SS" | b"BS" | b"NS" | b"L" => return Some(on_set_or_list_end),
-                        _ => {}
-                    }
+    // Match end of objects
+    if structural == StructuralPseudoname::Object {
+        match mode {
+            ParseMode::FieldNames => {
+                // Check if this is the Item/root object
+                let has_wrapper = baton.borrow().has_item_wrapper;
+                if has_wrapper.is_some() {
+                    return Some(on_item_end);
                 }
+            }
+            ParseMode::InM => {
+                return Some(on_map_end);
+            }
+            ParseMode::TypeDescriptor => {
+                return Some(on_type_descriptor_end);
+            }
+            _ => {}
+        }
+    }
+
+    // Match end of arrays
+    if structural == StructuralPseudoname::Array {
+        match mode {
+            ParseMode::InSS | ParseMode::InNS | ParseMode::InL => {
+                return Some(on_set_or_list_end);
+            }
+            _ => {}
+        }
+    }
+
+    // Match end of type descriptor objects in L arrays
+    if structural == StructuralPseudoname::Object {
+        if mode == ParseMode::TypeDescriptor {
+            // Check if parent is InL
+            let mode_stack = &baton.borrow().mode_stack;
+            if mode_stack.len() >= 2 && mode_stack[mode_stack.len() - 2] == ParseMode::InL {
+                return Some(on_list_element_end);
             }
         }
     }
@@ -771,18 +841,6 @@ pub fn convert_ddb_to_normal<R: IoRead, W: IoWrite>(
         }
         // Otherwise return the scan error
         return Err(ConversionError::ScanError(e));
-    }
-
-    // If there was no Item wrapper, we need to close the root object
-    let conv = baton.borrow();
-    if conv.has_item_wrapper == Some(false) {
-        drop(conv); // Release borrow before calling end handler
-        on_item_end(&baton).map_err(|msg| ConversionError::ScanError(
-            scan_json::Error::InternalError {
-                position: rjiter.current_index(),
-                message: msg,
-            }
-        ))?;
     }
 
     Ok(())
