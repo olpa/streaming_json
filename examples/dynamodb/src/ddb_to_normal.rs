@@ -148,7 +148,6 @@ pub struct DdbConverter<'a, 'workbuf, W: IoWrite> {
 
     phase: Phase,
     current_type: Option<TypeDesc>,
-    skip_next_object: bool, // Skip treating next object as type descriptor (for Item value)
     type_descriptor_depth: usize, // Nesting depth of type descriptors (0 = not in type descriptor)
     m_depth: usize, // Nesting depth of M objects (for distinguishing M from field named "M")
 
@@ -169,7 +168,6 @@ impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
             last_error: None,
             phase: Phase::ExpectingField,
             current_type: None,
-            skip_next_object: false,
             type_descriptor_depth: 0,
             m_depth: 0,
             current_in_list: false,
@@ -250,7 +248,6 @@ fn on_root_object_begin<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R
 fn on_item_key<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
     let mut conv = baton.borrow_mut();
     conv.has_item_wrapper = Some(true);
-    conv.skip_next_object = true; // Next object is the Item value, not a type descriptor
     StreamOp::None
 }
 
@@ -260,6 +257,7 @@ fn on_item_value_object_begin<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJ
     conv.write(b"{");
     conv.newline();
     conv.depth = 1;
+    conv.has_item_wrapper = Some(true);
     conv.pending_comma = false;
     conv.phase = Phase::ExpectingField;
     StreamOp::None
@@ -633,17 +631,23 @@ fn find_action_object<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
     // Check for root object at #top
     if let Some(first) = context.next() {
         if first == b"#top" {
+            let mode = baton.borrow().item_wrapper_mode;
+            if mode == ItemWrapperMode::AsWrapper {
+                // Ignore the wrapper object, wait for the Item value object
+                return None;
+            }
             return Some(on_root_object_begin);
         }
-    }
 
-    // Check if this is the Item value object
-    {
-        let mut conv = baton.borrow_mut();
-        if conv.skip_next_object {
-            conv.skip_next_object = false;
-            drop(conv);
-            return Some(on_item_value_object_begin);
+        // Check if this is the Item value object (when mode is AsWrapper)
+        // Context: parent is "Item", grandparent is "#top"
+        if first == b"Item" {
+            if let Some(b"#top") = context.next() {
+                let mode = baton.borrow().item_wrapper_mode;
+                if mode == ItemWrapperMode::AsWrapper {
+                    return Some(on_item_value_object_begin);
+                }
+            }
         }
     }
 
@@ -676,37 +680,36 @@ fn find_action_key<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
 ) -> Option<Action<DdbBaton<'a, 'workbuf, W>, R>> {
     let key = context.next()?;
 
-    // Check if this is "Item" key at root level (parent is #top)
-    if key == b"Item" {
-        if let Some(b"#top") = context.next() {
+    if phase == Phase::ExpectingField {
+        if key == b"Item" {
             let mode = baton.borrow().item_wrapper_mode;
-
-            // If mode is AsWrapper, handle "Item" specially as a wrapper
             if mode == ItemWrapperMode::AsWrapper {
-                let mut conv = baton.borrow_mut();
-                #[allow(unsafe_code)]
-                let key_slice: &'workbuf [u8] =
-                    unsafe { core::mem::transmute::<&[u8], &'workbuf [u8]>(key) };
-                conv.current_field = Some(key_slice);
-                return Some(on_item_key);
+                if let Some(b"#top") = context.next() {
+                    return None;
+                }
             }
-            // If mode is AsField, fall through to treat as normal field
         }
+
+        // Store the key and return field handler
+        let mut conv = baton.borrow_mut();
+        #[allow(unsafe_code)]
+        let key_slice: &'workbuf [u8] =
+            unsafe { core::mem::transmute::<&[u8], &'workbuf [u8]>(key) };
+        conv.current_field = Some(key_slice);
+        return Some(on_field_key);
     }
 
-    // Store the key
-    let mut conv = baton.borrow_mut();
-    #[allow(unsafe_code)]
-    let key_slice: &'workbuf [u8] =
-        unsafe { core::mem::transmute::<&[u8], &'workbuf [u8]>(key) };
-    conv.current_field = Some(key_slice);
-    drop(conv);
-
-    match phase {
-        Phase::ExpectingField => Some(on_field_key),
-        Phase::ExpectingTypeKey => Some(on_type_key),
-        _ => None,
+    // Handle type keys
+    if phase == Phase::ExpectingTypeKey {
+        let mut conv = baton.borrow_mut();
+        #[allow(unsafe_code)]
+        let key_slice: &'workbuf [u8] =
+            unsafe { core::mem::transmute::<&[u8], &'workbuf [u8]>(key) };
+        conv.current_field = Some(key_slice);
+        return Some(on_type_key);
     }
+
+    None
 }
 
 /// Handle Array structural pseudoname
