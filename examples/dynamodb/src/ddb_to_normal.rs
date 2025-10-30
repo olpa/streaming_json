@@ -7,26 +7,127 @@ use scan_json::stack::ContextIter;
 use core::cell::RefCell;
 use u8pool::U8Pool;
 use crate::ConversionError;
-use alloc::vec::Vec;
 
-/// Parse mode representing what we're currently expecting
+/// What phase of parsing we're in
 #[derive(Debug, Clone, Copy, PartialEq)]
-enum ParseMode {
-    Root,              // At root level, expecting "Item" key or field names
-    FieldNames,        // Expecting field names (inside Item or at root without wrapper)
-    TypeDescriptor,    // Inside type descriptor object, expecting type key
-    InS,              // Inside S type descriptor, expecting string value
-    InN,              // Inside N type descriptor, expecting string value (number)
-    InBool,           // Inside BOOL type descriptor, expecting boolean value
-    InNull,           // Inside NULL type descriptor, expecting true value
-    ExpectSSArray,    // Expecting array for SS/BS type
-    ExpectNSArray,    // Expecting array for NS type
-    ExpectLArray,     // Expecting array for L type
-    ExpectMObject,    // Expecting object for M type
-    InSS,             // Inside SS/BS array, expecting string elements
-    InNS,             // Inside NS array, expecting string (number) elements
-    InL,              // Inside L array, expecting type descriptor elements
-    InM,              // Inside M object, expecting field names
+enum Phase {
+    Root,                  // At root level, expecting root object or "Item" key
+    ExpectingField,        // Expecting a field key
+    ExpectingTypeDesc,     // Expecting type descriptor object (after field key)
+    ExpectingTypeKey,      // Inside type descriptor, expecting type key
+    ExpectingValue,        // After type key, expecting the value
+}
+
+/// Type descriptor being processed
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum TypeDesc {
+    S, N, Bool, Null,
+    SS, NS,  // Sets
+    L, M,    // Nested containers
+}
+
+/// Check if we're DIRECTLY inside an L (list) container (not nested in M inside L)
+/// This is used to determine the correct phase after consuming a value
+fn in_list_from_context(context: ContextIter) -> bool {
+    let mut ctx = context.clone();
+    // Check if the FIRST item in context is #array
+    if let Some(first) = ctx.next() {
+        if first == b"#array" {
+            // We're directly in an array, check if it's an L array
+            if let Some(array_key) = ctx.next() {
+                return array_key == b"L";
+            }
+        }
+    }
+    false
+}
+
+/// Check if we're ending an L array (context is at the array level, not inside it)
+fn ending_l_array_from_context(context: ContextIter) -> bool {
+    let mut ctx = context.clone();
+    // First item in context should be the key of the array
+    if let Some(key) = ctx.next() {
+        return key == b"L";
+    }
+    false
+}
+
+/// Check if we're ending an M object (context is at the object level, not inside it)
+/// Need to distinguish from a field named "M" whose type descriptor is ending
+fn ending_m_object_from_context(context: ContextIter) -> bool {
+    let mut ctx = context.clone();
+    // First item in context should be the key of the object
+    if let Some(key) = ctx.next() {
+        if key == b"M" {
+            // Check parent - if parent is #array (L array), "M" is a type key
+            // If parent is also a type key, then "M" is a field name, not ending M object
+            if let Some(parent) = ctx.next() {
+                match parent {
+                    b"#array" => {
+                        // In an array, check if it's an L array
+                        if let Some(array_parent) = ctx.next() {
+                            return array_parent == b"L";
+                        }
+                        return false;
+                    }
+                    // If parent is any type key, this "M" is a field name inside that type's value
+                    b"S" | b"N" | b"BOOL" | b"NULL" | b"SS" | b"NS" | b"BS" | b"L" => {
+                        // Parent is a type key, so this "M" is a field name
+                        return false;
+                    }
+                    b"M" => {
+                        // Parent is "M" - could be a type key OR a field name
+                        // Need to check grandparent and possibly great-grandparent
+                        if let Some(grandparent) = ctx.next() {
+                            match grandparent {
+                                b"M" => {
+                                    // Grandparent is also "M" - deeply nested M case
+                                    // Check great-grandparent to determine the pattern
+                                    if let Some(great_gp) = ctx.next() {
+                                        match great_gp {
+                                            // If great-grandparent IS a type key or marker, then:
+                                            // parent "M" is a field name inside another M's type descriptor
+                                            b"S" | b"N" | b"BOOL" | b"NULL" | b"SS" | b"NS" | b"BS" | b"L" | b"M" | b"#array" | b"#top" => {
+                                                return false;
+                                            }
+                                            // great-grandparent is a field name, so:
+                                            // grandparent="M" is type key, parent="M" is field, current="M" is type
+                                            _ => {
+                                                return true;
+                                            }
+                                        }
+                                    }
+                                    // No great-grandparent, conservatively assume we're closing a type descriptor
+                                    return false;
+                                }
+                                // If grandparent is any other type key or special marker
+                                b"S" | b"N" | b"BOOL" | b"NULL" | b"SS" | b"NS" | b"BS" | b"L" | b"#array" | b"#top" => {
+                                    // Parent "M" is a field name, current "M" is a type key
+                                    return true;
+                                }
+                                // Otherwise grandparent is a regular field name
+                                _ => {
+                                    // Parent "M" is the type key for grandparent field
+                                    // Current "M" is a field name inside that M value
+                                    return false;
+                                }
+                            }
+                        }
+                        // No grandparent, assume parent "M" is a type key
+                        return false;
+                    }
+                    // For any other parent (regular field name), "M" is a type key
+                    _ => {
+                        return true;
+                    }
+                }
+            } else {
+                // No parent, so "M" is a type key
+                return true;
+            }
+        }
+    }
+    false
 }
 
 pub struct DdbConverter<'a, 'workbuf, W: IoWrite> {
@@ -37,8 +138,16 @@ pub struct DdbConverter<'a, 'workbuf, W: IoWrite> {
     current_field: Option<&'workbuf [u8]>,
     has_item_wrapper: Option<bool>, // None = unknown, Some(true) = has Item, Some(false) = no Item
     last_error: Option<ConversionError>, // Stores detailed error information
-    mode_stack: Vec<ParseMode>, // Stack of parse modes
+
+    // Simplified state management
+    phase: Phase,
+    current_type: Option<TypeDesc>,
     skip_next_object: bool, // Skip treating next object as type descriptor (for Item value)
+    type_descriptor_depth: usize, // Nesting depth of type descriptors (0 = not in type descriptor)
+    m_depth: usize, // Nesting depth of M objects (for distinguishing M from field named "M")
+
+    // Cached context information (set in find_action/find_end_action)
+    current_in_list: bool, // True if currently in an L container
 }
 
 impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
@@ -51,21 +160,13 @@ impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
             current_field: None,
             has_item_wrapper: None,
             last_error: None,
-            mode_stack: Vec::from([ParseMode::Root]),
+            phase: Phase::Root,
+            current_type: None,
             skip_next_object: false,
+            type_descriptor_depth: 0,
+            m_depth: 0,
+            current_in_list: false,
         }
-    }
-
-    fn current_mode(&self) -> ParseMode {
-        *self.mode_stack.last().unwrap_or(&ParseMode::Root)
-    }
-
-    fn push_mode(&mut self, mode: ParseMode) {
-        self.mode_stack.push(mode);
-    }
-
-    fn pop_mode(&mut self) {
-        self.mode_stack.pop();
     }
 
     fn store_rjiter_error(&mut self, error: rjiter::Error, position: usize, context: &'static str) {
@@ -146,14 +247,14 @@ fn on_item_key<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton:
     StreamOp::None
 }
 
-/// Handle the start of Item value object - write opening brace and enter FieldNames mode
+/// Handle the start of Item value object - write opening brace and enter field-expecting phase
 fn on_item_value_object_begin<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
     let mut conv = baton.borrow_mut();
     conv.write(b"{");
     conv.newline();
     conv.depth = 1;
     conv.pending_comma = false;
-    conv.push_mode(ParseMode::FieldNames);
+    conv.phase = Phase::ExpectingField;
     StreamOp::None
 }
 
@@ -163,7 +264,6 @@ fn on_item_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static st
     conv.newline();
     conv.write(b"}");
     conv.write(b"\n");
-    conv.pop_mode(); // Pop FieldNames
     Ok(())
 }
 
@@ -176,14 +276,13 @@ fn on_field_key<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton
 
     let mut conv = baton.borrow_mut();
 
-    // If we're in Root mode (no Item wrapper), write opening brace on first field
-    if conv.current_mode() == ParseMode::Root {
+    // If we're in Root phase (no Item wrapper), write opening brace on first field
+    if conv.phase == Phase::Root {
         conv.write(b"{");
         conv.newline();
         conv.depth = 1;
         conv.has_item_wrapper = Some(false);
-        conv.pop_mode(); // Pop Root
-        conv.push_mode(ParseMode::FieldNames);
+        conv.phase = Phase::ExpectingField;
     }
 
     conv.write_comma();
@@ -192,6 +291,7 @@ fn on_field_key<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton
     conv.write(&field_name);
     conv.write(b"\":");
     conv.pending_comma = false;
+    conv.phase = Phase::ExpectingTypeDesc;
 
     StreamOp::None
 }
@@ -201,15 +301,16 @@ fn on_type_descriptor_begin<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJit
     let mut conv = baton.borrow_mut();
 
     // In L arrays, write comma before element
-    if conv.current_mode() == ParseMode::InL {
+    if conv.current_in_list {
         conv.write_comma();
     }
 
-    conv.push_mode(ParseMode::TypeDescriptor);
+    conv.type_descriptor_depth += 1;
+    conv.phase = Phase::ExpectingTypeKey;
     StreamOp::None
 }
 
-/// Handle a type key and transition to appropriate mode
+/// Handle a type key and transition to expecting value
 fn on_type_key<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
     let type_key = {
         let conv = baton.borrow();
@@ -218,15 +319,15 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton:
 
     let mut conv = baton.borrow_mut();
 
-    match type_key.as_slice() {
-        b"S" | b"B" => conv.push_mode(ParseMode::InS),
-        b"N" => conv.push_mode(ParseMode::InN),
-        b"BOOL" => conv.push_mode(ParseMode::InBool),
-        b"NULL" => conv.push_mode(ParseMode::InNull),
-        b"SS" | b"BS" => conv.push_mode(ParseMode::ExpectSSArray),
-        b"NS" => conv.push_mode(ParseMode::ExpectNSArray),
-        b"L" => conv.push_mode(ParseMode::ExpectLArray),
-        b"M" => conv.push_mode(ParseMode::ExpectMObject),
+    let type_desc = match type_key.as_slice() {
+        b"S" | b"B" => TypeDesc::S,
+        b"N" => TypeDesc::N,
+        b"BOOL" => TypeDesc::Bool,
+        b"NULL" => TypeDesc::Null,
+        b"SS" | b"BS" => TypeDesc::SS,
+        b"NS" => TypeDesc::NS,
+        b"L" => TypeDesc::L,
+        b"M" => TypeDesc::M,
         _ => {
             conv.store_parse_error(
                 0,
@@ -235,8 +336,10 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton:
             );
             return StreamOp::Error("Unknown type descriptor");
         }
-    }
+    };
 
+    conv.current_type = Some(type_desc);
+    conv.phase = Phase::ExpectingValue;
     StreamOp::None
 }
 
@@ -263,7 +366,10 @@ fn on_string_value<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, bat
     }
     conv.write(b"\"");
     conv.pending_comma = true;
-    conv.pop_mode(); // Pop InS
+
+    // After value, return to field or type descriptor level
+    conv.current_type = None;
+    conv.phase = if conv.current_in_list { Phase::ExpectingTypeDesc } else { Phase::ExpectingField };
     StreamOp::ValueIsConsumed
 }
 
@@ -286,7 +392,10 @@ fn on_number_value<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, bat
         return StreamOp::Error("Failed to write number value");
     }
     conv.pending_comma = true;
-    conv.pop_mode(); // Pop InN
+
+    // After value, return to field or type descriptor level
+    conv.current_type = None;
+    conv.phase = if conv.current_in_list { Phase::ExpectingTypeDesc } else { Phase::ExpectingField };
     StreamOp::ValueIsConsumed
 }
 
@@ -319,7 +428,10 @@ fn on_bool_value<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton
         _ => return StreamOp::Error("Expected boolean value for BOOL type"),
     }
     conv.pending_comma = true;
-    conv.pop_mode(); // Pop InBool
+
+    // After value, return to field or type descriptor level
+    conv.current_type = None;
+    conv.phase = if conv.current_in_list { Phase::ExpectingTypeDesc } else { Phase::ExpectingField };
     StreamOp::ValueIsConsumed
 }
 
@@ -343,7 +455,10 @@ fn on_null_value<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton
     let mut conv = baton.borrow_mut();
     conv.write(b"null");
     conv.pending_comma = true;
-    conv.pop_mode(); // Pop InNull
+
+    // After value, return to field or type descriptor level
+    conv.current_type = None;
+    conv.phase = if conv.current_in_list { Phase::ExpectingTypeDesc } else { Phase::ExpectingField };
     StreamOp::ValueIsConsumed
 }
 
@@ -367,10 +482,9 @@ fn on_string_set_begin<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>,
     }
 
     let mut conv = baton.borrow_mut();
-    conv.pop_mode(); // Pop ExpectSSArray
-    conv.push_mode(ParseMode::InSS);
     conv.write(b"[");
     conv.pending_comma = false;
+    // Stay in ExpectingValue, SS elements are atoms
     StreamOp::None
 }
 
@@ -394,10 +508,9 @@ fn on_number_set_begin<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>,
     }
 
     let mut conv = baton.borrow_mut();
-    conv.pop_mode(); // Pop ExpectNSArray
-    conv.push_mode(ParseMode::InNS);
     conv.write(b"[");
     conv.pending_comma = false;
+    // Stay in ExpectingValue, NS elements are atoms
     StreamOp::None
 }
 
@@ -421,10 +534,9 @@ fn on_list_begin<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton
     }
 
     let mut conv = baton.borrow_mut();
-    conv.pop_mode(); // Pop ExpectLArray
-    conv.push_mode(ParseMode::InL);
     conv.write(b"[");
     conv.pending_comma = false;
+    conv.phase = Phase::ExpectingTypeDesc;  // In L, we expect type descriptors
     StreamOp::None
 }
 
@@ -448,12 +560,12 @@ fn on_map_begin<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton:
     }
 
     let mut conv = baton.borrow_mut();
-    conv.pop_mode(); // Pop ExpectMObject
-    conv.push_mode(ParseMode::InM);
     conv.write(b"{");
     conv.newline();
     conv.depth += 1;
     conv.pending_comma = false;
+    conv.m_depth += 1;  // Track M nesting
+    conv.phase = Phase::ExpectingField;  // In M, we expect field keys
     StreamOp::None
 }
 
@@ -510,14 +622,22 @@ fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
     context: ContextIter,
     baton: DdbBaton<'a, 'workbuf, W>,
 ) -> Option<Action<DdbBaton<'a, 'workbuf, W>, R>> {
-    let mode = baton.borrow().current_mode();
+    // Update cached context information
+    {
+        let mut conv = baton.borrow_mut();
+        conv.current_in_list = in_list_from_context(context.clone());
+    }
+
+    let (phase, current_type) = {
+        let conv = baton.borrow();
+        (conv.phase, conv.current_type)
+    };
 
     // Match the root object - special case
-    if structural == StructuralPseudoname::Object && mode == ParseMode::Root {
+    if structural == StructuralPseudoname::Object && phase == Phase::Root {
         let mut ctx = context.clone();
         if let Some(first) = ctx.next() {
             if first == b"#top" {
-                // This is the root object - don't treat it as a type descriptor
                 return Some(on_root_object_begin);
             }
         }
@@ -528,8 +648,7 @@ fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
         let mut ctx = context.clone();
         if let Some(key) = ctx.next() {
             // Check if this is "Item" key at root level
-            if key == b"Item" && mode == ParseMode::Root {
-                // Verify parent is #top
+            if key == b"Item" && phase == Phase::Root {
                 if let Some(parent) = ctx.next() {
                     if parent == b"#top" {
                         let mut conv = baton.borrow_mut();
@@ -551,13 +670,11 @@ fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
             conv.current_field = Some(key_slice);
             drop(conv);
 
-            match mode {
-                ParseMode::Root | ParseMode::FieldNames | ParseMode::InM => {
-                    // Regular field name
+            match phase {
+                Phase::Root | Phase::ExpectingField => {
                     return Some(on_field_key);
                 }
-                ParseMode::TypeDescriptor => {
-                    // Type key inside type descriptor
+                Phase::ExpectingTypeKey => {
                     return Some(on_type_key);
                 }
                 _ => {}
@@ -568,18 +685,30 @@ fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
     // Match objects
     if structural == StructuralPseudoname::Object {
         // Check if this is the Item value object
-        let mut conv = baton.borrow_mut();
-        if conv.skip_next_object {
-            conv.skip_next_object = false;
-            drop(conv);
-            return Some(on_item_value_object_begin);
+        {
+            let mut conv = baton.borrow_mut();
+            if conv.skip_next_object {
+                conv.skip_next_object = false;
+                drop(conv);
+                return Some(on_item_value_object_begin);
+            }
         }
-        drop(conv);
 
-        match mode {
-            ParseMode::FieldNames | ParseMode::InM | ParseMode::InL => {
-                // Type descriptor object
+        match phase {
+            Phase::ExpectingTypeDesc => {
                 return Some(on_type_descriptor_begin);
+            }
+            Phase::ExpectingValue => {
+                // Check type - should be M
+                if current_type == Some(TypeDesc::M) {
+                    return Some(on_map_begin);
+                } else if current_type == Some(TypeDesc::L) {
+                    // L expects array, not object
+                    return Some(on_invalid_type_value_not_array);
+                } else {
+                    // Other types (S, N, BOOL, NULL, SS, NS) expect primitives/arrays, not objects
+                    return Some(on_invalid_type_value_not_atom);
+                }
             }
             _ => {}
         }
@@ -587,59 +716,48 @@ fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
 
     // Match arrays
     if structural == StructuralPseudoname::Array {
-        match mode {
-            ParseMode::ExpectSSArray => return Some(on_string_set_begin),
-            ParseMode::ExpectNSArray => return Some(on_number_set_begin),
-            ParseMode::ExpectLArray => return Some(on_list_begin),
-            // Validation: if we're expecting an object but got an array, it's an error
-            ParseMode::ExpectMObject => {
-                return Some(on_invalid_type_value_not_object);
+        if phase == Phase::ExpectingValue {
+            match current_type {
+                Some(TypeDesc::SS) => return Some(on_string_set_begin),
+                Some(TypeDesc::NS) => return Some(on_number_set_begin),
+                Some(TypeDesc::L) => return Some(on_list_begin),
+                Some(TypeDesc::M) => return Some(on_invalid_type_value_not_object),
+                Some(TypeDesc::S) | Some(TypeDesc::N) | Some(TypeDesc::Bool) | Some(TypeDesc::Null) => {
+                    return Some(on_invalid_type_value_not_atom);
+                }
+                _ => {}
             }
-            // Validation: if we're expecting an atom but got an array, it's an error
-            ParseMode::InS | ParseMode::InN | ParseMode::InBool | ParseMode::InNull => {
-                return Some(on_invalid_type_value_not_atom);
-            }
-            _ => {}
-        }
-    }
-
-    // Match objects for M type
-    if structural == StructuralPseudoname::Object {
-        // Skip the check from earlier since we're checking mode again
-        if mode == ParseMode::ExpectMObject {
-            return Some(on_map_begin);
-        }
-        // Validation: if we're expecting an array but got an object, it's an error
-        match mode {
-            ParseMode::ExpectSSArray | ParseMode::ExpectNSArray | ParseMode::ExpectLArray => {
-                return Some(on_invalid_type_value_not_array);
-            }
-            // Validation: if we're expecting an atom but got an object, it's an error
-            ParseMode::InS | ParseMode::InN | ParseMode::InBool | ParseMode::InNull => {
-                return Some(on_invalid_type_value_not_atom);
-            }
-            _ => {}
         }
     }
 
     // Match atom values
     if structural == StructuralPseudoname::Atom {
-        match mode {
-            ParseMode::InS => return Some(on_string_value),
-            ParseMode::InN => return Some(on_number_value),
-            ParseMode::InBool => return Some(on_bool_value),
-            ParseMode::InNull => return Some(on_null_value),
-            ParseMode::InSS => return Some(on_set_string_element),
-            ParseMode::InNS => return Some(on_set_number_element),
-            // Validation: if we're expecting an array but got an atom, it's an error
-            ParseMode::ExpectSSArray | ParseMode::ExpectNSArray | ParseMode::ExpectLArray => {
-                return Some(on_invalid_type_value_not_array);
+        if phase == Phase::ExpectingValue {
+            match current_type {
+                Some(TypeDesc::S) => return Some(on_string_value),
+                Some(TypeDesc::N) => return Some(on_number_value),
+                Some(TypeDesc::Bool) => return Some(on_bool_value),
+                Some(TypeDesc::Null) => return Some(on_null_value),
+                Some(TypeDesc::SS) | Some(TypeDesc::NS) => {
+                    // Check if we're inside an array (element) or at object level (invalid)
+                    let mut ctx = context.clone();
+                    if let Some(first) = ctx.next() {
+                        if first == b"#array" {
+                            // We're inside the array, this is a valid element
+                            if current_type == Some(TypeDesc::SS) {
+                                return Some(on_set_string_element);
+                            } else {
+                                return Some(on_set_number_element);
+                            }
+                        }
+                    }
+                    // Not inside an array, this is an error
+                    return Some(on_invalid_type_value_not_array);
+                }
+                Some(TypeDesc::L) => return Some(on_invalid_type_value_not_array),
+                Some(TypeDesc::M) => return Some(on_invalid_type_value_not_object),
+                _ => {}
             }
-            // Validation: if we're expecting an object but got an atom, it's an error
-            ParseMode::ExpectMObject => {
-                return Some(on_invalid_type_value_not_object);
-            }
-            _ => {}
         }
     }
 
@@ -648,11 +766,10 @@ fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
 
 fn on_invalid_type_value_not_array<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
     let mut conv = baton.borrow_mut();
-    let mode = conv.current_mode();
-    let type_name = match mode {
-        ParseMode::ExpectSSArray => "SS/BS",
-        ParseMode::ExpectNSArray => "NS",
-        ParseMode::ExpectLArray => "L",
+    let type_name = match conv.current_type {
+        Some(TypeDesc::SS) => "SS/BS",
+        Some(TypeDesc::NS) => "NS",
+        Some(TypeDesc::L) => "L",
         _ => "unknown",
     };
     conv.store_parse_error(
@@ -675,12 +792,11 @@ fn on_invalid_type_value_not_object<R: embedded_io::Read, W: IoWrite>(_rjiter: &
 
 fn on_invalid_type_value_not_atom<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
     let mut conv = baton.borrow_mut();
-    let mode = conv.current_mode();
-    let type_name = match mode {
-        ParseMode::InS => "S",
-        ParseMode::InN => "N",
-        ParseMode::InBool => "BOOL",
-        ParseMode::InNull => "NULL",
+    let type_name = match conv.current_type {
+        Some(TypeDesc::S) => "S",
+        Some(TypeDesc::N) => "N",
+        Some(TypeDesc::Bool) => "BOOL",
+        Some(TypeDesc::Null) => "NULL",
         _ => "unknown",
     };
     conv.store_parse_error(
@@ -691,11 +807,24 @@ fn on_invalid_type_value_not_atom<R: embedded_io::Read, W: IoWrite>(_rjiter: &mu
     StreamOp::Error("Expected primitive value for type")
 }
 
-fn on_set_or_list_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
+fn on_list_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     let mut conv = baton.borrow_mut();
     conv.write(b"]");
     conv.pending_comma = true;
-    conv.pop_mode(); // Pop InSS/InNS/InL
+
+    // Ending L array - restore phase based on whether we're still in another L
+    conv.phase = if conv.current_in_list { Phase::ExpectingTypeDesc } else { Phase::ExpectingField };
+    conv.current_type = None;
+    Ok(())
+}
+
+fn on_set_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
+    let mut conv = baton.borrow_mut();
+    conv.write(b"]");
+    conv.pending_comma = true;
+
+    // Ending SS/NS set - just clear type and return to field/typedesc level (phase already set by last element)
+    conv.current_type = None;
     Ok(())
 }
 
@@ -706,13 +835,21 @@ fn on_map_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str
     conv.indent();
     conv.write(b"}");
     conv.pending_comma = true;
-    conv.pop_mode(); // Pop InM
+
+    // Decrement M depth
+    conv.m_depth = conv.m_depth.saturating_sub(1);
+
+    // Restore phase based on whether we're in an L array
+    conv.current_type = None;
+    conv.phase = if conv.current_in_list { Phase::ExpectingTypeDesc } else { Phase::ExpectingField };
     Ok(())
 }
 
 fn on_type_descriptor_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     let mut conv = baton.borrow_mut();
-    conv.pop_mode(); // Pop TypeDescriptor
+    // Type descriptor ended, return to field or typedesc level
+    conv.type_descriptor_depth = conv.type_descriptor_depth.saturating_sub(1);
+    conv.phase = if conv.current_in_list { Phase::ExpectingTypeDesc } else { Phase::ExpectingField };
     Ok(())
 }
 
@@ -738,10 +875,19 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
     context: ContextIter,
     baton: DdbBaton<'a, 'workbuf, W>,
 ) -> Option<EndAction<DdbBaton<'a, 'workbuf, W>>> {
-    let mode = baton.borrow().current_mode();
+    // Update cached context information
+    {
+        let mut conv = baton.borrow_mut();
+        conv.current_in_list = in_list_from_context(context.clone());
+    }
+
+    let (phase, current_type, in_list, type_descriptor_depth, m_depth) = {
+        let conv = baton.borrow();
+        (conv.phase, conv.current_type, conv.current_in_list, conv.type_descriptor_depth, conv.m_depth)
+    };
 
     // Match end of root object
-    if structural == StructuralPseudoname::Object && mode == ParseMode::Root {
+    if structural == StructuralPseudoname::Object && phase == Phase::Root {
         let mut ctx = context.clone();
         if let Some(first) = ctx.next() {
             if first == b"#top" {
@@ -752,29 +898,58 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
 
     // Match end of objects
     if structural == StructuralPseudoname::Object {
-        match mode {
-            ParseMode::FieldNames => {
-                // Check if this is the Item/root object
-                let has_wrapper = baton.borrow().has_item_wrapper;
-                if has_wrapper.is_some() {
-                    return Some(on_item_end);
+        match phase {
+            Phase::ExpectingField => {
+                // This could be the Item/root object or an M object
+                // Check for M value ending FIRST, then type descriptors
+                let ending_m = m_depth > 0 && ending_m_object_from_context(context.clone());
+
+                if ending_m {
+                    return Some(on_map_end);
+                } else if type_descriptor_depth >= 1 {
+                    return Some(on_type_descriptor_end);
+                } else {
+                    // depth == 0, not in type descriptor or M container
+                    // Check if this is the Item value object or root object
+                    let mut ctx = context.clone();
+                    if let Some(first) = ctx.next() {
+                        if first != b"#top" {
+                            // Not the root object, this is the Item value object
+                            return Some(on_item_end);
+                        } else {
+                            // Root object ending - check if no Item wrapper
+                            let has_wrapper = baton.borrow().has_item_wrapper;
+                            if has_wrapper == Some(false) {
+                                // No Item wrapper, root object IS the record
+                                return Some(on_item_end);
+                            }
+                            // has_wrapper == Some(true) or None - already handled elsewhere
+                        }
+                    }
                 }
             }
-            ParseMode::InM => {
-                return Some(on_map_end);
+            _ => {
+                // For other phases, check if we're ending a type descriptor
+                if type_descriptor_depth > 0 {
+                    return Some(on_type_descriptor_end);
+                }
             }
-            ParseMode::TypeDescriptor => {
-                return Some(on_type_descriptor_end);
-            }
-            _ => {}
         }
     }
 
     // Match end of arrays
     if structural == StructuralPseudoname::Array {
-        match mode {
-            ParseMode::InSS | ParseMode::InNS | ParseMode::InL => {
-                return Some(on_set_or_list_end);
+        // Check if we're ending an L array (context key is "L")
+        if ending_l_array_from_context(context.clone()) {
+            return Some(on_list_end);
+        }
+        // Otherwise, check for SS/NS arrays by current_type
+        match current_type {
+            Some(TypeDesc::SS) | Some(TypeDesc::NS) => {
+                // SS/NS arrays: phase is ExpectingValue while processing elements
+                if phase == Phase::ExpectingValue {
+                    return Some(on_set_end);
+                }
             }
             _ => {}
         }
@@ -782,12 +957,9 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
 
     // Match end of type descriptor objects in L arrays
     if structural == StructuralPseudoname::Object {
-        if mode == ParseMode::TypeDescriptor {
-            // Check if parent is InL
-            let mode_stack = &baton.borrow().mode_stack;
-            if mode_stack.len() >= 2 && mode_stack[mode_stack.len() - 2] == ParseMode::InL {
-                return Some(on_list_element_end);
-            }
+        if phase == Phase::ExpectingTypeKey && in_list {
+            // Type descriptor in L array ending
+            return Some(on_list_element_end);
         }
     }
 
