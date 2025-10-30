@@ -660,48 +660,38 @@ fn find_action_object<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
     None
 }
 
-/// Handle None structural pseudoname (keys)
 fn find_action_key<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
     mut context: ContextIter,
     baton: DdbBaton<'a, 'workbuf, W>,
     phase: Phase,
 ) -> Option<Action<DdbBaton<'a, 'workbuf, W>, R>> {
-    if let Some(key) = context.next() {
-        // Check if this is "Item" key at root level (parent is #top)
-        if key == b"Item" {
-            if let Some(parent) = context.next() {
-                if parent == b"#top" {
-                    let mut conv = baton.borrow_mut();
-                    #[allow(unsafe_code)]
-                    let key_slice: &'workbuf [u8] =
-                        unsafe { core::mem::transmute::<&[u8], &'workbuf [u8]>(key) };
-                    conv.current_field = Some(key_slice);
-                    drop(conv);
-                    return Some(on_item_key);
-                }
-            }
-        }
+    let key = context.next()?;
 
-        // Store the key
-        let mut conv = baton.borrow_mut();
-        #[allow(unsafe_code)]
-        let key_slice: &'workbuf [u8] =
-            unsafe { core::mem::transmute::<&[u8], &'workbuf [u8]>(key) };
-        conv.current_field = Some(key_slice);
-        drop(conv);
-
-        match phase {
-            Phase::ExpectingField => {
-                return Some(on_field_key);
-            }
-            Phase::ExpectingTypeKey => {
-                return Some(on_type_key);
-            }
-            _ => {}
+    // Check if this is "Item" key at root level (parent is #top)
+    if key == b"Item" {
+        if let Some(b"#top") = context.next() {
+            let mut conv = baton.borrow_mut();
+            #[allow(unsafe_code)]
+            let key_slice: &'workbuf [u8] =
+                unsafe { core::mem::transmute::<&[u8], &'workbuf [u8]>(key) };
+            conv.current_field = Some(key_slice);
+            return Some(on_item_key);
         }
     }
 
-    None
+    // Store the key
+    let mut conv = baton.borrow_mut();
+    #[allow(unsafe_code)]
+    let key_slice: &'workbuf [u8] =
+        unsafe { core::mem::transmute::<&[u8], &'workbuf [u8]>(key) };
+    conv.current_field = Some(key_slice);
+    drop(conv);
+
+    match phase {
+        Phase::ExpectingField => Some(on_field_key),
+        Phase::ExpectingTypeKey => Some(on_type_key),
+        _ => None,
+    }
 }
 
 /// Handle Array structural pseudoname
