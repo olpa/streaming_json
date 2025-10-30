@@ -11,7 +11,6 @@ use crate::ConversionError;
 /// What phase of parsing we're in
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Phase {
-    Root,                  // At root level, expecting root object or "Item" key
     ExpectingField,        // Expecting a field key
     ExpectingTypeDesc,     // Expecting type descriptor object (after field key)
     ExpectingTypeKey,      // Inside type descriptor, expecting type key
@@ -139,7 +138,6 @@ pub struct DdbConverter<'a, 'workbuf, W: IoWrite> {
     has_item_wrapper: Option<bool>, // None = unknown, Some(true) = has Item, Some(false) = no Item
     last_error: Option<ConversionError>, // Stores detailed error information
 
-    // Simplified state management
     phase: Phase,
     current_type: Option<TypeDesc>,
     skip_next_object: bool, // Skip treating next object as type descriptor (for Item value)
@@ -160,7 +158,7 @@ impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
             current_field: None,
             has_item_wrapper: None,
             last_error: None,
-            phase: Phase::Root,
+            phase: Phase::ExpectingField,
             current_type: None,
             skip_next_object: false,
             type_descriptor_depth: 0,
@@ -276,13 +274,12 @@ fn on_field_key<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton
 
     let mut conv = baton.borrow_mut();
 
-    // If we're in Root phase (no Item wrapper), write opening brace on first field
-    if conv.phase == Phase::Root {
+    // If we haven't seen Item wrapper yet, this is the first field (no Item wrapper)
+    if conv.has_item_wrapper.is_none() {
         conv.write(b"{");
         conv.newline();
         conv.depth = 1;
         conv.has_item_wrapper = Some(false);
-        conv.phase = Phase::ExpectingField;
     }
 
     conv.write_comma();
@@ -617,6 +614,156 @@ fn on_set_number_element<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R
     StreamOp::ValueIsConsumed
 }
 
+/// Handle Object structural pseudoname
+fn find_action_object<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
+    mut context: ContextIter,
+    baton: DdbBaton<'a, 'workbuf, W>,
+    phase: Phase,
+    current_type: Option<TypeDesc>,
+) -> Option<Action<DdbBaton<'a, 'workbuf, W>, R>> {
+    // Check for root object at #top
+    if let Some(first) = context.next() {
+        if first == b"#top" {
+            return Some(on_root_object_begin);
+        }
+    }
+
+    // Check if this is the Item value object
+    {
+        let mut conv = baton.borrow_mut();
+        if conv.skip_next_object {
+            conv.skip_next_object = false;
+            drop(conv);
+            return Some(on_item_value_object_begin);
+        }
+    }
+
+    match phase {
+        Phase::ExpectingTypeDesc => {
+            return Some(on_type_descriptor_begin);
+        }
+        Phase::ExpectingValue => {
+            // Check type - should be M
+            if current_type == Some(TypeDesc::M) {
+                return Some(on_map_begin);
+            } else if current_type == Some(TypeDesc::L) {
+                // L expects array, not object
+                return Some(on_invalid_type_value_not_array);
+            } else {
+                // Other types (S, N, BOOL, NULL, SS, NS) expect primitives/arrays, not objects
+                return Some(on_invalid_type_value_not_atom);
+            }
+        }
+        _ => {}
+    }
+
+    None
+}
+
+/// Handle None structural pseudoname (keys)
+fn find_action_key<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
+    mut context: ContextIter,
+    baton: DdbBaton<'a, 'workbuf, W>,
+    phase: Phase,
+) -> Option<Action<DdbBaton<'a, 'workbuf, W>, R>> {
+    if let Some(key) = context.next() {
+        // Check if this is "Item" key at root level (parent is #top)
+        if key == b"Item" {
+            if let Some(parent) = context.next() {
+                if parent == b"#top" {
+                    let mut conv = baton.borrow_mut();
+                    #[allow(unsafe_code)]
+                    let key_slice: &'workbuf [u8] =
+                        unsafe { core::mem::transmute::<&[u8], &'workbuf [u8]>(key) };
+                    conv.current_field = Some(key_slice);
+                    drop(conv);
+                    return Some(on_item_key);
+                }
+            }
+        }
+
+        // Store the key
+        let mut conv = baton.borrow_mut();
+        #[allow(unsafe_code)]
+        let key_slice: &'workbuf [u8] =
+            unsafe { core::mem::transmute::<&[u8], &'workbuf [u8]>(key) };
+        conv.current_field = Some(key_slice);
+        drop(conv);
+
+        match phase {
+            Phase::ExpectingField => {
+                return Some(on_field_key);
+            }
+            Phase::ExpectingTypeKey => {
+                return Some(on_type_key);
+            }
+            _ => {}
+        }
+    }
+
+    None
+}
+
+/// Handle Array structural pseudoname
+fn find_action_array<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
+    _context: ContextIter,
+    _baton: DdbBaton<'a, 'workbuf, W>,
+    phase: Phase,
+    current_type: Option<TypeDesc>,
+) -> Option<Action<DdbBaton<'a, 'workbuf, W>, R>> {
+    if phase == Phase::ExpectingValue {
+        match current_type {
+            Some(TypeDesc::SS) => return Some(on_string_set_begin),
+            Some(TypeDesc::NS) => return Some(on_number_set_begin),
+            Some(TypeDesc::L) => return Some(on_list_begin),
+            Some(TypeDesc::M) => return Some(on_invalid_type_value_not_object),
+            Some(TypeDesc::S) | Some(TypeDesc::N) | Some(TypeDesc::Bool) | Some(TypeDesc::Null) => {
+                return Some(on_invalid_type_value_not_atom);
+            }
+            _ => {}
+        }
+    }
+
+    None
+}
+
+/// Handle Atom structural pseudoname
+fn find_action_atom<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
+    mut context: ContextIter,
+    _baton: DdbBaton<'a, 'workbuf, W>,
+    phase: Phase,
+    current_type: Option<TypeDesc>,
+) -> Option<Action<DdbBaton<'a, 'workbuf, W>, R>> {
+    if phase == Phase::ExpectingValue {
+        match current_type {
+            Some(TypeDesc::S) => return Some(on_string_value),
+            Some(TypeDesc::N) => return Some(on_number_value),
+            Some(TypeDesc::Bool) => return Some(on_bool_value),
+            Some(TypeDesc::Null) => return Some(on_null_value),
+            Some(TypeDesc::SS) | Some(TypeDesc::NS) => {
+                // Check if we're inside an array (element) or at object level (invalid)
+                if let Some(first) = context.next() {
+                    if first == b"#array" {
+                        // We're inside the array, this is a valid element
+                        if current_type == Some(TypeDesc::SS) {
+                            return Some(on_set_string_element);
+                        } else {
+                            return Some(on_set_number_element);
+                        }
+                    }
+                }
+                // Not inside an array, this is an error
+                return Some(on_invalid_type_value_not_array);
+            }
+            Some(TypeDesc::L) => return Some(on_invalid_type_value_not_array),
+            Some(TypeDesc::M) => return Some(on_invalid_type_value_not_object),
+            _ => {}
+        }
+    }
+
+    None
+}
+
 fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
     structural: StructuralPseudoname,
     context: ContextIter,
@@ -633,135 +780,13 @@ fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
         (conv.phase, conv.current_type)
     };
 
-    // Match the root object - special case
-    if structural == StructuralPseudoname::Object && phase == Phase::Root {
-        let mut ctx = context.clone();
-        if let Some(first) = ctx.next() {
-            if first == b"#top" {
-                return Some(on_root_object_begin);
-            }
-        }
+    // Match on structural type and delegate to appropriate handler
+    match structural {
+        StructuralPseudoname::Object => find_action_object(context, baton, phase, current_type),
+        StructuralPseudoname::None => find_action_key(context, baton, phase),
+        StructuralPseudoname::Array => find_action_array(context, baton, phase, current_type),
+        StructuralPseudoname::Atom => find_action_atom(context, baton, phase, current_type),
     }
-
-    // Match keys (field names or type keys)
-    if structural == StructuralPseudoname::None {
-        let mut ctx = context.clone();
-        if let Some(key) = ctx.next() {
-            // Check if this is "Item" key at root level
-            if key == b"Item" && phase == Phase::Root {
-                if let Some(parent) = ctx.next() {
-                    if parent == b"#top" {
-                        let mut conv = baton.borrow_mut();
-                        #[allow(unsafe_code)]
-                        let key_slice: &'workbuf [u8] =
-                            unsafe { core::mem::transmute::<&[u8], &'workbuf [u8]>(key) };
-                        conv.current_field = Some(key_slice);
-                        drop(conv);
-                        return Some(on_item_key);
-                    }
-                }
-            }
-
-            // Store the key
-            let mut conv = baton.borrow_mut();
-            #[allow(unsafe_code)]
-            let key_slice: &'workbuf [u8] =
-                unsafe { core::mem::transmute::<&[u8], &'workbuf [u8]>(key) };
-            conv.current_field = Some(key_slice);
-            drop(conv);
-
-            match phase {
-                Phase::Root | Phase::ExpectingField => {
-                    return Some(on_field_key);
-                }
-                Phase::ExpectingTypeKey => {
-                    return Some(on_type_key);
-                }
-                _ => {}
-            }
-        }
-    }
-
-    // Match objects
-    if structural == StructuralPseudoname::Object {
-        // Check if this is the Item value object
-        {
-            let mut conv = baton.borrow_mut();
-            if conv.skip_next_object {
-                conv.skip_next_object = false;
-                drop(conv);
-                return Some(on_item_value_object_begin);
-            }
-        }
-
-        match phase {
-            Phase::ExpectingTypeDesc => {
-                return Some(on_type_descriptor_begin);
-            }
-            Phase::ExpectingValue => {
-                // Check type - should be M
-                if current_type == Some(TypeDesc::M) {
-                    return Some(on_map_begin);
-                } else if current_type == Some(TypeDesc::L) {
-                    // L expects array, not object
-                    return Some(on_invalid_type_value_not_array);
-                } else {
-                    // Other types (S, N, BOOL, NULL, SS, NS) expect primitives/arrays, not objects
-                    return Some(on_invalid_type_value_not_atom);
-                }
-            }
-            _ => {}
-        }
-    }
-
-    // Match arrays
-    if structural == StructuralPseudoname::Array {
-        if phase == Phase::ExpectingValue {
-            match current_type {
-                Some(TypeDesc::SS) => return Some(on_string_set_begin),
-                Some(TypeDesc::NS) => return Some(on_number_set_begin),
-                Some(TypeDesc::L) => return Some(on_list_begin),
-                Some(TypeDesc::M) => return Some(on_invalid_type_value_not_object),
-                Some(TypeDesc::S) | Some(TypeDesc::N) | Some(TypeDesc::Bool) | Some(TypeDesc::Null) => {
-                    return Some(on_invalid_type_value_not_atom);
-                }
-                _ => {}
-            }
-        }
-    }
-
-    // Match atom values
-    if structural == StructuralPseudoname::Atom {
-        if phase == Phase::ExpectingValue {
-            match current_type {
-                Some(TypeDesc::S) => return Some(on_string_value),
-                Some(TypeDesc::N) => return Some(on_number_value),
-                Some(TypeDesc::Bool) => return Some(on_bool_value),
-                Some(TypeDesc::Null) => return Some(on_null_value),
-                Some(TypeDesc::SS) | Some(TypeDesc::NS) => {
-                    // Check if we're inside an array (element) or at object level (invalid)
-                    let mut ctx = context.clone();
-                    if let Some(first) = ctx.next() {
-                        if first == b"#array" {
-                            // We're inside the array, this is a valid element
-                            if current_type == Some(TypeDesc::SS) {
-                                return Some(on_set_string_element);
-                            } else {
-                                return Some(on_set_number_element);
-                            }
-                        }
-                    }
-                    // Not inside an array, this is an error
-                    return Some(on_invalid_type_value_not_array);
-                }
-                Some(TypeDesc::L) => return Some(on_invalid_type_value_not_array),
-                Some(TypeDesc::M) => return Some(on_invalid_type_value_not_object),
-                _ => {}
-            }
-        }
-    }
-
-    None
 }
 
 fn on_invalid_type_value_not_array<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
@@ -885,16 +910,6 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
         let conv = baton.borrow();
         (conv.phase, conv.current_type, conv.current_in_list, conv.type_descriptor_depth, conv.m_depth)
     };
-
-    // Match end of root object
-    if structural == StructuralPseudoname::Object && phase == Phase::Root {
-        let mut ctx = context.clone();
-        if let Some(first) = ctx.next() {
-            if first == b"#top" {
-                return Some(on_root_object_end);
-            }
-        }
-    }
 
     // Match end of objects
     if structural == StructuralPseudoname::Object {
