@@ -680,36 +680,42 @@ fn find_action_key<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
 ) -> Option<Action<DdbBaton<'a, 'workbuf, W>, R>> {
     let key = context.next()?;
 
-    if phase == Phase::ExpectingField {
-        if key == b"Item" {
-            let mode = baton.borrow().item_wrapper_mode;
-            if mode == ItemWrapperMode::AsWrapper {
-                if let Some(b"#top") = context.next() {
-                    return None;
+    let action: Option<Action<DdbBaton<'a, 'workbuf, W>, R>> = match phase {
+        Phase::ExpectingField => {
+            // Check for Item at top with AsWrapper - early return without side effects
+            if key == b"Item" {
+                let mode = baton.borrow().item_wrapper_mode;
+                if mode == ItemWrapperMode::AsWrapper {
+                    if let Some(b"#top") = context.next() {
+                        return None;
+                    }
                 }
             }
+            Some(on_field_key)
         }
+        Phase::ExpectingTypeKey => Some(on_type_key),
+        _ => {
+            // Unexpected phase - set internal error
+            let mut conv = baton.borrow_mut();
+            conv.last_error = Some(ConversionError::ParseError {
+                position: 0,
+                context: "Unexpected key in phase",
+                unknown_type: None,
+            });
+            None
+        }
+    };
 
-        // Store the key and return field handler
+    // Store the key if we have an action to execute
+    if action.is_some() {
         let mut conv = baton.borrow_mut();
         #[allow(unsafe_code)]
         let key_slice: &'workbuf [u8] =
             unsafe { core::mem::transmute::<&[u8], &'workbuf [u8]>(key) };
         conv.current_field = Some(key_slice);
-        return Some(on_field_key);
     }
 
-    // Handle type keys
-    if phase == Phase::ExpectingTypeKey {
-        let mut conv = baton.borrow_mut();
-        #[allow(unsafe_code)]
-        let key_slice: &'workbuf [u8] =
-            unsafe { core::mem::transmute::<&[u8], &'workbuf [u8]>(key) };
-        conv.current_field = Some(key_slice);
-        return Some(on_type_key);
-    }
-
-    None
+    action
 }
 
 /// Handle Array structural pseudoname
