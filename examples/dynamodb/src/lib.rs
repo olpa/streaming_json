@@ -8,7 +8,7 @@ extern crate alloc;
 mod ddb_to_normal;
 mod normal_to_ddb;
 
-pub use ddb_to_normal::convert_ddb_to_normal;
+pub use ddb_to_normal::{convert_ddb_to_normal, ItemWrapperMode};
 pub use normal_to_ddb::convert_normal_to_ddb;
 
 /// Detailed error information for conversion errors

@@ -17,6 +17,7 @@ fn convert_test_with_pretty(ddb_json: &str, pretty: bool) -> String {
         &mut rjiter_buffer,
         &mut context_buffer,
         pretty,
+        ddb_convert::ItemWrapperMode::AsWrapper,
     ).unwrap();
 
     let bytes_written = 4096 - output_slice.len();
@@ -434,6 +435,7 @@ fn test_error_incomplete_json() {
         &mut rjiter_buffer,
         &mut context_buffer,
         false,
+        ddb_convert::ItemWrapperMode::AsWrapper,
     );
 
     assert!(result.is_err());

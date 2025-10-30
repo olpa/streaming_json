@@ -17,6 +17,13 @@ enum Phase {
     ExpectingValue,        // After type key, expecting the value
 }
 
+/// How to handle "Item" key at top level
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ItemWrapperMode {
+    AsWrapper,   // Interpret "Item" at top level as a special wrapper
+    AsField,     // Interpret "Item" at top level as a normal field
+}
+
 /// Type descriptor being processed
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum TypeDesc {
@@ -136,6 +143,7 @@ pub struct DdbConverter<'a, 'workbuf, W: IoWrite> {
     depth: usize,
     current_field: Option<&'workbuf [u8]>,
     has_item_wrapper: Option<bool>, // None = unknown, Some(true) = has Item, Some(false) = no Item
+    item_wrapper_mode: ItemWrapperMode, // How to handle "Item" key at top level
     last_error: Option<ConversionError>, // Stores detailed error information
 
     phase: Phase,
@@ -149,7 +157,7 @@ pub struct DdbConverter<'a, 'workbuf, W: IoWrite> {
 }
 
 impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
-    fn new(writer: &'a mut W, pretty: bool) -> Self {
+    fn new(writer: &'a mut W, pretty: bool, item_wrapper_mode: ItemWrapperMode) -> Self {
         Self {
             writer,
             pending_comma: false,
@@ -157,6 +165,7 @@ impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
             depth: 0,
             current_field: None,
             has_item_wrapper: None,
+            item_wrapper_mode,
             last_error: None,
             phase: Phase::ExpectingField,
             current_type: None,
@@ -670,12 +679,18 @@ fn find_action_key<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
     // Check if this is "Item" key at root level (parent is #top)
     if key == b"Item" {
         if let Some(b"#top") = context.next() {
-            let mut conv = baton.borrow_mut();
-            #[allow(unsafe_code)]
-            let key_slice: &'workbuf [u8] =
-                unsafe { core::mem::transmute::<&[u8], &'workbuf [u8]>(key) };
-            conv.current_field = Some(key_slice);
-            return Some(on_item_key);
+            let mode = baton.borrow().item_wrapper_mode;
+
+            // If mode is AsWrapper, handle "Item" specially as a wrapper
+            if mode == ItemWrapperMode::AsWrapper {
+                let mut conv = baton.borrow_mut();
+                #[allow(unsafe_code)]
+                let key_slice: &'workbuf [u8] =
+                    unsafe { core::mem::transmute::<&[u8], &'workbuf [u8]>(key) };
+                conv.current_field = Some(key_slice);
+                return Some(on_item_key);
+            }
+            // If mode is AsField, fall through to treat as normal field
         }
     }
 
@@ -980,6 +995,7 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
 /// * `rjiter_buffer` - Buffer for rjiter to use (recommended: 4096 bytes)
 /// * `context_buffer` - Buffer for scan_json context tracking (recommended: 2048 bytes)
 /// * `pretty` - Whether to pretty-print the output
+/// * `item_wrapper_mode` - How to handle "Item" key at top level (AsWrapper or AsField)
 ///
 /// # Returns
 /// `Ok(())` on success, or `Err(ConversionError)` with detailed error information on failure
@@ -989,10 +1005,11 @@ pub fn convert_ddb_to_normal<R: IoRead, W: IoWrite>(
     rjiter_buffer: &mut [u8],
     context_buffer: &mut [u8],
     pretty: bool,
+    item_wrapper_mode: ItemWrapperMode,
 ) -> Result<(), ConversionError> {
     let mut rjiter = RJiter::new(reader, rjiter_buffer);
 
-    let converter = DdbConverter::new(writer, pretty);
+    let converter = DdbConverter::new(writer, pretty, item_wrapper_mode);
     let baton = RefCell::new(converter);
 
     let mut context = U8Pool::new(context_buffer, 32)

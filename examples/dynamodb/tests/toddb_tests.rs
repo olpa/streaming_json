@@ -294,6 +294,7 @@ fn test_roundtrip_int_like_float() {
         &mut rjiter_buffer,
         &mut context_buffer,
         false,
+        ddb_convert::ItemWrapperMode::AsWrapper,
     ).unwrap();
 
     let bytes_written = 4096 - output_slice.len();
@@ -337,6 +338,7 @@ fn test_roundtrip_various_int_like_floats() {
             &mut rjiter_buffer,
             &mut context_buffer,
             false,
+            ddb_convert::ItemWrapperMode::AsWrapper,
         ).unwrap();
 
         let bytes_written = 4096 - output_slice.len();

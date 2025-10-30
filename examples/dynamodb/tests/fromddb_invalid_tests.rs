@@ -17,6 +17,7 @@ fn convert_test_expect_error(ddb_json: &str) -> ddb_convert::ConversionError {
         &mut rjiter_buffer,
         &mut context_buffer,
         false,
+        ddb_convert::ItemWrapperMode::AsWrapper,
     )
     .expect_err("Expected conversion to fail but it succeeded")
 }

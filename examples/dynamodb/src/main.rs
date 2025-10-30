@@ -66,6 +66,7 @@ fn main() {
                         &mut rjiter_buffer,
                         &mut context_buffer,
                         args.pretty,
+                        ddb_convert::ItemWrapperMode::AsWrapper,
                     )
                 } else {
                     let stdout = io::stdout();
@@ -76,6 +77,7 @@ fn main() {
                         &mut rjiter_buffer,
                         &mut context_buffer,
                         args.pretty,
+                        ddb_convert::ItemWrapperMode::AsWrapper,
                     )
                 }
             } else {
@@ -93,6 +95,7 @@ fn main() {
                         &mut rjiter_buffer,
                         &mut context_buffer,
                         args.pretty,
+                        ddb_convert::ItemWrapperMode::AsWrapper,
                     )
                 } else {
                     let stdout = io::stdout();
@@ -103,6 +106,7 @@ fn main() {
                         &mut rjiter_buffer,
                         &mut context_buffer,
                         args.pretty,
+                        ddb_convert::ItemWrapperMode::AsWrapper,
                     )
                 }
             };
