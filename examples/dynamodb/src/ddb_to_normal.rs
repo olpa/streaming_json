@@ -24,10 +24,9 @@ pub enum ItemWrapperMode {
     AsField,     // Interpret "Item" at top level as a normal field
 }
 
-/// Type descriptor being processed
+/// Type descriptor being processed (only for container types)
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum TypeDesc {
-    S, N, Bool, Null,
     SS, NS,  // Sets
     L, M,    // Nested containers
 }
@@ -314,25 +313,140 @@ fn on_type_descriptor_begin<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJit
     StreamOp::None
 }
 
-/// Handle a type key and transition to expecting value
-fn on_type_key<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
+/// Handle a type key - for literal types, consume and write the value directly
+fn on_type_key<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
     let type_key = {
         let conv = baton.borrow();
         conv.current_field.expect("current_field should be set for type key").to_vec()
     };
 
-    let mut conv = baton.borrow_mut();
+    let position = rjiter.current_index();
 
-    let type_desc = match type_key.as_slice() {
-        b"S" | b"B" => TypeDesc::S,
-        b"N" => TypeDesc::N,
-        b"BOOL" => TypeDesc::Bool,
-        b"NULL" => TypeDesc::Null,
-        b"SS" | b"BS" => TypeDesc::SS,
-        b"NS" => TypeDesc::NS,
-        b"L" => TypeDesc::L,
-        b"M" => TypeDesc::M,
+    // Helper to finalize after consuming a literal value
+    fn finalize_literal_value<W: IoWrite>(baton: DdbBaton<'_, '_, W>) {
+        let mut conv = baton.borrow_mut();
+        conv.pending_comma = true;
+        conv.current_type = None;
+        conv.phase = if conv.current_in_list { Phase::ExpectingTypeDesc } else { Phase::ExpectingField };
+    }
+
+    // Helper for string-based types (S/B/N): peek string, write with write_long_bytes
+    fn handle_string_based_type<R: embedded_io::Read, W: IoWrite>(
+        rjiter: &mut RJiter<R>,
+        baton: DdbBaton<'_, '_, W>,
+        position: usize,
+        with_quotes: bool,
+        type_name: &'static str,
+    ) -> StreamOp {
+        let peek = match rjiter.peek() {
+            Ok(p) => p,
+            Err(e) => {
+                baton.borrow_mut().store_rjiter_error(e, position, type_name);
+                return StreamOp::Error("Failed to peek string value");
+            }
+        };
+        if peek != Peek::String {
+            return StreamOp::Error("Expected string value");
+        }
+
+        let mut conv = baton.borrow_mut();
+        if with_quotes {
+            conv.write(b"\"");
+        }
+        if let Err(e) = rjiter.write_long_bytes(conv.writer) {
+            conv.store_rjiter_error(e, position, type_name);
+            return StreamOp::Error("Failed to write value");
+        }
+        if with_quotes {
+            conv.write(b"\"");
+        }
+        drop(conv);
+
+        finalize_literal_value(baton);
+        StreamOp::ValueIsConsumed
+    }
+
+    // Helper for boolean-based types (BOOL/NULL): peek bool, consume with known_bool, write output
+    fn handle_bool_based_type<R: embedded_io::Read, W: IoWrite>(
+        rjiter: &mut RJiter<R>,
+        baton: DdbBaton<'_, '_, W>,
+        position: usize,
+        validate_peek: impl Fn(Peek) -> Result<&'static [u8], &'static str>,
+        type_name: &'static str,
+    ) -> StreamOp {
+        let peek = match rjiter.peek() {
+            Ok(p) => p,
+            Err(e) => {
+                baton.borrow_mut().store_rjiter_error(e, position, type_name);
+                return StreamOp::Error("Failed to peek value");
+            }
+        };
+
+        // Validate and get output bytes
+        let output = match validate_peek(peek) {
+            Ok(bytes) => bytes,
+            Err(msg) => return StreamOp::Error(msg),
+        };
+
+        // Consume the value
+        let mut conv = baton.borrow_mut();
+        if let Err(e) = rjiter.known_bool(peek) {
+            conv.store_rjiter_error(e, position, type_name);
+            return StreamOp::Error("Failed to consume boolean value");
+        }
+        conv.write(output);
+        drop(conv);
+
+        finalize_literal_value(baton);
+        StreamOp::ValueIsConsumed
+    }
+
+    match type_key.as_slice() {
+        b"S" | b"B" => handle_string_based_type(rjiter, baton, position, true, "S/B (string) type"),
+        b"N" => handle_string_based_type(rjiter, baton, position, false, "N (number) type"),
+        b"BOOL" => handle_bool_based_type(
+            rjiter, baton, position,
+            |peek| match peek {
+                Peek::True => Ok(b"true"),
+                Peek::False => Ok(b"false"),
+                _ => Err("Expected boolean value for BOOL type"),
+            },
+            "BOOL type"
+        ),
+        b"NULL" => handle_bool_based_type(
+            rjiter, baton, position,
+            |peek| match peek {
+                Peek::True => Ok(b"null"),
+                _ => Err("Expected true for NULL type"),
+            },
+            "NULL type"
+        ),
+        b"SS" | b"BS" => {
+            let mut conv = baton.borrow_mut();
+            conv.current_type = Some(TypeDesc::SS);
+            conv.phase = Phase::ExpectingValue;
+            StreamOp::None
+        }
+        b"NS" => {
+            let mut conv = baton.borrow_mut();
+            conv.current_type = Some(TypeDesc::NS);
+            conv.phase = Phase::ExpectingValue;
+            StreamOp::None
+        }
+        b"L" => {
+            let mut conv = baton.borrow_mut();
+            conv.current_type = Some(TypeDesc::L);
+            conv.phase = Phase::ExpectingValue;
+            StreamOp::None
+        }
+        b"M" => {
+            let mut conv = baton.borrow_mut();
+            conv.current_type = Some(TypeDesc::M);
+            conv.phase = Phase::ExpectingValue;
+            StreamOp::None
+        }
         _ => {
+            let mut conv = baton.borrow_mut();
             conv.store_parse_error(
                 0,
                 "Invalid DynamoDB JSON format: unknown type descriptor",
@@ -340,131 +454,10 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton:
             );
             return StreamOp::Error("Unknown type descriptor");
         }
-    };
-
-    conv.current_type = Some(type_desc);
-    conv.phase = Phase::ExpectingValue;
-    StreamOp::None
+    }
 }
 
-// Type descriptor value handlers
-
-fn on_string_value<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
-    let position = rjiter.current_index();
-    let peek = match rjiter.peek() {
-        Ok(p) => p,
-        Err(e) => {
-            baton.borrow_mut().store_rjiter_error(e, position, "peeking S (string) type value");
-            return StreamOp::Error("Failed to peek string value");
-        }
-    };
-    if peek != Peek::String {
-        return StreamOp::Error("Expected string value for S type");
-    }
-
-    let mut conv = baton.borrow_mut();
-    conv.write(b"\"");
-    if let Err(e) = rjiter.write_long_bytes(conv.writer) {
-        conv.store_rjiter_error(e, position, "writing S (string) type value");
-        return StreamOp::Error("Failed to write string value");
-    }
-    conv.write(b"\"");
-    conv.pending_comma = true;
-
-    // After value, return to field or type descriptor level
-    conv.current_type = None;
-    conv.phase = if conv.current_in_list { Phase::ExpectingTypeDesc } else { Phase::ExpectingField };
-    StreamOp::ValueIsConsumed
-}
-
-fn on_number_value<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
-    let position = rjiter.current_index();
-    let peek = match rjiter.peek() {
-        Ok(p) => p,
-        Err(e) => {
-            baton.borrow_mut().store_rjiter_error(e, position, "peeking N (number) type value");
-            return StreamOp::Error("Failed to peek number value");
-        }
-    };
-    if peek != Peek::String {
-        return StreamOp::Error("Expected string value for N (number) type");
-    }
-
-    let mut conv = baton.borrow_mut();
-    if let Err(e) = rjiter.write_long_bytes(conv.writer) {
-        conv.store_rjiter_error(e, position, "writing N (number) type value");
-        return StreamOp::Error("Failed to write number value");
-    }
-    conv.pending_comma = true;
-
-    // After value, return to field or type descriptor level
-    conv.current_type = None;
-    conv.phase = if conv.current_in_list { Phase::ExpectingTypeDesc } else { Phase::ExpectingField };
-    StreamOp::ValueIsConsumed
-}
-
-fn on_bool_value<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
-    let position = rjiter.current_index();
-    let peek = match rjiter.peek() {
-        Ok(p) => p,
-        Err(e) => {
-            baton.borrow_mut().store_rjiter_error(e, position, "peeking BOOL type value");
-            return StreamOp::Error("Failed to peek boolean value");
-        }
-    };
-
-    let mut conv = baton.borrow_mut();
-    match peek {
-        Peek::True => {
-            if let Err(e) = rjiter.known_bool(peek) {
-                conv.store_rjiter_error(e, position, "consuming BOOL type value (true)");
-                return StreamOp::Error("Failed to consume true value");
-            }
-            conv.write(b"true");
-        }
-        Peek::False => {
-            if let Err(e) = rjiter.known_bool(peek) {
-                conv.store_rjiter_error(e, position, "consuming BOOL type value (false)");
-                return StreamOp::Error("Failed to consume false value");
-            }
-            conv.write(b"false");
-        }
-        _ => return StreamOp::Error("Expected boolean value for BOOL type"),
-    }
-    conv.pending_comma = true;
-
-    // After value, return to field or type descriptor level
-    conv.current_type = None;
-    conv.phase = if conv.current_in_list { Phase::ExpectingTypeDesc } else { Phase::ExpectingField };
-    StreamOp::ValueIsConsumed
-}
-
-fn on_null_value<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
-    let position = rjiter.current_index();
-    let peek = match rjiter.peek() {
-        Ok(p) => p,
-        Err(e) => {
-            baton.borrow_mut().store_rjiter_error(e, position, "peeking NULL type value");
-            return StreamOp::Error("Failed to peek NULL value");
-        }
-    };
-    if peek != Peek::True {
-        return StreamOp::Error("Expected true for NULL type");
-    }
-    if let Err(e) = rjiter.known_bool(peek) {
-        baton.borrow_mut().store_rjiter_error(e, position, "consuming NULL type value");
-        return StreamOp::Error("Failed to consume NULL value");
-    }
-
-    let mut conv = baton.borrow_mut();
-    conv.write(b"null");
-    conv.pending_comma = true;
-
-    // After value, return to field or type descriptor level
-    conv.current_type = None;
-    conv.phase = if conv.current_in_list { Phase::ExpectingTypeDesc } else { Phase::ExpectingField };
-    StreamOp::ValueIsConsumed
-}
+// Type descriptor value handlers for container types (SS, NS, L, M)
 
 fn on_string_set_begin<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
     let position = rjiter.current_index();
@@ -663,8 +656,8 @@ fn find_action_object<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
                 // L expects array, not object
                 return Some(on_invalid_type_value_not_array);
             } else {
-                // Other types (S, N, BOOL, NULL, SS, NS) expect primitives/arrays, not objects
-                return Some(on_invalid_type_value_not_atom);
+                // Other types (SS, NS) expect arrays, not objects
+                return Some(on_invalid_type_value_not_array);
             }
         }
         _ => {}
@@ -731,9 +724,6 @@ fn find_action_array<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
             Some(TypeDesc::NS) => return Some(on_number_set_begin),
             Some(TypeDesc::L) => return Some(on_list_begin),
             Some(TypeDesc::M) => return Some(on_invalid_type_value_not_object),
-            Some(TypeDesc::S) | Some(TypeDesc::N) | Some(TypeDesc::Bool) | Some(TypeDesc::Null) => {
-                return Some(on_invalid_type_value_not_atom);
-            }
             _ => {}
         }
     }
@@ -750,10 +740,6 @@ fn find_action_atom<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
 ) -> Option<Action<DdbBaton<'a, 'workbuf, W>, R>> {
     if phase == Phase::ExpectingValue {
         match current_type {
-            Some(TypeDesc::S) => return Some(on_string_value),
-            Some(TypeDesc::N) => return Some(on_number_value),
-            Some(TypeDesc::Bool) => return Some(on_bool_value),
-            Some(TypeDesc::Null) => return Some(on_null_value),
             Some(TypeDesc::SS) | Some(TypeDesc::NS) => {
                 // Check if we're inside an array (element) or at object level (invalid)
                 if let Some(first) = context.next() {
@@ -827,23 +813,6 @@ fn on_invalid_type_value_not_object<R: embedded_io::Read, W: IoWrite>(_rjiter: &
         Some(b"M"),
     );
     StreamOp::Error("Expected object value for M type")
-}
-
-fn on_invalid_type_value_not_atom<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
-    let mut conv = baton.borrow_mut();
-    let type_name = match conv.current_type {
-        Some(TypeDesc::S) => "S",
-        Some(TypeDesc::N) => "N",
-        Some(TypeDesc::Bool) => "BOOL",
-        Some(TypeDesc::Null) => "NULL",
-        _ => "unknown",
-    };
-    conv.store_parse_error(
-        0,
-        "Invalid DynamoDB JSON format: type expects a primitive value",
-        Some(type_name.as_bytes()),
-    );
-    StreamOp::Error("Expected primitive value for type")
 }
 
 fn on_list_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
