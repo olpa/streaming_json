@@ -12,9 +12,8 @@ use crate::ConversionError;
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Phase {
     ExpectingField,        // Expecting a field key
-    ExpectingTypeDesc,     // Expecting type descriptor object (after field key)
-    ExpectingTypeKey,      // Inside type descriptor, expecting type key
-    ExpectingValue,        // After type key, expecting the value
+    ExpectingTypeKey,      // Expecting type key (after field key, or in L array)
+    ExpectingValue,        // After type key, expecting the value (only for lists/sets)
 }
 
 /// How to handle "Item" key at top level
@@ -144,11 +143,12 @@ pub struct DdbConverter<'a, 'workbuf, W: IoWrite> {
     has_item_wrapper: Option<bool>, // None = unknown, Some(true) = has Item, Some(false) = no Item
     item_wrapper_mode: ItemWrapperMode, // How to handle "Item" key at top level
     last_error: Option<ConversionError>, // Stores detailed error information
+    item_end_called: bool, // Track if on_item_end has been called to prevent duplicate calls
 
     phase: Phase,
     current_type: Option<TypeDesc>,
-    type_descriptor_depth: usize, // Nesting depth of type descriptors (0 = not in type descriptor)
     m_depth: usize, // Nesting depth of M objects (for distinguishing M from field named "M")
+    l_depth: usize, // Nesting depth of L arrays (for determining phase after literals)
 
     // Cached context information (set in find_action/find_end_action)
     current_in_list: bool, // True if currently in an L container
@@ -165,10 +165,11 @@ impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
             has_item_wrapper: None,
             item_wrapper_mode,
             last_error: None,
+            item_end_called: false,
             phase: Phase::ExpectingField,
             current_type: None,
-            type_descriptor_depth: 0,
             m_depth: 0,
+            l_depth: 0,
             current_in_list: false,
         }
     }
@@ -265,6 +266,11 @@ fn on_item_value_object_begin<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJ
 /// Handle the end of Item object - write closing brace and newline for JSONL
 fn on_item_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     let mut conv = baton.borrow_mut();
+    // Prevent duplicate calls
+    if conv.item_end_called {
+        return Ok(());
+    }
+    conv.item_end_called = true;
     conv.newline();
     conv.write(b"}");
     conv.write(b"\n");
@@ -280,8 +286,8 @@ fn on_field_key<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton
 
     let mut conv = baton.borrow_mut();
 
-    // If we haven't seen Item wrapper yet, this is the first field (no Item wrapper)
-    if conv.has_item_wrapper.is_none() {
+    // If we haven't seen Item wrapper yet AND we're at root level, this is the first field (no Item wrapper)
+    if conv.has_item_wrapper.is_none() && conv.depth == 0 {
         conv.write(b"{");
         conv.newline();
         conv.depth = 1;
@@ -294,21 +300,15 @@ fn on_field_key<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton
     conv.write(&field_name);
     conv.write(b"\":");
     conv.pending_comma = false;
-    conv.phase = Phase::ExpectingTypeDesc;
+    conv.phase = Phase::ExpectingTypeKey;
 
     StreamOp::None
 }
 
 /// Handle the start of a type descriptor object
+/// Type descriptors are mostly transparent, but we need to ensure phase is set correctly
 fn on_type_descriptor_begin<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
     let mut conv = baton.borrow_mut();
-
-    // In L arrays, write comma before element
-    if conv.current_in_list {
-        conv.write_comma();
-    }
-
-    conv.type_descriptor_depth += 1;
     conv.phase = Phase::ExpectingTypeKey;
     StreamOp::None
 }
@@ -325,7 +325,6 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: 
     fn finalize_literal_value<W: IoWrite>(conv: &mut DdbConverter<'_, '_, W>) {
         conv.pending_comma = true;
         conv.current_type = None;
-        conv.phase = if conv.current_in_list { Phase::ExpectingTypeDesc } else { Phase::ExpectingField };
     }
 
     // Helper for string-based types (S/B/N): peek string, write with write_long_bytes
@@ -345,6 +344,11 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: 
         };
         if peek != Peek::String {
             return StreamOp::Error("Expected string value");
+        }
+
+        // Write comma if in L array
+        if conv.l_depth > 0 {
+            conv.write_comma();
         }
 
         if with_quotes {
@@ -384,6 +388,11 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: 
             Ok(bytes) => bytes,
             Err(msg) => return StreamOp::Error(msg),
         };
+
+        // Write comma if in L array
+        if conv.l_depth > 0 {
+            conv.write_comma();
+        }
 
         // Consume the value
         if let Err(e) = rjiter.known_bool(peek) {
@@ -434,7 +443,7 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: 
         }
         b"M" => {
             conv.current_type = Some(TypeDesc::M);
-            conv.phase = Phase::ExpectingValue;
+            conv.phase = Phase::ExpectingField;
             StreamOp::None
         }
         _ => {
@@ -522,9 +531,14 @@ fn on_list_begin<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton
     }
 
     let mut conv = baton.borrow_mut();
+    // Write comma if in L array (nested L)
+    if conv.l_depth > 0 {
+        conv.write_comma();
+    }
     conv.write(b"[");
     conv.pending_comma = false;
-    conv.phase = Phase::ExpectingTypeDesc;  // In L, we expect type descriptors
+    conv.l_depth += 1;  // Track L nesting
+    conv.phase = Phase::ExpectingTypeKey;  // In L, we expect type keys (type descriptors are ignored)
     StreamOp::None
 }
 
@@ -548,6 +562,10 @@ fn on_map_begin<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton:
     }
 
     let mut conv = baton.borrow_mut();
+    // Write comma if in L array
+    if conv.l_depth > 0 {
+        conv.write_comma();
+    }
     conv.write(b"{");
     conv.newline();
     conv.depth += 1;
@@ -636,22 +654,22 @@ fn find_action_object<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
     }
 
     match phase {
-        Phase::ExpectingTypeDesc => {
+        Phase::ExpectingTypeKey => {
+            // Type descriptor objects are mostly transparent, but we need to handle the begin to set phase
             return Some(on_type_descriptor_begin);
         }
-        Phase::ExpectingValue => {
-            // Check type - should be M
+        Phase::ExpectingField => {
+            // Check if this is an M value object (after M type key)
             if current_type == Some(TypeDesc::M) {
                 return Some(on_map_begin);
-            } else if current_type == Some(TypeDesc::L) {
-                // L expects array, not object
-                return Some(on_invalid_type_value_not_array);
-            } else {
-                // Other types (SS, NS) expect arrays, not objects
-                return Some(on_invalid_type_value_not_array);
             }
         }
-        _ => {}
+        Phase::ExpectingValue => {
+            // Only L, SS, NS, BS use ExpectingValue
+            // L expects array, not object
+            // SS, NS, BS expect arrays, not objects
+            return Some(on_invalid_type_value_not_array);
+        }
     }
 
     None
@@ -717,6 +735,9 @@ fn find_action_array<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
             Some(TypeDesc::M) => return Some(on_invalid_type_value_not_object),
             _ => {}
         }
+    } else if phase == Phase::ExpectingField && current_type == Some(TypeDesc::M) {
+        // M type expects object, not array
+        return Some(on_invalid_type_value_not_object);
     }
 
     None
@@ -750,6 +771,9 @@ fn find_action_atom<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
             Some(TypeDesc::M) => return Some(on_invalid_type_value_not_object),
             _ => {}
         }
+    } else if phase == Phase::ExpectingField && current_type == Some(TypeDesc::M) {
+        // M type expects object, not atom
+        return Some(on_invalid_type_value_not_object);
     }
 
     None
@@ -811,8 +835,11 @@ fn on_list_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static st
     conv.write(b"]");
     conv.pending_comma = true;
 
+    // Decrement L depth
+    conv.l_depth = conv.l_depth.saturating_sub(1);
+
     // Ending L array - restore phase based on whether we're still in another L
-    conv.phase = if conv.current_in_list { Phase::ExpectingTypeDesc } else { Phase::ExpectingField };
+    conv.phase = if conv.l_depth > 0 { Phase::ExpectingTypeKey } else { Phase::ExpectingField };
     conv.current_type = None;
     Ok(())
 }
@@ -822,8 +849,9 @@ fn on_set_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str
     conv.write(b"]");
     conv.pending_comma = true;
 
-    // Ending SS/NS set - just clear type and return to field/typedesc level (phase already set by last element)
+    // Ending SS/NS set - restore phase based on whether we're in an L array
     conv.current_type = None;
+    conv.phase = if conv.l_depth > 0 { Phase::ExpectingTypeKey } else { Phase::ExpectingField };
     Ok(())
 }
 
@@ -840,21 +868,23 @@ fn on_map_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str
 
     // Restore phase based on whether we're in an L array
     conv.current_type = None;
-    conv.phase = if conv.current_in_list { Phase::ExpectingTypeDesc } else { Phase::ExpectingField };
+    conv.phase = if conv.l_depth > 0 { Phase::ExpectingTypeKey } else { Phase::ExpectingField };
     Ok(())
 }
 
 fn on_type_descriptor_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
+    // Type descriptor ended - restore phase based on context
     let mut conv = baton.borrow_mut();
-    // Type descriptor ended, return to field or typedesc level
-    conv.type_descriptor_depth = conv.type_descriptor_depth.saturating_sub(1);
-    conv.phase = if conv.current_in_list { Phase::ExpectingTypeDesc } else { Phase::ExpectingField };
-    Ok(())
-}
-
-fn on_list_element_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
-    let mut conv = baton.borrow_mut();
-    conv.pending_comma = true;
+    // Priority: M object (if we're in one, expect another field)
+    // Otherwise: L array (expect another type descriptor)
+    // Otherwise: root (expect a field)
+    conv.phase = if conv.m_depth > 0 {
+        Phase::ExpectingField
+    } else if conv.l_depth > 0 {
+        Phase::ExpectingTypeKey
+    } else {
+        Phase::ExpectingField
+    };
     Ok(())
 }
 
@@ -864,8 +894,12 @@ fn on_root_object_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'st
     if conv.has_item_wrapper == Some(false) {
         drop(conv);
         on_item_end(baton)?;
+    } else if conv.has_item_wrapper.is_none() && conv.depth == 0 {
+        // Edge case: no Item wrapper was set and depth is 0 (empty or malformed input)
+        drop(conv);
+        on_item_end(baton)?;
     }
-    // If there was an Item wrapper, the root object just wraps "Item", nothing to write
+    // If there was an Item wrapper (Some(true)), the root object just wraps "Item", nothing to write
     Ok(())
 }
 
@@ -880,48 +914,48 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
         conv.current_in_list = in_list_from_context(context.clone());
     }
 
-    let (phase, current_type, in_list, type_descriptor_depth, m_depth) = {
+    let (phase, current_type, m_depth) = {
         let conv = baton.borrow();
-        (conv.phase, conv.current_type, conv.current_in_list, conv.type_descriptor_depth, conv.m_depth)
+        (conv.phase, conv.current_type, conv.m_depth)
     };
 
     // Match end of objects
     if structural == StructuralPseudoname::Object {
         match phase {
+            Phase::ExpectingTypeKey => {
+                // Ending an object while expecting type key means we're ending a type descriptor in a list
+                // Example: {"L": [{"S": "value"}]} - the } after "value" when phase is still ExpectingTypeKey
+                return Some(on_type_descriptor_end);
+            }
             Phase::ExpectingField => {
-                // This could be the Item/root object or an M object
-                // Check for M value ending FIRST, then type descriptors
-                let ending_m = m_depth > 0 && ending_m_object_from_context(context.clone());
+                // Could be: M value object, root/Item object, or type descriptor
 
+                // Check for M value ending first
+                let ending_m = m_depth > 0 && ending_m_object_from_context(context.clone());
                 if ending_m {
                     return Some(on_map_end);
-                } else if type_descriptor_depth >= 1 {
-                    return Some(on_type_descriptor_end);
-                } else {
-                    // depth == 0, not in type descriptor or M container
-                    // Check if this is the Item value object or root object
-                    let mut ctx = context.clone();
-                    if let Some(first) = ctx.next() {
-                        if first != b"#top" {
-                            // Not the root object, this is the Item value object
-                            return Some(on_item_end);
-                        } else {
-                            // Root object ending - check if no Item wrapper
-                            let has_wrapper = baton.borrow().has_item_wrapper;
-                            if has_wrapper == Some(false) {
-                                // No Item wrapper, root object IS the record
-                                return Some(on_item_end);
-                            }
-                            // has_wrapper == Some(true) or None - already handled elsewhere
-                        }
+                }
+
+                // Check if this is the Item value object or root object
+                let mut ctx = context.clone();
+                if let Some(first) = ctx.next() {
+                    if first == b"Item" {
+                        // Item value object ending
+                        return Some(on_item_end);
+                    } else if first == b"#top" {
+                        // Root object ending
+                        return Some(on_root_object_end);
                     }
+                    // Otherwise it's a type descriptor (context is a field key) - return minimal handler
                 }
+
+                // Type descriptor - call minimal handler
+                return Some(on_type_descriptor_end);
             }
-            _ => {
-                // For other phases, check if we're ending a type descriptor
-                if type_descriptor_depth > 0 {
-                    return Some(on_type_descriptor_end);
-                }
+            Phase::ExpectingValue => {
+                // Shouldn't end an object in ExpectingValue (only arrays for SS/NS/L)
+                // Could be a type descriptor in an error case - call minimal handler
+                return Some(on_type_descriptor_end);
             }
         }
     }
@@ -941,14 +975,6 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
                 }
             }
             _ => {}
-        }
-    }
-
-    // Match end of type descriptor objects in L arrays
-    if structural == StructuralPseudoname::Object {
-        if phase == Phase::ExpectingTypeKey && in_list {
-            // Type descriptor in L array ending
-            return Some(on_list_element_end);
         }
     }
 
