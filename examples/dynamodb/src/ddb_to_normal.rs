@@ -321,8 +321,6 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: 
         None => return StreamOp::Error("current_field should be set for type key"),
     };
 
-    let position = rjiter.current_index();
-
     // Helper to finalize after consuming a literal value
     fn finalize_literal_value<W: IoWrite>(conv: &mut DdbConverter<'_, '_, W>) {
         conv.pending_comma = true;
@@ -334,13 +332,13 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: 
     fn handle_string_based_type<R: embedded_io::Read, W: IoWrite>(
         rjiter: &mut RJiter<R>,
         conv: &mut DdbConverter<'_, '_, W>,
-        position: usize,
         with_quotes: bool,
         type_name: &'static str,
     ) -> StreamOp {
         let peek = match rjiter.peek() {
             Ok(p) => p,
             Err(e) => {
+                let position = rjiter.current_index();
                 conv.store_rjiter_error(e, position, type_name);
                 return StreamOp::Error("Failed to peek string value");
             }
@@ -353,6 +351,7 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: 
             conv.write(b"\"");
         }
         if let Err(e) = rjiter.write_long_bytes(conv.writer) {
+            let position = rjiter.current_index();
             conv.store_rjiter_error(e, position, type_name);
             return StreamOp::Error("Failed to write value");
         }
@@ -368,13 +367,13 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: 
     fn handle_bool_based_type<R: embedded_io::Read, W: IoWrite>(
         rjiter: &mut RJiter<R>,
         conv: &mut DdbConverter<'_, '_, W>,
-        position: usize,
         validate_peek: impl Fn(Peek) -> Result<&'static [u8], &'static str>,
         type_name: &'static str,
     ) -> StreamOp {
         let peek = match rjiter.peek() {
             Ok(p) => p,
             Err(e) => {
+                let position = rjiter.current_index();
                 conv.store_rjiter_error(e, position, type_name);
                 return StreamOp::Error("Failed to peek value");
             }
@@ -388,6 +387,7 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: 
 
         // Consume the value
         if let Err(e) = rjiter.known_bool(peek) {
+            let position = rjiter.current_index();
             conv.store_rjiter_error(e, position, type_name);
             return StreamOp::Error("Failed to consume boolean value");
         }
@@ -398,10 +398,10 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: 
     }
 
     match type_key {
-        b"S" | b"B" => handle_string_based_type(rjiter, &mut conv, position, true, "S/B (string) type"),
-        b"N" => handle_string_based_type(rjiter, &mut conv, position, false, "N (number) type"),
+        b"S" | b"B" => handle_string_based_type(rjiter, &mut conv, true, "S/B (string) type"),
+        b"N" => handle_string_based_type(rjiter, &mut conv, false, "N (number) type"),
         b"BOOL" => handle_bool_based_type(
-            rjiter, &mut conv, position,
+            rjiter, &mut conv,
             |peek| match peek {
                 Peek::True => Ok(b"true"),
                 Peek::False => Ok(b"false"),
@@ -410,7 +410,7 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: 
             "BOOL type"
         ),
         b"NULL" => handle_bool_based_type(
-            rjiter, &mut conv, position,
+            rjiter, &mut conv,
             |peek| match peek {
                 Peek::True => Ok(b"null"),
                 _ => Err("Expected true for NULL type"),
