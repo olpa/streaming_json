@@ -758,42 +758,27 @@ fn find_action_atom<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
     phase: Phase,
     current_type: Option<TypeDesc>,
 ) -> Option<Action<DdbBaton<'a, 'workbuf, W>, R>> {
-    // Early exit if not in ExpectingValue phase
+    // Atoms are only valid as set elements inside arrays
     if phase != Phase::ExpectingValue {
-        // Special cases for ExpectingField phase:
-        // - M type expects object, not atom
-        // - L type expects array, not atom
-        if phase == Phase::ExpectingField {
-            match current_type {
-                Some(TypeDesc::M) => return Some(on_invalid_type_value_not_object),
-                Some(TypeDesc::L) => return Some(on_invalid_type_value_not_array),
-                _ => {}
-            }
-        }
-        return None;
+        return Some(on_unexpected_atom);
     }
 
-    // Handle atoms in ExpectingValue phase (SS/NS set elements)
-    match current_type {
-        Some(TypeDesc::SS) | Some(TypeDesc::NS) => {
-            // Check if we're inside an array (element) or at object level (invalid)
-            if let Some(first) = context.next() {
-                if first == b"#array" {
-                    // We're inside the array, this is a valid element
-                    if current_type == Some(TypeDesc::SS) {
-                        return Some(on_set_string_element);
-                    } else {
-                        return Some(on_set_number_element);
-                    }
-                }
+    // SS/NS set element inside array
+    if matches!(current_type, Some(TypeDesc::SS) | Some(TypeDesc::NS)) {
+        if let Some(first) = context.next() {
+            if first == b"#array" {
+                // Valid set element inside array
+                return if current_type == Some(TypeDesc::SS) {
+                    Some(on_set_string_element)
+                } else {
+                    Some(on_set_number_element)
+                };
             }
-            // Not inside an array, this is an error
-            return Some(on_invalid_type_value_not_array);
         }
-        _ => {}
     }
 
-    None
+    // All other cases: atoms are unexpected
+    Some(on_unexpected_atom)
 }
 
 fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
@@ -845,6 +830,16 @@ fn on_invalid_type_value_not_object<R: embedded_io::Read, W: IoWrite>(_rjiter: &
         Some(b"M"),
     );
     StreamOp::Error("Expected object value for M type")
+}
+
+fn on_unexpected_atom<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
+    let mut conv = baton.borrow_mut();
+    conv.store_parse_error(
+        0,
+        "Invalid DynamoDB JSON format: Expected array for set type, atom values only allowed as set elements",
+        None,
+    );
+    StreamOp::Error("Expected array for set type, atom values only allowed as set elements")
 }
 
 fn on_list_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {

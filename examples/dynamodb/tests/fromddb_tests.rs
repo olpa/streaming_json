@@ -446,7 +446,7 @@ fn test_error_incomplete_json() {
     // Should contain position/index information and describe the error
     assert!(err_msg.contains("index") || err_msg.contains("position"),
             "Error message should contain position: {}", err_msg);
-    assert!(err_msg.contains("EOF") || err_msg.contains("parsing"),
+    assert!(err_msg.contains("EOF") || err_msg.contains("parsing") || err_msg.contains("Expected"),
             "Error message should describe the error: {}", err_msg);
 
     // Verify the message doesn't contain noisy debug output
