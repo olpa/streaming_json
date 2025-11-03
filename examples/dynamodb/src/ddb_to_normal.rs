@@ -13,7 +13,7 @@ use crate::ConversionError;
 enum Phase {
     ExpectingField,        // Expecting a field key
     ExpectingTypeKey,      // Expecting type key (after field key, or in L array)
-    ExpectingValue,        // After type key, expecting the value (only for lists/sets)
+    ExpectingValue,        // After type key, expecting the value (only for sets: SS, NS, BS)
 }
 
 /// How to handle "Item" key at top level
@@ -438,7 +438,7 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: 
         }
         b"L" => {
             conv.current_type = Some(TypeDesc::L);
-            conv.phase = Phase::ExpectingValue;
+            conv.phase = Phase::ExpectingField;
             StreamOp::None
         }
         b"M" => {
@@ -663,10 +663,13 @@ fn find_action_object<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
             if current_type == Some(TypeDesc::M) {
                 return Some(on_map_begin);
             }
+            // L type expects array, not object
+            if current_type == Some(TypeDesc::L) {
+                return Some(on_invalid_type_value_not_array);
+            }
         }
         Phase::ExpectingValue => {
-            // Only L, SS, NS, BS use ExpectingValue
-            // L expects array, not object
+            // Only SS, NS, BS use ExpectingValue
             // SS, NS, BS expect arrays, not objects
             return Some(on_invalid_type_value_not_array);
         }
@@ -731,13 +734,18 @@ fn find_action_array<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
         match current_type {
             Some(TypeDesc::SS) => return Some(on_string_set_begin),
             Some(TypeDesc::NS) => return Some(on_number_set_begin),
-            Some(TypeDesc::L) => return Some(on_list_begin),
             Some(TypeDesc::M) => return Some(on_invalid_type_value_not_object),
             _ => {}
         }
-    } else if phase == Phase::ExpectingField && current_type == Some(TypeDesc::M) {
-        // M type expects object, not array
-        return Some(on_invalid_type_value_not_object);
+    } else if phase == Phase::ExpectingField {
+        match current_type {
+            Some(TypeDesc::L) => return Some(on_list_begin),
+            Some(TypeDesc::M) => {
+                // M type expects object, not array
+                return Some(on_invalid_type_value_not_object);
+            }
+            _ => {}
+        }
     }
 
     None
@@ -750,30 +758,39 @@ fn find_action_atom<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
     phase: Phase,
     current_type: Option<TypeDesc>,
 ) -> Option<Action<DdbBaton<'a, 'workbuf, W>, R>> {
-    if phase == Phase::ExpectingValue {
-        match current_type {
-            Some(TypeDesc::SS) | Some(TypeDesc::NS) => {
-                // Check if we're inside an array (element) or at object level (invalid)
-                if let Some(first) = context.next() {
-                    if first == b"#array" {
-                        // We're inside the array, this is a valid element
-                        if current_type == Some(TypeDesc::SS) {
-                            return Some(on_set_string_element);
-                        } else {
-                            return Some(on_set_number_element);
-                        }
+    // Early exit if not in ExpectingValue phase
+    if phase != Phase::ExpectingValue {
+        // Special cases for ExpectingField phase:
+        // - M type expects object, not atom
+        // - L type expects array, not atom
+        if phase == Phase::ExpectingField {
+            match current_type {
+                Some(TypeDesc::M) => return Some(on_invalid_type_value_not_object),
+                Some(TypeDesc::L) => return Some(on_invalid_type_value_not_array),
+                _ => {}
+            }
+        }
+        return None;
+    }
+
+    // Handle atoms in ExpectingValue phase (SS/NS set elements)
+    match current_type {
+        Some(TypeDesc::SS) | Some(TypeDesc::NS) => {
+            // Check if we're inside an array (element) or at object level (invalid)
+            if let Some(first) = context.next() {
+                if first == b"#array" {
+                    // We're inside the array, this is a valid element
+                    if current_type == Some(TypeDesc::SS) {
+                        return Some(on_set_string_element);
+                    } else {
+                        return Some(on_set_number_element);
                     }
                 }
-                // Not inside an array, this is an error
-                return Some(on_invalid_type_value_not_array);
             }
-            Some(TypeDesc::L) => return Some(on_invalid_type_value_not_array),
-            Some(TypeDesc::M) => return Some(on_invalid_type_value_not_object),
-            _ => {}
+            // Not inside an array, this is an error
+            return Some(on_invalid_type_value_not_array);
         }
-    } else if phase == Phase::ExpectingField && current_type == Some(TypeDesc::M) {
-        // M type expects object, not atom
-        return Some(on_invalid_type_value_not_object);
+        _ => {}
     }
 
     None
