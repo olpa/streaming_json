@@ -212,7 +212,7 @@ impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
         let _ = self.writer.write_all(bytes);
     }
 
-    fn write_comma(&mut self) {
+    fn write_comma_if_pending(&mut self) {
         if self.pending_comma {
             self.write(b",");
             self.newline();
@@ -294,7 +294,7 @@ fn on_field_key<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton
         conv.has_item_wrapper = Some(false);
     }
 
-    conv.write_comma();
+    conv.write_comma_if_pending();
     conv.indent();
     conv.write(b"\"");
     conv.write(&field_name);
@@ -313,6 +313,48 @@ fn on_type_descriptor_begin<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJit
     StreamOp::None
 }
 
+/// Generic helper for writing string-based values (S/B/N types and set elements)
+/// Handles peeking, comma writing, quotes, and error reporting
+fn write_string_value<R: embedded_io::Read, W: IoWrite>(
+    rjiter: &mut RJiter<R>,
+    conv: &mut DdbConverter<'_, '_, W>,
+    with_quotes: bool,
+    write_comma_if_pending: bool,
+    peek_context: &'static str,
+    write_context: &'static str,
+) -> StreamOp {
+    let peek = match rjiter.peek() {
+        Ok(p) => p,
+        Err(e) => {
+            let position = rjiter.current_index();
+            conv.store_rjiter_error(e, position, peek_context);
+            return StreamOp::Error("Failed to peek string value");
+        }
+    };
+    if peek != Peek::String {
+        return StreamOp::Error("Expected string value");
+    }
+
+    if write_comma_if_pending {
+        conv.write_comma_if_pending();
+    }
+
+    if with_quotes {
+        conv.write(b"\"");
+    }
+    if let Err(e) = rjiter.write_long_bytes(conv.writer) {
+        let position = rjiter.current_index();
+        conv.store_rjiter_error(e, position, write_context);
+        return StreamOp::Error("Failed to write value");
+    }
+    if with_quotes {
+        conv.write(b"\"");
+    }
+
+    conv.pending_comma = true;
+    StreamOp::ValueIsConsumed
+}
+
 /// Handle a type key - for literal types, consume and write the value directly
 fn on_type_key<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
     let mut conv = baton.borrow_mut();
@@ -320,52 +362,6 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: 
         Some(field) => field,
         None => return StreamOp::Error("current_field should be set for type key"),
     };
-
-    // Helper to finalize after consuming a literal value
-    fn finalize_literal_value<W: IoWrite>(conv: &mut DdbConverter<'_, '_, W>) {
-        conv.pending_comma = true;
-        conv.current_type = None;
-    }
-
-    // Helper for string-based types (S/B/N): peek string, write with write_long_bytes
-    fn handle_string_based_type<R: embedded_io::Read, W: IoWrite>(
-        rjiter: &mut RJiter<R>,
-        conv: &mut DdbConverter<'_, '_, W>,
-        with_quotes: bool,
-        type_name: &'static str,
-    ) -> StreamOp {
-        let peek = match rjiter.peek() {
-            Ok(p) => p,
-            Err(e) => {
-                let position = rjiter.current_index();
-                conv.store_rjiter_error(e, position, type_name);
-                return StreamOp::Error("Failed to peek string value");
-            }
-        };
-        if peek != Peek::String {
-            return StreamOp::Error("Expected string value");
-        }
-
-        // Write comma if in L array
-        if conv.l_depth > 0 {
-            conv.write_comma();
-        }
-
-        if with_quotes {
-            conv.write(b"\"");
-        }
-        if let Err(e) = rjiter.write_long_bytes(conv.writer) {
-            let position = rjiter.current_index();
-            conv.store_rjiter_error(e, position, type_name);
-            return StreamOp::Error("Failed to write value");
-        }
-        if with_quotes {
-            conv.write(b"\"");
-        }
-
-        finalize_literal_value(conv);
-        StreamOp::ValueIsConsumed
-    }
 
     // Helper for boolean-based types (BOOL/NULL): peek bool, consume with known_bool, write output
     fn handle_bool_based_type<R: embedded_io::Read, W: IoWrite>(
@@ -391,7 +387,7 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: 
 
         // Write comma if in L array
         if conv.l_depth > 0 {
-            conv.write_comma();
+            conv.write_comma_if_pending();
         }
 
         // Consume the value
@@ -402,13 +398,24 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: 
         }
         conv.write(output);
 
-        finalize_literal_value(conv);
+        conv.pending_comma = true;
+        conv.current_type = None;
         StreamOp::ValueIsConsumed
     }
 
     match type_key {
-        b"S" | b"B" => handle_string_based_type(rjiter, &mut conv, true, "S/B (string) type"),
-        b"N" => handle_string_based_type(rjiter, &mut conv, false, "N (number) type"),
+        b"S" | b"B" => {
+            let write_comma_if_pending = conv.l_depth > 0;
+            let result = write_string_value(rjiter, &mut conv, true, write_comma_if_pending, "S/B (string) type", "S/B (string) type");
+            conv.current_type = None;
+            result
+        }
+        b"N" => {
+            let write_comma_if_pending = conv.l_depth > 0;
+            let result = write_string_value(rjiter, &mut conv, false, write_comma_if_pending, "N (number) type", "N (number) type");
+            conv.current_type = None;
+            result
+        }
         b"BOOL" => handle_bool_based_type(
             rjiter, &mut conv,
             |peek| match peek {
@@ -533,7 +540,7 @@ fn on_list_begin<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton
     let mut conv = baton.borrow_mut();
     // Write comma if in L array (nested L)
     if conv.l_depth > 0 {
-        conv.write_comma();
+        conv.write_comma_if_pending();
     }
     conv.write(b"[");
     conv.pending_comma = false;
@@ -564,7 +571,7 @@ fn on_map_begin<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton:
     let mut conv = baton.borrow_mut();
     // Write comma if in L array
     if conv.l_depth > 0 {
-        conv.write_comma();
+        conv.write_comma_if_pending();
     }
     conv.write(b"{");
     conv.newline();
@@ -576,51 +583,27 @@ fn on_map_begin<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton:
 }
 
 fn on_set_string_element<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
-    let position = rjiter.current_index();
-    let peek = match rjiter.peek() {
-        Ok(p) => p,
-        Err(e) => {
-            baton.borrow_mut().store_rjiter_error(e, position, "peeking SS/BS (string set) element");
-            return StreamOp::Error("Failed to peek string set element");
-        }
-    };
-    if peek != Peek::String {
-        return StreamOp::Error("Expected string in SS/BS set");
-    }
-
     let mut conv = baton.borrow_mut();
-    conv.write_comma();
-    conv.write(b"\"");
-    if let Err(e) = rjiter.write_long_bytes(conv.writer) {
-        conv.store_rjiter_error(e, position, "writing SS/BS (string set) element");
-        return StreamOp::Error("Failed to write string set element");
-    }
-    conv.write(b"\"");
-    conv.pending_comma = true;
-    StreamOp::ValueIsConsumed
+    write_string_value(
+        rjiter,
+        &mut conv,
+        true,  // with_quotes
+        true,  // write_comma_if_pending: always for set elements (pending_comma handles first element)
+        "peeking SS/BS (string set) element",
+        "writing SS/BS (string set) element",
+    )
 }
 
 fn on_set_number_element<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
-    let position = rjiter.current_index();
-    let peek = match rjiter.peek() {
-        Ok(p) => p,
-        Err(e) => {
-            baton.borrow_mut().store_rjiter_error(e, position, "peeking NS (number set) element");
-            return StreamOp::Error("Failed to peek number set element");
-        }
-    };
-    if peek != Peek::String {
-        return StreamOp::Error("Expected string (number) in NS set");
-    }
-
     let mut conv = baton.borrow_mut();
-    conv.write_comma();
-    if let Err(e) = rjiter.write_long_bytes(conv.writer) {
-        conv.store_rjiter_error(e, position, "writing NS (number set) element");
-        return StreamOp::Error("Failed to write number set element");
-    }
-    conv.pending_comma = true;
-    StreamOp::ValueIsConsumed
+    write_string_value(
+        rjiter,
+        &mut conv,
+        false,  // with_quotes
+        true,   // write_comma_if_pending: always for set elements (pending_comma handles first element)
+        "peeking NS (number set) element",
+        "writing NS (number set) element",
+    )
 }
 
 /// Handle Object structural pseudoname
