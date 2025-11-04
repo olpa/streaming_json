@@ -30,22 +30,6 @@ enum TypeDesc {
     L, M,    // Nested containers
 }
 
-/// Check if we're DIRECTLY inside an L (list) container (not nested in M inside L)
-/// This is used to determine the correct phase after consuming a value
-fn in_list_from_context(context: ContextIter) -> bool {
-    let mut ctx = context.clone();
-    // Check if the FIRST item in context is #array
-    if let Some(first) = ctx.next() {
-        if first == b"#array" {
-            // We're directly in an array, check if it's an L array
-            if let Some(array_key) = ctx.next() {
-                return array_key == b"L";
-            }
-        }
-    }
-    false
-}
-
 /// Check if we're ending an L array (context is at the array level, not inside it)
 fn ending_l_array_from_context(context: ContextIter) -> bool {
     let mut ctx = context.clone();
@@ -149,9 +133,6 @@ pub struct DdbConverter<'a, 'workbuf, W: IoWrite> {
     current_type: Option<TypeDesc>,
     m_depth: usize, // Nesting depth of M objects (for distinguishing M from field named "M")
     l_depth: usize, // Nesting depth of L arrays (for determining phase after literals)
-
-    // Cached context information (set in find_action/find_end_action)
-    current_in_list: bool, // True if currently in an L container
 }
 
 impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
@@ -170,7 +151,6 @@ impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
             current_type: None,
             m_depth: 0,
             l_depth: 0,
-            current_in_list: false,
         }
     }
 
@@ -638,12 +618,6 @@ fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
     context: ContextIter,
     baton: DdbBaton<'a, 'workbuf, W>,
 ) -> Option<Action<DdbBaton<'a, 'workbuf, W>, R>> {
-    // Update cached context information
-    {
-        let mut conv = baton.borrow_mut();
-        conv.current_in_list = in_list_from_context(context.clone());
-    }
-
     let (phase, current_type) = {
         let conv = baton.borrow();
         (conv.phase, conv.current_type)
@@ -746,12 +720,6 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
     context: ContextIter,
     baton: DdbBaton<'a, 'workbuf, W>,
 ) -> Option<EndAction<DdbBaton<'a, 'workbuf, W>>> {
-    // Update cached context information
-    {
-        let mut conv = baton.borrow_mut();
-        conv.current_in_list = in_list_from_context(context.clone());
-    }
-
     let (phase, current_type, m_depth) = {
         let conv = baton.borrow();
         (conv.phase, conv.current_type, conv.m_depth)
