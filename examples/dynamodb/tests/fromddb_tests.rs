@@ -293,7 +293,7 @@ fn test_zero_number() {
 
 // Tests for confusing field names that match type descriptors
 #[test]
-fn test_field_named_M_inside_M() {
+fn test_field_named_m_inside_m() {
     let ddb_json = r#"{"Item":{"data": {"M": {"M": {"S": "value"}}}}}"#;
     let result = convert_test(ddb_json);
     let expected = r#"{"data":{"M":"value"}}
@@ -302,7 +302,7 @@ fn test_field_named_M_inside_M() {
 }
 
 #[test]
-fn test_field_named_L_inside_M() {
+fn test_field_named_l_inside_m() {
     let ddb_json = r#"{"Item":{"data": {"M": {"L": {"S": "value"}}}}}"#;
     let result = convert_test(ddb_json);
     let expected = r#"{"data":{"L":"value"}}
@@ -311,7 +311,7 @@ fn test_field_named_L_inside_M() {
 }
 
 #[test]
-fn test_field_named_S_inside_M() {
+fn test_field_named_s_inside_m() {
     let ddb_json = r#"{"Item":{"data": {"M": {"S": {"S": "value"}}}}}"#;
     let result = convert_test(ddb_json);
     let expected = r#"{"data":{"S":"value"}}
@@ -320,7 +320,7 @@ fn test_field_named_S_inside_M() {
 }
 
 #[test]
-fn test_field_named_N_inside_M() {
+fn test_field_named_n_inside_m() {
     let ddb_json = r#"{"Item":{"data": {"M": {"N": {"N": "123"}}}}}"#;
     let result = convert_test(ddb_json);
     let expected = r#"{"data":{"N":123}}
@@ -329,7 +329,7 @@ fn test_field_named_N_inside_M() {
 }
 
 #[test]
-fn test_field_named_BOOL_inside_M() {
+fn test_field_named_bool_inside_m() {
     let ddb_json = r#"{"Item":{"data": {"M": {"BOOL": {"BOOL": true}}}}}"#;
     let result = convert_test(ddb_json);
     let expected = r#"{"data":{"BOOL":true}}
@@ -338,7 +338,7 @@ fn test_field_named_BOOL_inside_M() {
 }
 
 #[test]
-fn test_field_named_NULL_inside_M() {
+fn test_field_named_null_inside_m() {
     let ddb_json = r#"{"Item":{"data": {"M": {"NULL": {"NULL": true}}}}}"#;
     let result = convert_test(ddb_json);
     let expected = r#"{"data":{"NULL":null}}
@@ -347,7 +347,7 @@ fn test_field_named_NULL_inside_M() {
 }
 
 #[test]
-fn test_field_named_SS_inside_M() {
+fn test_field_named_ss_inside_m() {
     let ddb_json = r#"{"Item":{"data": {"M": {"SS": {"SS": ["a", "b"]}}}}}"#;
     let result = convert_test(ddb_json);
     let expected = r#"{"data":{"SS":["a","b"]}}
@@ -356,7 +356,7 @@ fn test_field_named_SS_inside_M() {
 }
 
 #[test]
-fn test_field_named_Item_inside_M() {
+fn test_field_named_item_inside_m() {
     let ddb_json = r#"{"Item":{"data": {"M": {"Item": {"S": "value"}}}}}"#;
     let result = convert_test(ddb_json);
     let expected = r#"{"data":{"Item":"value"}}
@@ -365,7 +365,7 @@ fn test_field_named_Item_inside_M() {
 }
 
 #[test]
-fn test_nested_M_fields() {
+fn test_nested_m_fields() {
     let ddb_json = r#"{"Item":{"a": {"M": {"M": {"M": {"b": {"S": "c"}}}}}}}"#;
     let result = convert_test(ddb_json);
     let expected = r#"{"a":{"M":{"b":"c"}}}
