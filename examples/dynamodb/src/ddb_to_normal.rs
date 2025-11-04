@@ -237,32 +237,6 @@ impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
 
 type DdbBaton<'a, 'workbuf, W> = &'a RefCell<DdbConverter<'a, 'workbuf, W>>;
 
-/// Handle the root object - just enter it, don't write anything yet
-fn on_root_object_begin<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
-    // Don't write anything - we'll write when we know if there's an Item wrapper
-    let _conv = baton.borrow();
-    StreamOp::None
-}
-
-/// Handle the "Item" key at root - prepare for Item value object
-fn on_item_key<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
-    let mut conv = baton.borrow_mut();
-    conv.has_item_wrapper = Some(true);
-    StreamOp::None
-}
-
-/// Handle the start of Item value object - write opening brace and enter field-expecting phase
-fn on_item_value_object_begin<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
-    let mut conv = baton.borrow_mut();
-    conv.write(b"{");
-    conv.newline();
-    conv.depth = 1;
-    conv.has_item_wrapper = Some(true);
-    conv.pending_comma = false;
-    conv.phase = Phase::ExpectingField;
-    StreamOp::None
-}
-
 /// Handle the end of Item object - write closing brace and newline for JSONL
 fn on_item_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     let mut conv = baton.borrow_mut();
@@ -302,14 +276,6 @@ fn on_field_key<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton
     conv.pending_comma = false;
     conv.phase = Phase::ExpectingTypeKey;
 
-    StreamOp::None
-}
-
-/// Handle the start of a type descriptor object
-/// Type descriptors are mostly transparent, but we need to ensure phase is set correctly
-fn on_type_descriptor_begin<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
-    let mut conv = baton.borrow_mut();
-    conv.phase = Phase::ExpectingTypeKey;
     StreamOp::None
 }
 
@@ -449,6 +415,16 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: 
             StreamOp::None
         }
         b"M" => {
+            // M type - write opening brace here (parent handles it, not find_action_object)
+            // Write comma if in L array
+            if conv.l_depth > 0 {
+                conv.write_comma_if_pending();
+            }
+            conv.write(b"{");
+            conv.newline();
+            conv.depth += 1;
+            conv.pending_comma = false;
+            conv.m_depth += 1;  // Track M nesting
             conv.current_type = Some(TypeDesc::M);
             conv.phase = Phase::ExpectingField;
             StreamOp::None
@@ -549,39 +525,6 @@ fn on_list_begin<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton
     StreamOp::None
 }
 
-fn on_map_begin<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
-    let position = rjiter.current_index();
-    let peek = match rjiter.peek() {
-        Ok(p) => p,
-        Err(e) => {
-            baton.borrow_mut().store_rjiter_error(e, position, "peeking M (map) type value");
-            return StreamOp::Error("Failed to peek map value");
-        }
-    };
-    if peek != Peek::Object {
-        let mut conv = baton.borrow_mut();
-        conv.store_parse_error(
-            position,
-            "Invalid DynamoDB JSON format: M type expects an object value",
-            None,
-        );
-        return StreamOp::Error("Expected object value for M type");
-    }
-
-    let mut conv = baton.borrow_mut();
-    // Write comma if in L array
-    if conv.l_depth > 0 {
-        conv.write_comma_if_pending();
-    }
-    conv.write(b"{");
-    conv.newline();
-    conv.depth += 1;
-    conv.pending_comma = false;
-    conv.m_depth += 1;  // Track M nesting
-    conv.phase = Phase::ExpectingField;  // In M, we expect field keys
-    StreamOp::None
-}
-
 fn on_set_string_element<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
     let mut conv = baton.borrow_mut();
     write_string_value(
@@ -608,53 +551,36 @@ fn on_set_number_element<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R
 
 /// Handle Object structural pseudoname
 fn find_action_object<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
-    mut context: ContextIter,
+    _context: ContextIter,
     baton: DdbBaton<'a, 'workbuf, W>,
     phase: Phase,
     current_type: Option<TypeDesc>,
 ) -> Option<Action<DdbBaton<'a, 'workbuf, W>, R>> {
-    // Check for root object at #top
-    if let Some(first) = context.next() {
-        if first == b"#top" {
-            let mode = baton.borrow().item_wrapper_mode;
-            if mode == ItemWrapperMode::AsWrapper {
-                // Ignore the wrapper object, wait for the Item value object
-                return None;
-            }
-            return Some(on_root_object_begin);
-        }
-
-        // Check if this is the Item value object (when mode is AsWrapper)
-        // Context: parent is "Item", grandparent is "#top"
-        if first == b"Item" {
-            if let Some(b"#top") = context.next() {
-                let mode = baton.borrow().item_wrapper_mode;
-                if mode == ItemWrapperMode::AsWrapper {
-                    return Some(on_item_value_object_begin);
-                }
-            }
-        }
-    }
-
+    // Validate context: check for invalid cases (sets expecting objects)
     match phase {
-        Phase::ExpectingTypeKey => {
-            // Type descriptor objects are mostly transparent, but we need to handle the begin to set phase
-            return Some(on_type_descriptor_begin);
-        }
-        Phase::ExpectingField => {
-            // Check if this is an M value object (after M type key)
-            if current_type == Some(TypeDesc::M) {
-                return Some(on_map_begin);
-            }
-            // L type expects array, not object
-            if current_type == Some(TypeDesc::L) {
-                return Some(on_invalid_type_value_not_array);
-            }
-        }
         Phase::ExpectingValue => {
             // Only SS, NS, BS use ExpectingValue
             // SS, NS, BS expect arrays, not objects
-            return Some(on_invalid_type_value_not_array);
+            let mut conv = baton.borrow_mut();
+            conv.store_parse_error(
+                0,
+                "Invalid DynamoDB JSON format: Set types (SS/NS/BS) expect array values, not objects",
+                None,
+            );
+        }
+        Phase::ExpectingField => {
+            // L type expects array, not object
+            if current_type == Some(TypeDesc::L) {
+                let mut conv = baton.borrow_mut();
+                conv.store_parse_error(
+                    0,
+                    "Invalid DynamoDB JSON format: L type expects an array value, not an object",
+                    None,
+                );
+            }
+        }
+        Phase::ExpectingTypeKey => {
+            // Type descriptor objects are allowed
         }
     }
 
@@ -787,22 +713,6 @@ fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
         StructuralPseudoname::Array => find_action_array(context, baton, phase, current_type),
         StructuralPseudoname::Atom => find_action_atom(context, baton, phase, current_type),
     }
-}
-
-fn on_invalid_type_value_not_array<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
-    let mut conv = baton.borrow_mut();
-    let type_name = match conv.current_type {
-        Some(TypeDesc::SS) => "SS/BS",
-        Some(TypeDesc::NS) => "NS",
-        Some(TypeDesc::L) => "L",
-        _ => "unknown",
-    };
-    conv.store_parse_error(
-        0,
-        "Invalid DynamoDB JSON format: type expects an array value",
-        Some(type_name.as_bytes()),
-    );
-    StreamOp::Error("Expected array value for type")
 }
 
 fn on_invalid_type_value_not_object<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
