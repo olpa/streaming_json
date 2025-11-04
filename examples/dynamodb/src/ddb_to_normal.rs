@@ -30,16 +30,6 @@ enum TypeDesc {
     L, M,    // Nested containers
 }
 
-/// Check if we're ending an L array (context is at the array level, not inside it)
-fn ending_l_array_from_context(context: ContextIter) -> bool {
-    let mut ctx = context.clone();
-    // First item in context should be the key of the array
-    if let Some(key) = ctx.next() {
-        return key == b"L";
-    }
-    false
-}
-
 /// Check if we're ending an M object (context is at the object level, not inside it)
 /// Need to distinguish from a field named "M" whose type descriptor is ending
 fn ending_m_object_from_context(context: ContextIter) -> bool {
@@ -684,8 +674,9 @@ fn on_map_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str
     Ok(())
 }
 
-fn on_type_descriptor_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
-    // Type descriptor ended - restore phase based on context
+fn on_type_key_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
+    // Type key value ended (for literal types: S, N, B, BOOL, NULL)
+    // Restore phase based on context
     let mut conv = baton.borrow_mut();
     // Priority: M object (if we're in one, expect another field)
     // Otherwise: L array (expect another type descriptor)
@@ -715,76 +706,110 @@ fn on_root_object_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'st
     Ok(())
 }
 
+/// Handle end of Array structural pseudoname - arrays have no end-actions
+fn find_end_action_array<'a, 'workbuf, W: IoWrite>(
+    _context: ContextIter,
+    _baton: DdbBaton<'a, 'workbuf, W>,
+) -> Option<EndAction<DdbBaton<'a, 'workbuf, W>>> {
+    // Arrays are transparent - all logic is in the key handler
+    None
+}
+
+/// Handle end of Object structural pseudoname - objects have no end-actions
+fn find_end_action_object<'a, 'workbuf, W: IoWrite>(
+    context: ContextIter,
+    _baton: DdbBaton<'a, 'workbuf, W>,
+) -> Option<EndAction<DdbBaton<'a, 'workbuf, W>>> {
+    // Objects are transparent - except for the root object (#top)
+    let mut ctx = context;
+    if let Some(key) = ctx.next() {
+        if key == b"#top" {
+            return Some(on_root_object_end);
+        }
+    }
+    None
+}
+
+/// Handle end-actions for keys - this is where all end-action logic resides
+fn find_end_action_key<'a, 'workbuf, W: IoWrite>(
+    context: ContextIter,
+    baton: DdbBaton<'a, 'workbuf, W>,
+) -> Option<EndAction<DdbBaton<'a, 'workbuf, W>>> {
+    let mut ctx = context.clone();
+    let key = ctx.next()?;
+
+    match key {
+        b"L" => {
+            // Only call on_list_end if this is actually an L array type descriptor
+            // Check if the parent suggests this is a field name inside M
+            if let Some(parent) = ctx.next() {
+                if parent == b"M" {
+                    // "L" is a field name inside M object, not an L array
+                    Some(on_type_key_end)
+                } else {
+                    // "L" is an L array type descriptor
+                    Some(on_list_end)
+                }
+            } else {
+                Some(on_list_end)
+            }
+        }
+        b"SS" | b"NS" | b"BS" => {
+            // Check if this is a set type descriptor or a field name
+            if let Some(parent) = ctx.next() {
+                if parent == b"M" {
+                    // Field name inside M object
+                    Some(on_type_key_end)
+                } else {
+                    // Set type descriptor
+                    Some(on_set_end)
+                }
+            } else {
+                Some(on_set_end)
+            }
+        }
+        b"M" => {
+            // Could be M object value or type descriptor
+            let m_depth = baton.borrow().m_depth;
+            if m_depth > 0 && ending_m_object_from_context(context) {
+                Some(on_map_end)
+            } else {
+                None
+            }
+        }
+        b"Item" => {
+            // Check if this is the Item wrapper (parent is #top) or a field named "Item"
+            if let Some(parent) = ctx.next() {
+                if parent == b"#top" {
+                    Some(on_item_end)
+                } else {
+                    // Field named "Item" - type descriptor ending
+                    Some(on_type_key_end)
+                }
+            } else {
+                None
+            }
+        }
+        b"#top" => Some(on_root_object_end),
+        _ => {
+            // Any other key - this is a type descriptor object ending
+            // Literal types (S, N, BOOL, NULL, B) need phase restoration
+            Some(on_type_key_end)
+        }
+    }
+}
+
 fn find_end_action<'a, 'workbuf, W: IoWrite>(
     structural: StructuralPseudoname,
     context: ContextIter,
     baton: DdbBaton<'a, 'workbuf, W>,
 ) -> Option<EndAction<DdbBaton<'a, 'workbuf, W>>> {
-    let (phase, current_type, m_depth) = {
-        let conv = baton.borrow();
-        (conv.phase, conv.current_type, conv.m_depth)
-    };
-
-    // Match end of objects
-    if structural == StructuralPseudoname::Object {
-        match phase {
-            Phase::ExpectingTypeKey => {
-                // Ending an object while expecting type key means we're ending a type descriptor in a list
-                // Example: {"L": [{"S": "value"}]} - the } after "value" when phase is still ExpectingTypeKey
-                return Some(on_type_descriptor_end);
-            }
-            Phase::ExpectingField => {
-                // Could be: M value object, root/Item object, or type descriptor
-
-                // Check for M value ending first
-                let ending_m = m_depth > 0 && ending_m_object_from_context(context.clone());
-                if ending_m {
-                    return Some(on_map_end);
-                }
-
-                // Check if this is the Item value object or root object
-                let mut ctx = context.clone();
-                if let Some(first) = ctx.next() {
-                    if first == b"Item" {
-                        // Item value object ending
-                        return Some(on_item_end);
-                    } else if first == b"#top" {
-                        // Root object ending
-                        return Some(on_root_object_end);
-                    }
-                    // Otherwise it's a type descriptor (context is a field key) - return minimal handler
-                }
-
-                // Type descriptor - call minimal handler
-                return Some(on_type_descriptor_end);
-            }
-            Phase::ExpectingValue => {
-                // Shouldn't end an object in ExpectingValue (only arrays for SS/NS/L)
-                // Could be a type descriptor in an error case - call minimal handler
-                return Some(on_type_descriptor_end);
-            }
-        }
+    match structural {
+        StructuralPseudoname::Array => find_end_action_array(context, baton),
+        StructuralPseudoname::Object => find_end_action_object(context, baton),
+        StructuralPseudoname::None => find_end_action_key(context, baton),
+        StructuralPseudoname::Atom => None, // Atoms have no end-actions
     }
-
-    // Match end of arrays
-    if structural == StructuralPseudoname::Array {
-        // Check if we're ending an L array (context key is "L")
-        if ending_l_array_from_context(context.clone()) {
-            return Some(on_list_end);
-        }
-        // Otherwise, check for SS/NS arrays by current_type
-        match current_type {
-            Some(TypeDesc::SS) | Some(TypeDesc::NS) => {
-                // SS/NS arrays: phase is ExpectingValue while processing elements
-                if phase == Phase::ExpectingValue {
-                    return Some(on_set_end);
-                }
-            }
-            _ => {}
-        }
-    }
-
-    None
 }
 
 /// Convert DynamoDB JSON to normal JSON in a streaming, allocation-free manner.
