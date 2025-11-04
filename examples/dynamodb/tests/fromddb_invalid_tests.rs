@@ -491,8 +491,8 @@ fn test_map_type_with_array_value() {
 
     let error_message = format!("{:?}", error);
     assert!(
-        error_message.contains("object") || error_message.contains("M") || error_message.contains("Expected"),
-        "Error message should explain that M type expects an object value, got: {}",
+        error_message.contains("array") || error_message.contains("unexpected"),
+        "Error message should explain that an unexpected array was found, got: {}",
         error_message
     );
 }

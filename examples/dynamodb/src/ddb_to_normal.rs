@@ -400,18 +400,32 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: 
             "NULL type"
         ),
         b"SS" | b"BS" => {
+            // SS/BS type - write opening bracket here (parent handles it, not find_action_array)
+            conv.write(b"[");
+            conv.pending_comma = false;
             conv.current_type = Some(TypeDesc::SS);
-            conv.phase = Phase::ExpectingValue;
+            conv.phase = Phase::ExpectingValue;  // Stay in ExpectingValue, SS elements are atoms
             StreamOp::None
         }
         b"NS" => {
+            // NS type - write opening bracket here (parent handles it, not find_action_array)
+            conv.write(b"[");
+            conv.pending_comma = false;
             conv.current_type = Some(TypeDesc::NS);
-            conv.phase = Phase::ExpectingValue;
+            conv.phase = Phase::ExpectingValue;  // Stay in ExpectingValue, NS elements are atoms
             StreamOp::None
         }
         b"L" => {
+            // L type - write opening bracket here (parent handles it, not find_action_array)
+            // Write comma if in L array (nested L)
+            if conv.l_depth > 0 {
+                conv.write_comma_if_pending();
+            }
+            conv.write(b"[");
+            conv.pending_comma = false;
+            conv.l_depth += 1;  // Track L nesting
             conv.current_type = Some(TypeDesc::L);
-            conv.phase = Phase::ExpectingField;
+            conv.phase = Phase::ExpectingTypeKey;  // In L, we expect type keys (type descriptors are ignored)
             StreamOp::None
         }
         b"M" => {
@@ -440,90 +454,7 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: 
     }
 }
 
-// Type descriptor value handlers for container types (SS, NS, L, M)
-
-fn on_string_set_begin<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
-    let position = rjiter.current_index();
-    let peek = match rjiter.peek() {
-        Ok(p) => p,
-        Err(e) => {
-            baton.borrow_mut().store_rjiter_error(e, position, "peeking SS/BS (string set) type value");
-            return StreamOp::Error("Failed to peek string set value");
-        }
-    };
-    if peek != Peek::Array {
-        let mut conv = baton.borrow_mut();
-        conv.store_parse_error(
-            position,
-            "Invalid DynamoDB JSON format: SS/BS type expects an array value",
-            None,
-        );
-        return StreamOp::Error("Expected array value for SS/BS type");
-    }
-
-    let mut conv = baton.borrow_mut();
-    conv.write(b"[");
-    conv.pending_comma = false;
-    // Stay in ExpectingValue, SS elements are atoms
-    StreamOp::None
-}
-
-fn on_number_set_begin<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
-    let position = rjiter.current_index();
-    let peek = match rjiter.peek() {
-        Ok(p) => p,
-        Err(e) => {
-            baton.borrow_mut().store_rjiter_error(e, position, "peeking NS (number set) type value");
-            return StreamOp::Error("Failed to peek number set value");
-        }
-    };
-    if peek != Peek::Array {
-        let mut conv = baton.borrow_mut();
-        conv.store_parse_error(
-            position,
-            "Invalid DynamoDB JSON format: NS type expects an array value",
-            None,
-        );
-        return StreamOp::Error("Expected array value for NS type");
-    }
-
-    let mut conv = baton.borrow_mut();
-    conv.write(b"[");
-    conv.pending_comma = false;
-    // Stay in ExpectingValue, NS elements are atoms
-    StreamOp::None
-}
-
-fn on_list_begin<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
-    let position = rjiter.current_index();
-    let peek = match rjiter.peek() {
-        Ok(p) => p,
-        Err(e) => {
-            baton.borrow_mut().store_rjiter_error(e, position, "peeking L (list) type value");
-            return StreamOp::Error("Failed to peek list value");
-        }
-    };
-    if peek != Peek::Array {
-        let mut conv = baton.borrow_mut();
-        conv.store_parse_error(
-            position,
-            "Invalid DynamoDB JSON format: L type expects an array value",
-            None,
-        );
-        return StreamOp::Error("Expected array value for L type");
-    }
-
-    let mut conv = baton.borrow_mut();
-    // Write comma if in L array (nested L)
-    if conv.l_depth > 0 {
-        conv.write_comma_if_pending();
-    }
-    conv.write(b"[");
-    conv.pending_comma = false;
-    conv.l_depth += 1;  // Track L nesting
-    conv.phase = Phase::ExpectingTypeKey;  // In L, we expect type keys (type descriptors are ignored)
-    StreamOp::None
-}
+// Type descriptor value handlers for set element atoms (SS, NS)
 
 fn on_set_string_element<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
     let mut conv = baton.borrow_mut();
@@ -549,6 +480,11 @@ fn on_set_number_element<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R
     )
 }
 
+// Generic error handler that returns the stored error
+fn on_error<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, _baton: DdbBaton<'_, '_, W>) -> StreamOp {
+    StreamOp::Error("Validation error (see stored error)")
+}
+
 /// Handle Object structural pseudoname
 fn find_action_object<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
     _context: ContextIter,
@@ -556,20 +492,21 @@ fn find_action_object<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
     phase: Phase,
     current_type: Option<TypeDesc>,
 ) -> Option<Action<DdbBaton<'a, 'workbuf, W>, R>> {
-    // Validate context: check for invalid cases (sets expecting objects)
+    // Validate context: only allow objects in valid contexts
     match phase {
         Phase::ExpectingValue => {
-            // Only SS, NS, BS use ExpectingValue
-            // SS, NS, BS expect arrays, not objects
+            // In ExpectingValue, only M type expects objects; all others (SS, NS, L) expect arrays
+            // If we're here with an object, it's invalid
             let mut conv = baton.borrow_mut();
             conv.store_parse_error(
                 0,
-                "Invalid DynamoDB JSON format: Set types (SS/NS/BS) expect array values, not objects",
+                "Invalid DynamoDB JSON format: unexpected object value",
                 None,
             );
+            Some(on_error)
         }
-        Phase::ExpectingField => {
-            // L type expects array, not object
+        Phase::ExpectingTypeKey => {
+            // Check if L type is expecting an array but got an object
             if current_type == Some(TypeDesc::L) {
                 let mut conv = baton.borrow_mut();
                 conv.store_parse_error(
@@ -577,14 +514,16 @@ fn find_action_object<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
                     "Invalid DynamoDB JSON format: L type expects an array value, not an object",
                     None,
                 );
+                return Some(on_error);
             }
+            // Type descriptor objects are allowed in other contexts
+            None
         }
-        Phase::ExpectingTypeKey => {
-            // Type descriptor objects are allowed
+        Phase::ExpectingField => {
+            // M type context - objects (nested M values) are allowed
+            None
         }
     }
-
-    None
 }
 
 fn find_action_key<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
@@ -635,29 +574,33 @@ fn find_action_key<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
 /// Handle Array structural pseudoname
 fn find_action_array<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
     _context: ContextIter,
-    _baton: DdbBaton<'a, 'workbuf, W>,
-    phase: Phase,
+    baton: DdbBaton<'a, 'workbuf, W>,
+    _phase: Phase,
     current_type: Option<TypeDesc>,
 ) -> Option<Action<DdbBaton<'a, 'workbuf, W>, R>> {
-    if phase == Phase::ExpectingValue {
-        match current_type {
-            Some(TypeDesc::SS) => return Some(on_string_set_begin),
-            Some(TypeDesc::NS) => return Some(on_number_set_begin),
-            Some(TypeDesc::M) => return Some(on_invalid_type_value_not_object),
-            _ => {}
+    // Validate context: only allow arrays for SS, NS, L types
+    match current_type {
+        Some(TypeDesc::SS) | Some(TypeDesc::NS) => {
+            // Valid: these types expect arrays
+            None
         }
-    } else if phase == Phase::ExpectingField {
-        match current_type {
-            Some(TypeDesc::L) => return Some(on_list_begin),
-            Some(TypeDesc::M) => {
-                // M type expects object, not array
-                return Some(on_invalid_type_value_not_object);
-            }
-            _ => {}
+        Some(TypeDesc::L) => {
+            // Valid: L expects array. Clear current_type so elements inside don't inherit it
+            let mut conv = baton.borrow_mut();
+            conv.current_type = None;
+            None
+        }
+        _ => {
+            // All other cases: arrays are not valid
+            let mut conv = baton.borrow_mut();
+            conv.store_parse_error(
+                0,
+                "Invalid DynamoDB JSON format: unexpected array value",
+                None,
+            );
+            Some(on_error)
         }
     }
-
-    None
 }
 
 /// Handle Atom structural pseudoname
@@ -713,16 +656,6 @@ fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
         StructuralPseudoname::Array => find_action_array(context, baton, phase, current_type),
         StructuralPseudoname::Atom => find_action_atom(context, baton, phase, current_type),
     }
-}
-
-fn on_invalid_type_value_not_object<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
-    let mut conv = baton.borrow_mut();
-    conv.store_parse_error(
-        0,
-        "Invalid DynamoDB JSON format: M type expects an object value",
-        Some(b"M"),
-    );
-    StreamOp::Error("Expected object value for M type")
 }
 
 fn on_unexpected_atom<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
