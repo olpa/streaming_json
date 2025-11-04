@@ -122,7 +122,7 @@ pub struct DdbConverter<'a, 'workbuf, W: IoWrite> {
     writer: &'a mut W,
     pending_comma: bool,
     pretty: bool,
-    depth: usize,
+    depth: usize, // JSON output nesting depth (for pretty-printing indentation and root level detection)
     current_field: Option<&'workbuf [u8]>,
     has_item_wrapper: Option<bool>, // None = unknown, Some(true) = has Item, Some(false) = no Item
     item_wrapper_mode: ItemWrapperMode, // How to handle "Item" key at top level
