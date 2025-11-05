@@ -221,6 +221,16 @@ fn on_item_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static st
     Ok(())
 }
 
+/// Handle root object beginning - write opening brace
+fn on_root_object_begin<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
+    let mut conv = baton.borrow_mut();
+    conv.write(b"{");
+    conv.newline();
+    conv.depth = 1;
+    conv.has_item_wrapper = Some(false);
+    StreamOp::None
+}
+
 /// Handle a field key - write the field name and prepare for type descriptor
 fn on_field_key<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
     let field_name = {
@@ -229,14 +239,6 @@ fn on_field_key<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton
     };
 
     let mut conv = baton.borrow_mut();
-
-    // If we haven't seen Item wrapper yet AND we're at root level, this is the first field (no Item wrapper)
-    if conv.has_item_wrapper.is_none() && conv.depth == 0 {
-        conv.write(b"{");
-        conv.newline();
-        conv.depth = 1;
-        conv.has_item_wrapper = Some(false);
-    }
 
     conv.write_comma_if_pending();
     conv.indent();
@@ -457,11 +459,19 @@ fn on_error<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, _baton: D
 
 /// Handle Object structural pseudoname
 fn find_action_object<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
-    _context: ContextIter,
+    context: ContextIter,
     baton: DdbBaton<'a, 'workbuf, W>,
     phase: Phase,
     current_type: Option<TypeDesc>,
 ) -> Option<Action<DdbBaton<'a, 'workbuf, W>, R>> {
+    // Check if this is the root object (#top in context)
+    let mut ctx = context.clone();
+    if let Some(key) = ctx.next() {
+        if key == b"#top" {
+            return Some(on_root_object_begin);
+        }
+    }
+
     // Validate context: only allow objects in valid contexts
     match phase {
         Phase::ExpectingValue => {
@@ -706,21 +716,11 @@ fn on_root_object_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'st
     Ok(())
 }
 
-/// Handle end of Array structural pseudoname - arrays have no end-actions
-fn find_end_action_array<'a, 'workbuf, W: IoWrite>(
-    _context: ContextIter,
-    _baton: DdbBaton<'a, 'workbuf, W>,
-) -> Option<EndAction<DdbBaton<'a, 'workbuf, W>>> {
-    // Arrays are transparent - all logic is in the key handler
-    None
-}
-
-/// Handle end of Object structural pseudoname - objects have no end-actions
+/// Handle Object structural pseudoname for end actions
 fn find_end_action_object<'a, 'workbuf, W: IoWrite>(
     context: ContextIter,
     _baton: DdbBaton<'a, 'workbuf, W>,
 ) -> Option<EndAction<DdbBaton<'a, 'workbuf, W>>> {
-    // Objects are transparent - except for the root object (#top)
     let mut ctx = context;
     if let Some(key) = ctx.next() {
         if key == b"#top" {
@@ -781,16 +781,22 @@ fn find_end_action_key<'a, 'workbuf, W: IoWrite>(
             // Check if this is the Item wrapper (parent is #top) or a field named "Item"
             if let Some(parent) = ctx.next() {
                 if parent == b"#top" {
-                    Some(on_item_end)
+                    // At top level - check item_wrapper_mode
+                    let mode = baton.borrow().item_wrapper_mode;
+                    if mode == ItemWrapperMode::AsWrapper {
+                        None  // Transparent - Item wrapper has no end action
+                    } else {
+                        // AsField mode - treat as a regular field
+                        Some(on_type_key_end)
+                    }
                 } else {
-                    // Field named "Item" - type descriptor ending
+                    // Field named "Item" inside M - type descriptor ending
                     Some(on_type_key_end)
                 }
             } else {
                 None
             }
         }
-        b"#top" => Some(on_root_object_end),
         _ => {
             // Any other key - this is a type descriptor object ending
             // Literal types (S, N, BOOL, NULL, B) need phase restoration
@@ -805,10 +811,10 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
     baton: DdbBaton<'a, 'workbuf, W>,
 ) -> Option<EndAction<DdbBaton<'a, 'workbuf, W>>> {
     match structural {
-        StructuralPseudoname::Array => find_end_action_array(context, baton),
+        StructuralPseudoname::Array => None,
         StructuralPseudoname::Object => find_end_action_object(context, baton),
         StructuralPseudoname::None => find_end_action_key(context, baton),
-        StructuralPseudoname::Atom => None, // Atoms have no end-actions
+        StructuralPseudoname::Atom => None,
     }
 }
 
