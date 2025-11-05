@@ -114,7 +114,6 @@ pub struct DdbConverter<'a, 'workbuf, W: IoWrite> {
     pretty: bool,
     depth: usize, // JSON output nesting depth (for pretty-printing indentation and root level detection)
     current_field: Option<&'workbuf [u8]>,
-    has_item_wrapper: Option<bool>, // None = unknown, Some(true) = has Item, Some(false) = no Item
     item_wrapper_mode: ItemWrapperMode, // How to handle "Item" key at top level
     last_error: Option<ConversionError>, // Stores detailed error information
     item_end_called: bool, // Track if on_item_end has been called to prevent duplicate calls
@@ -133,7 +132,6 @@ impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
             pretty,
             depth: 0,
             current_field: None,
-            has_item_wrapper: None,
             item_wrapper_mode,
             last_error: None,
             item_end_called: false,
@@ -227,7 +225,6 @@ fn on_root_object_begin<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R
     conv.write(b"{");
     conv.newline();
     conv.depth = 1;
-    conv.has_item_wrapper = Some(false);
     StreamOp::None
 }
 
@@ -459,17 +456,14 @@ fn on_error<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, _baton: D
 
 /// Handle Object structural pseudoname
 fn find_action_object<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
-    context: ContextIter,
+    _context: ContextIter,
     baton: DdbBaton<'a, 'workbuf, W>,
     phase: Phase,
     current_type: Option<TypeDesc>,
 ) -> Option<Action<DdbBaton<'a, 'workbuf, W>, R>> {
-    // Check if this is the root object (#top in context)
-    let mut ctx = context.clone();
-    if let Some(key) = ctx.next() {
-        if key == b"#top" {
-            return Some(on_root_object_begin);
-        }
+    // Check if this is the root object (depth == 0)
+    if baton.borrow().depth == 0 {
+        return Some(on_root_object_begin);
     }
 
     // Validate context: only allow objects in valid contexts
@@ -703,16 +697,12 @@ fn on_type_key_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'stati
 
 fn on_root_object_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     let conv = baton.borrow();
-    // If there was no Item wrapper, the root object IS the record, so close it
-    if conv.has_item_wrapper == Some(false) {
-        drop(conv);
-        on_item_end(baton)?;
-    } else if conv.has_item_wrapper.is_none() && conv.depth == 0 {
-        // Edge case: no Item wrapper was set and depth is 0 (empty or malformed input)
+    // If we opened a root object (depth > 0), close it
+    // Both Item wrapper and no-Item cases write the same braces
+    if conv.depth > 0 {
         drop(conv);
         on_item_end(baton)?;
     }
-    // If there was an Item wrapper (Some(true)), the root object just wraps "Item", nothing to write
     Ok(())
 }
 
@@ -721,6 +711,7 @@ fn find_end_action_object<'a, 'workbuf, W: IoWrite>(
     context: ContextIter,
     _baton: DdbBaton<'a, 'workbuf, W>,
 ) -> Option<EndAction<DdbBaton<'a, 'workbuf, W>>> {
+    // Check if this is the root object ending (#top in context)
     let mut ctx = context;
     if let Some(key) = ctx.next() {
         if key == b"#top" {
