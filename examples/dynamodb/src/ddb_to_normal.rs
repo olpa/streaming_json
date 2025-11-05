@@ -116,7 +116,6 @@ pub struct DdbConverter<'a, 'workbuf, W: IoWrite> {
     current_field: Option<&'workbuf [u8]>,
     item_wrapper_mode: ItemWrapperMode, // How to handle "Item" key at top level
     last_error: Option<ConversionError>, // Stores detailed error information
-    item_end_called: bool, // Track if on_item_end has been called to prevent duplicate calls
 
     phase: Phase,
     current_type: Option<TypeDesc>,
@@ -134,7 +133,6 @@ impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
             current_field: None,
             item_wrapper_mode,
             last_error: None,
-            item_end_called: false,
             phase: Phase::ExpectingField,
             current_type: None,
             m_depth: 0,
@@ -208,11 +206,6 @@ type DdbBaton<'a, 'workbuf, W> = &'a RefCell<DdbConverter<'a, 'workbuf, W>>;
 /// Handle the end of Item object - write closing brace and newline for JSONL
 fn on_item_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     let mut conv = baton.borrow_mut();
-    // Prevent duplicate calls
-    if conv.item_end_called {
-        return Ok(());
-    }
-    conv.item_end_called = true;
     conv.newline();
     conv.write(b"}");
     conv.write(b"\n");
