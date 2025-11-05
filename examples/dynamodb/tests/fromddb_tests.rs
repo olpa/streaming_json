@@ -5,6 +5,11 @@ fn convert_test(ddb_json: &str) -> String {
 
 /// Helper function to convert DDB JSON to normal JSON with optional pretty printing
 fn convert_test_with_pretty(ddb_json: &str, pretty: bool) -> String {
+    convert_test_with_mode(ddb_json, pretty, ddb_convert::ItemWrapperMode::AsWrapper)
+}
+
+/// Helper function to convert DDB JSON to normal JSON with custom ItemWrapperMode
+fn convert_test_with_mode(ddb_json: &str, pretty: bool, mode: ddb_convert::ItemWrapperMode) -> String {
     let mut reader = ddb_json.as_bytes();
     let mut output = vec![0u8; 4096];
     let mut output_slice = output.as_mut_slice();
@@ -17,7 +22,7 @@ fn convert_test_with_pretty(ddb_json: &str, pretty: bool) -> String {
         &mut rjiter_buffer,
         &mut context_buffer,
         pretty,
-        ddb_convert::ItemWrapperMode::AsWrapper,
+        mode,
     ).unwrap();
 
     let bytes_written = 4096 - output_slice.len();
@@ -454,4 +459,14 @@ fn test_error_incomplete_json() {
             "Error message should not contain debug format: {}", err_msg);
     assert!(!err_msg.contains("error_type:"),
             "Error message should not contain debug format: {}", err_msg);
+}
+
+// Test for Item field with AsField mode (Item is a regular field, not a wrapper)
+#[test]
+fn test_item_as_field() {
+    let ddb_json = r#"{"Item":{"S":"test value"},"other":{"N":"42"}}"#;
+    let result = convert_test_with_mode(ddb_json, false, ddb_convert::ItemWrapperMode::AsField);
+    let expected = r#"{"Item":"test value","other":42}
+"#;
+    assert_eq!(result, expected);
 }
