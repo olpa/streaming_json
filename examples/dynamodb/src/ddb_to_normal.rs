@@ -660,7 +660,17 @@ fn find_end_action_object<'a, 'workbuf, W: IoWrite>(
         return Some(on_type_key_end);
     }
 
-    // M objects are handled by find_end_action_key (when key "M" ends with Phase::ExpectingField)
+    // Check if this is an M content object ending
+    // M content objects end with phase=ExpectingField and key="M" in context
+    if phase == Phase::ExpectingField {
+        let mut ctx = context.clone();
+        if let Some(key) = ctx.next() {
+            if key == b"M" {
+                return Some(on_map_end);
+            }
+        }
+    }
+
     // Other objects need no end action
     None
 }
@@ -687,18 +697,40 @@ fn find_end_action_key<'a, 'workbuf, W: IoWrite>(
 
     match key {
         b"M" => {
-            if phase == Phase::ExpectingField {
-                // M type descriptor - M value object already closed
-                Some(on_map_end)
-            } else {
-                // Phase::ExpectingTypeKey - field named "M", transition to TypeKeyConsumed
+            // M objects are now handled by find_end_action_object
+            // Here we only handle the TypeKeyConsumed transition for M type keys
+            if phase == Phase::ExpectingTypeKey {
                 Some(on_transition_to_type_key_consumed)
+            } else {
+                // Field name or type key that already handled M content closing
+                None
             }
         }
         b"L" | b"SS" | b"NS" | b"BS" => {
-            // These are handled by Array structural end actions
-            // Keys only handle when these are field names - transition to TypeKeyConsumed
-            Some(on_transition_to_type_key_consumed)
+            // These types have array values handled by Array structural end actions
+            // Distinguish between type keys and field names using parent context:
+            // - Type keys have regular field names as parents
+            // - Field names have type keys or structural markers as parents
+            let mut ctx = context.clone();
+            ctx.next(); // Skip current key
+            if let Some(parent) = ctx.next() {
+                // Check if parent is a type descriptor or structural marker
+                let is_type_or_marker = parent == b"#top" || parent == b"#array"
+                    || parent == b"M" || parent == b"L"
+                    || parent == b"SS" || parent == b"NS" || parent == b"BS"
+                    || parent == b"S" || parent == b"N" || parent == b"B"
+                    || parent == b"BOOL" || parent == b"NULL";
+
+                if is_type_or_marker {
+                    // This is a field name
+                    None
+                } else {
+                    // Parent is a regular field name, so this is a type key
+                    Some(on_transition_to_type_key_consumed)
+                }
+            } else {
+                None
+            }
         }
         b"Item" => {
             // Check if this is the Item wrapper (parent is #top) or a field named "Item"

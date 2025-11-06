@@ -373,8 +373,7 @@ fn test_field_named_item_inside_m() {
 fn test_nested_m_fields() {
     let ddb_json = r#"{"Item":{"a": {"M": {"M": {"M": {"b": {"S": "c"}}}}}}}"#;
     let result = convert_test(ddb_json);
-    let expected = r#"{"a":{"M":{"b":"c"}}}
-"#;
+    let expected = r#"{"a":{"M":{"b":"c"}}}"#;
     assert_eq!(result, expected);
 }
 
