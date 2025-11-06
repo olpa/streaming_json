@@ -14,6 +14,7 @@ enum Phase {
     ExpectingField,        // Expecting a field key
     ExpectingTypeKey,      // Expecting type key (after field key, or in L array)
     ExpectingValue,        // After type key, expecting the value (only for sets: SS, NS, BS)
+    TypeKeyConsumed,       // Type key ended, waiting for type descriptor object to end
 }
 
 /// How to handle "Item" key at top level
@@ -28,84 +29,6 @@ pub enum ItemWrapperMode {
 enum TypeDesc {
     SS, NS,  // Sets
     L, M,    // Nested containers
-}
-
-/// Check if we're ending an M object (context is at the object level, not inside it)
-/// Need to distinguish from a field named "M" whose type descriptor is ending
-fn ending_m_object_from_context(context: ContextIter) -> bool {
-    let mut ctx = context.clone();
-    // First item in context should be the key of the object
-    if let Some(key) = ctx.next() {
-        if key == b"M" {
-            // Check parent - if parent is #array (L array), "M" is a type key
-            // If parent is also a type key, then "M" is a field name, not ending M object
-            if let Some(parent) = ctx.next() {
-                match parent {
-                    b"#array" => {
-                        // In an array, check if it's an L array
-                        if let Some(array_parent) = ctx.next() {
-                            return array_parent == b"L";
-                        }
-                        return false;
-                    }
-                    // If parent is any type key, this "M" is a field name inside that type's value
-                    b"S" | b"N" | b"BOOL" | b"NULL" | b"SS" | b"NS" | b"BS" | b"L" => {
-                        // Parent is a type key, so this "M" is a field name
-                        return false;
-                    }
-                    b"M" => {
-                        // Parent is "M" - could be a type key OR a field name
-                        // Need to check grandparent and possibly great-grandparent
-                        if let Some(grandparent) = ctx.next() {
-                            match grandparent {
-                                b"M" => {
-                                    // Grandparent is also "M" - deeply nested M case
-                                    // Check great-grandparent to determine the pattern
-                                    if let Some(great_gp) = ctx.next() {
-                                        match great_gp {
-                                            // If great-grandparent IS a type key or marker, then:
-                                            // parent "M" is a field name inside another M's type descriptor
-                                            b"S" | b"N" | b"BOOL" | b"NULL" | b"SS" | b"NS" | b"BS" | b"L" | b"M" | b"#array" | b"#top" => {
-                                                return false;
-                                            }
-                                            // great-grandparent is a field name, so:
-                                            // grandparent="M" is type key, parent="M" is field, current="M" is type
-                                            _ => {
-                                                return true;
-                                            }
-                                        }
-                                    }
-                                    // No great-grandparent, conservatively assume we're closing a type descriptor
-                                    return false;
-                                }
-                                // If grandparent is any other type key or special marker
-                                b"S" | b"N" | b"BOOL" | b"NULL" | b"SS" | b"NS" | b"BS" | b"L" | b"#array" | b"#top" => {
-                                    // Parent "M" is a field name, current "M" is a type key
-                                    return true;
-                                }
-                                // Otherwise grandparent is a regular field name
-                                _ => {
-                                    // Parent "M" is the type key for grandparent field
-                                    // Current "M" is a field name inside that M value
-                                    return false;
-                                }
-                            }
-                        }
-                        // No grandparent, assume parent "M" is a type key
-                        return false;
-                    }
-                    // For any other parent (regular field name), "M" is a type key
-                    _ => {
-                        return true;
-                    }
-                }
-            } else {
-                // No parent, so "M" is a type key
-                return true;
-            }
-        }
-    }
-    false
 }
 
 pub struct DdbConverter<'a, 'workbuf, W: IoWrite> {
@@ -490,6 +413,16 @@ fn find_action_object<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
             // M type context - objects (nested M values) are allowed
             None
         }
+        Phase::TypeKeyConsumed => {
+            // Error: we're waiting for a type descriptor object to end, shouldn't begin a new object
+            let mut conv = baton.borrow_mut();
+            conv.store_parse_error(
+                0,
+                "Invalid DynamoDB JSON format: unexpected nested object in type descriptor",
+                None,
+            );
+            Some(on_error)
+        }
     }
 }
 
@@ -610,6 +543,14 @@ fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
         (conv.phase, conv.current_type)
     };
 
+    #[cfg(feature = "std")]
+    {
+        let mut ctx = context.clone();
+        let key = ctx.next();
+        std::eprintln!("DEBUG BEGIN: structural={:?}, key={:?}, phase={:?}, current_type={:?}",
+            structural, key.map(|k| std::str::from_utf8(k).unwrap_or("???")), phase, current_type);
+    }
+
     // Match on structural type and delegate to appropriate handler
     match structural {
         StructuralPseudoname::Object => find_action_object(context, baton, phase, current_type),
@@ -702,64 +643,62 @@ fn on_root_object_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'st
 /// Handle Object structural pseudoname for end actions
 fn find_end_action_object<'a, 'workbuf, W: IoWrite>(
     context: ContextIter,
-    _baton: DdbBaton<'a, 'workbuf, W>,
+    baton: DdbBaton<'a, 'workbuf, W>,
+    phase: Phase,
 ) -> Option<EndAction<DdbBaton<'a, 'workbuf, W>>> {
     // Check if this is the root object ending (#top in context)
-    let mut ctx = context;
+    let mut ctx = context.clone();
     if let Some(key) = ctx.next() {
         if key == b"#top" {
             return Some(on_root_object_end);
         }
     }
+
+    // Check if type descriptor object is ending (Phase::TypeKeyConsumed)
+    if phase == Phase::TypeKeyConsumed {
+        // Type descriptor object ending - restore phase
+        return Some(on_type_key_end);
+    }
+
+    // M objects are handled by find_end_action_key (when key "M" ends with Phase::ExpectingField)
+    // Other objects need no end action
     None
+}
+
+/// Transition to TypeKeyConsumed phase
+fn on_transition_to_type_key_consumed<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
+    let mut conv = baton.borrow_mut();
+    conv.phase = Phase::TypeKeyConsumed;
+    Ok(())
 }
 
 /// Handle end-actions for keys - this is where all end-action logic resides
 fn find_end_action_key<'a, 'workbuf, W: IoWrite>(
     context: ContextIter,
     baton: DdbBaton<'a, 'workbuf, W>,
+    phase: Phase,
 ) -> Option<EndAction<DdbBaton<'a, 'workbuf, W>>> {
     let mut ctx = context.clone();
     let key = ctx.next()?;
 
+    // Use Phase to distinguish key types:
+    // - Literal type keys (S, N, BOOL, NULL, B) end with Phase::ExpectingTypeKey → transition to TypeKeyConsumed
+    // - Container type keys (M, L, SS, NS, BS) end with Phase::ExpectingField → call end action now
+
     match key {
-        b"L" => {
-            // Only call on_list_end if this is actually an L array type descriptor
-            // Check if the parent suggests this is a field name inside M
-            if let Some(parent) = ctx.next() {
-                if parent == b"M" {
-                    // "L" is a field name inside M object, not an L array
-                    Some(on_type_key_end)
-                } else {
-                    // "L" is an L array type descriptor
-                    Some(on_list_end)
-                }
-            } else {
-                Some(on_list_end)
-            }
-        }
-        b"SS" | b"NS" | b"BS" => {
-            // Check if this is a set type descriptor or a field name
-            if let Some(parent) = ctx.next() {
-                if parent == b"M" {
-                    // Field name inside M object
-                    Some(on_type_key_end)
-                } else {
-                    // Set type descriptor
-                    Some(on_set_end)
-                }
-            } else {
-                Some(on_set_end)
-            }
-        }
         b"M" => {
-            // Could be M object value or type descriptor
-            let m_depth = baton.borrow().m_depth;
-            if m_depth > 0 && ending_m_object_from_context(context) {
+            if phase == Phase::ExpectingField {
+                // M type descriptor - M value object already closed
                 Some(on_map_end)
             } else {
-                None
+                // Phase::ExpectingTypeKey - field named "M", transition to TypeKeyConsumed
+                Some(on_transition_to_type_key_consumed)
             }
+        }
+        b"L" | b"SS" | b"NS" | b"BS" => {
+            // These are handled by Array structural end actions
+            // Keys only handle when these are field names - transition to TypeKeyConsumed
+            Some(on_transition_to_type_key_consumed)
         }
         b"Item" => {
             // Check if this is the Item wrapper (parent is #top) or a field named "Item"
@@ -770,21 +709,34 @@ fn find_end_action_key<'a, 'workbuf, W: IoWrite>(
                     if mode == ItemWrapperMode::AsWrapper {
                         None  // Transparent - Item wrapper has no end action
                     } else {
-                        // AsField mode - treat as a regular field
-                        Some(on_type_key_end)
+                        // AsField mode - distinguish type key from field name using phase
+                        if phase == Phase::ExpectingTypeKey {
+                            Some(on_transition_to_type_key_consumed)
+                        } else {
+                            None
+                        }
                     }
                 } else {
-                    // Field named "Item" inside M - type descriptor ending
-                    Some(on_type_key_end)
+                    // Field named "Item" inside M - distinguish type key from field name
+                    if phase == Phase::ExpectingTypeKey {
+                        Some(on_transition_to_type_key_consumed)
+                    } else {
+                        None
+                    }
                 }
             } else {
                 None
             }
         }
         _ => {
-            // Any other key - this is a type descriptor object ending
-            // Literal types (S, N, BOOL, NULL, B) need phase restoration
-            Some(on_type_key_end)
+            // Distinguish between type keys and field names using phase
+            if phase == Phase::ExpectingTypeKey {
+                // Literal type key ending (S, N, BOOL, NULL, B) - transition to TypeKeyConsumed
+                Some(on_transition_to_type_key_consumed)
+            } else {
+                // Field name ending - no action needed, phase stays as-is
+                None
+            }
         }
     }
 }
@@ -794,10 +746,34 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
     context: ContextIter,
     baton: DdbBaton<'a, 'workbuf, W>,
 ) -> Option<EndAction<DdbBaton<'a, 'workbuf, W>>> {
+    let (phase, current_type, l_depth) = {
+        let conv = baton.borrow();
+        (conv.phase, conv.current_type, conv.l_depth)
+    };
+
+    #[cfg(feature = "std")]
+    {
+        let mut ctx = context.clone();
+        let key = ctx.next();
+        std::eprintln!("DEBUG END: structural={:?}, key={:?}, phase={:?}, current_type={:?}",
+            structural, key.map(|k| std::str::from_utf8(k).unwrap_or("???")), phase, current_type);
+    }
+
     match structural {
-        StructuralPseudoname::Array => None,
-        StructuralPseudoname::Object => find_end_action_object(context, baton),
-        StructuralPseudoname::None => find_end_action_key(context, baton),
+        StructuralPseudoname::Array => {
+            // Check if we're ending an L array or a set (SS, NS, BS)
+            // L arrays use l_depth since current_type is cleared for L
+            // Sets use current_type since they maintain it
+            if l_depth > 0 {
+                Some(on_list_end)
+            } else if current_type == Some(TypeDesc::SS) || current_type == Some(TypeDesc::NS) {
+                Some(on_set_end)
+            } else {
+                None
+            }
+        }
+        StructuralPseudoname::Object => find_end_action_object(context, baton, phase),
+        StructuralPseudoname::None => find_end_action_key(context, baton, phase),
         StructuralPseudoname::Atom => None,
     }
 }
