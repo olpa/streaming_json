@@ -122,6 +122,59 @@ impl<'buf, R: Read> Buffer<'buf, R> {
         }
         Ok(())
     }
+
+    /// Collect bytes while a predicate is true, starting at the given position.
+    /// Read-shift-read-shift-read-shift... until predicate returns false or EOF is reached.
+    /// Returns the offset of the first rejected byte, or the offset at EOF.
+    ///
+    /// # Arguments
+    ///
+    /// * `pos` - The position in the buffer to start collecting from
+    /// * `predicate` - A function that returns true if the byte should be accepted
+    ///
+    /// # Errors
+    ///
+    /// Returns `ErrorType::BufferFull` if the buffer fills up with all accepted bytes.
+    /// Also returns errors from the underlying reader.
+    pub fn collect_while<F>(&mut self, pos: usize, predicate: F) -> RJiterResult<usize>
+    where
+        F: Fn(&u8) -> bool,
+    {
+        let mut i = pos;
+        loop {
+            // `i >= 0` (`usize`), `self.n_bytes <= buf.len()` (contract)
+            #[allow(clippy::indexing_slicing)]
+            while i < self.n_bytes && predicate(&self.buf[i]) {
+                i += 1;
+            }
+
+            if i < self.n_bytes {
+                // Found rejected byte
+                if i > pos {
+                    self.shift_buffer(pos, i);
+                }
+                return Ok(pos);
+            }
+
+            // Reached end of buffer, shift and read more
+            self.shift_buffer(pos, self.n_bytes);
+            let n_new = self.read_more()?;
+            if n_new == 0 {
+                // EOF reached
+                return Ok(pos);
+            }
+
+            // Check if buffer is full after reading
+            if self.n_bytes >= self.buf.len() {
+                // Buffer is full and all bytes were accepted - error!
+                return Err(Error {
+                    error_type: ErrorType::BufferFull,
+                    index: self.n_shifted_out + pos,
+                });
+            }
+            i = pos;
+        }
+    }
 }
 
 impl<R: Read> core::fmt::Debug for Buffer<'_, R> {

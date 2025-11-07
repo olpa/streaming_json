@@ -27,6 +27,8 @@ pub enum ErrorType {
         /// The kind of I/O error that occurred.
         kind: embedded_io::ErrorKind,
     },
+    /// Buffer is full and cannot accept more data.
+    BufferFull,
 }
 
 #[cfg(any(feature = "std", feature = "display"))]
@@ -38,6 +40,7 @@ impl core::fmt::Display for ErrorType {
                 write!(f, "expected {} but found {}", expected, actual)
             }
             ErrorType::IoError { kind } => write!(f, "I/O operation failed: {:?}", kind),
+            ErrorType::BufferFull => write!(f, "buffer is full"),
         }
     }
 }
