@@ -416,19 +416,18 @@ fn test_collect_while_buffer_full_error() {
 }
 
 #[test]
-fn test_collect_while_buffer_full_error_from_pos1() {
-    let input = "xaaaaaaaaa"; // 'x' + 9 'a's (all acceptable)
+fn test_collect_while_rejection_after_read() {
+    let input = "aaaaaaa123"; // 7 'a's + "123"
     let mut reader = input.as_bytes();
     let mut buf = [0u8; 4]; // Small buffer
     let mut buffer = Buffer::new(&mut reader, &mut buf);
 
-    // Try to collect all 'a's from position 1 - should fail even after shifting
-    let result = buffer.collect_while(|b| b.is_ascii_alphabetic(), 1, true, 1);
+    // Collect 'a's - needs to read multiple times before finding '1'
+    let offset = buffer.collect_while(|b| b == b'a', 0, true, 0).unwrap();
 
-    assert!(result.is_err());
-    if let Err(e) = result {
-        assert!(matches!(e.error_type, rjiter::error::ErrorType::BufferFull));
-    }
+    assert_eq!(offset, 0); // After shift, '1' is at position 0
+    assert_eq!(&buffer.buf[..buffer.n_bytes], b"123");
+    assert_eq!(buffer.n_shifted_out, 7);
 }
 
 #[test]
@@ -462,18 +461,19 @@ fn test_collect_while_empty_buffer() {
 }
 
 #[test]
-fn test_collect_while_multiple_reads() {
-    let input = "aaaaaaa123"; // 7 'a's + "123"
+fn test_collect_while_rejection_in_full_buffer() {
+    let input = "aaa1"; // 3 'a's + "1"
     let mut reader = input.as_bytes();
-    let mut buf = [0u8; 3]; // Very small buffer
+    let mut buf = [0u8; 4]; // Exactly fits all data
     let mut buffer = Buffer::new(&mut reader, &mut buf);
+    buffer.read_more().unwrap();
 
-    // Collect all 'a's (will shift once when buffer fills)
+    // Buffer is full (4 bytes), but finds rejection without needing to shift
     let offset = buffer.collect_while(|b| b == b'a', 0, true, 0).unwrap();
 
-    assert_eq!(offset, 0);
-    assert_eq!(&buffer.buf[..buffer.n_bytes], b"123");
-    assert_eq!(buffer.n_shifted_out, 7);
+    assert_eq!(offset, 3); // Stops at '1'
+    assert_eq!(&buffer.buf[..3], b"aaa");
+    assert_eq!(buffer.n_shifted_out, 0); // No shift needed
 }
 
 #[test]
@@ -507,4 +507,19 @@ fn test_collect_while_no_shift_allowed() {
     if let Err(e) = result {
         assert!(matches!(e.error_type, rjiter::error::ErrorType::BufferFull));
     }
+}
+
+#[test]
+fn test_collect_while_rejection_after_multiple_reads() {
+    let input = "aaa1"; // 3 'a's + "1"
+    let mut reader = input.as_bytes();
+    let mut buf = [0u8; 2]; // Very small buffer
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+
+    // Needs to read multiple times, then finds rejection
+    let offset = buffer.collect_while(|b| b == b'a', 0, true, 0).unwrap();
+
+    assert_eq!(offset, 0); // After shifting
+    assert_eq!(&buffer.buf[..buffer.n_bytes], b"1");
+    assert_eq!(buffer.n_shifted_out, 3);
 }
