@@ -144,6 +144,7 @@ impl<'buf, R: Read> Buffer<'buf, R> {
         F: Fn(u8) -> bool,
     {
         let mut i = start_pos;
+        let mut shifted = false;
 
         loop {
             // Check bytes while predicate is true
@@ -157,26 +158,28 @@ impl<'buf, R: Read> Buffer<'buf, R> {
                 return Ok(i);
             }
 
-            // Reached end of buffer, try to read more
-            let n_new = self.read_more()?;
-            if n_new == 0 {
-                // EOF reached, all bytes were accepted
-                return Ok(self.n_bytes);
-            }
-
-            // Check if buffer is full after reading
+            // Reached end of buffer, need more data
+            // Check if buffer is full and we need to shift before reading
             if self.n_bytes >= self.buf.len() {
-                // Buffer is full
-                if !allow_shift {
-                    // Shifting not allowed, cannot make progress - error!
+                // Buffer is full, need to shift to make space
+                if !allow_shift || shifted {
+                    // Shifting not allowed or already shifted, cannot make progress - error!
                     return Err(Error {
                         error_type: ErrorType::BufferFull,
                         index: self.n_shifted_out + shift_target_pos,
                     });
                 }
-                // Shift once to make space and recurse with allow_shift = false
+                // Shift once to make space
                 self.shift_buffer(shift_target_pos, self.n_bytes);
-                return self.collect_while(predicate, shift_target_pos, false, shift_target_pos);
+                shifted = true;
+                i = shift_target_pos;
+            }
+
+            // Try to read more
+            let n_new = self.read_more()?;
+            if n_new == 0 {
+                // EOF reached, all bytes were accepted
+                return Ok(self.n_bytes);
             }
         }
     }
