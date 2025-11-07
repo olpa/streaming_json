@@ -330,7 +330,7 @@ fn test_collect_while_basic() {
     buffer.read_more().unwrap();
 
     // Collect alphabetic characters from position 0
-    let offset = buffer.collect_while(|b| b.is_ascii_alphabetic(), 0, true, 0).unwrap();
+    let offset = buffer.collect_while(|b| b.is_ascii_alphabetic(), 0, true).unwrap();
 
     assert_eq!(offset, 3); // Stops at '1'
     assert_eq!(&buffer.buf[..offset], b"abc");
@@ -346,7 +346,7 @@ fn test_collect_while_from_non_zero_pos() {
     buffer.read_more().unwrap();
 
     // Collect digits starting from position 3
-    let offset = buffer.collect_while(|b| b.is_ascii_digit(), 3, true, 3).unwrap();
+    let offset = buffer.collect_while(|b| b.is_ascii_digit(), 3, true).unwrap();
 
     assert_eq!(offset, 6); // Stops at 'd'
     assert_eq!(&buffer.buf[3..offset], b"123");
@@ -362,7 +362,7 @@ fn test_collect_while_until_eof() {
     buffer.read_more().unwrap();
 
     // Collect all alphabetic characters (should reach EOF)
-    let offset = buffer.collect_while(|b| b.is_ascii_alphabetic(), 0, true, 0).unwrap();
+    let offset = buffer.collect_while(|b| b.is_ascii_alphabetic(), 0, true).unwrap();
 
     assert_eq!(offset, 6); // EOF reached
     assert_eq!(&buffer.buf[..offset], b"abcdef");
@@ -371,32 +371,34 @@ fn test_collect_while_until_eof() {
 
 #[test]
 fn test_collect_while_with_shift() {
-    let input = "aaaaaaaaaa123"; // 10 'a's + "123"
+    let input = "XXaaaaaaaaaa123"; // "XX" prefix + 10 'a's + "123"
     let mut reader = input.as_bytes();
-    let mut buf = [0u8; 4]; // Small buffer to force shifting
+    let mut buf = [0u8; 6]; // Small buffer to force shifting
     let mut buffer = Buffer::new(&mut reader, &mut buf);
 
-    // Collect all 'a's (will need to shift once when buffer fills)
-    let offset = buffer.collect_while(|b| b == b'a', 0, true, 0).unwrap();
+    // Collect all 'a's starting from position 2 (after "XX")
+    // When buffer fills, shift discards the "XX" prefix (everything before pos 2)
+    let offset = buffer.collect_while(|b| b == b'a', 2, true).unwrap();
 
-    assert_eq!(offset, 0); // Position after shifting
+    assert_eq!(offset, 0); // After shift, rejection is at position 0
     assert_eq!(&buffer.buf[..buffer.n_bytes], b"123");
-    assert_eq!(buffer.n_shifted_out, 10);
+    assert_eq!(buffer.n_shifted_out, 12); // 2 ('XX') + 10 ('a's) shifted out
 }
 
 #[test]
 fn test_collect_while_with_shift_from_pos1() {
-    let input = "xaaaaaaaaaa123"; // 'x' + 10 'a's + "123"
+    let input = "Xaaaaaaaaa123"; // 'X' prefix + 9 'a's + "123"
     let mut reader = input.as_bytes();
-    let mut buf = [0u8; 4]; // Small buffer to force shifting
+    let mut buf = [0u8; 5]; // Small buffer to force shifting
     let mut buffer = Buffer::new(&mut reader, &mut buf);
 
-    // Collect all 'a's starting from position 1, shift to position 1
-    let offset = buffer.collect_while(|b| b == b'a', 1, true, 1).unwrap();
+    // Collect all 'a's starting from position 1 (after "X")
+    // When buffer fills, shift discards the "X" prefix (everything before pos 1)
+    let offset = buffer.collect_while(|b| b == b'a', 1, true).unwrap();
 
-    assert_eq!(offset, 1);
-    assert_eq!(&buffer.buf[..buffer.n_bytes], b"x12");
-    assert_eq!(buffer.n_shifted_out, 10);
+    assert_eq!(offset, 0); // After shift, rejection is at position 0
+    assert_eq!(&buffer.buf[..buffer.n_bytes], b"123");
+    assert_eq!(buffer.n_shifted_out, 10); // 1 ('X') + 9 ('a's) shifted out
 }
 
 #[test]
@@ -407,7 +409,7 @@ fn test_collect_while_buffer_full_error() {
     let mut buffer = Buffer::new(&mut reader, &mut buf);
 
     // Try to collect all 'a's - should fail because buffer is full even after shifting
-    let result = buffer.collect_while(|b| b.is_ascii_alphabetic(), 0, true, 0);
+    let result = buffer.collect_while(|b| b.is_ascii_alphabetic(), 0, true);
 
     assert!(result.is_err());
     if let Err(e) = result {
@@ -423,7 +425,7 @@ fn test_collect_while_rejection_after_read() {
     let mut buffer = Buffer::new(&mut reader, &mut buf);
 
     // Collect 'a's - needs to read multiple times before finding '1'
-    let offset = buffer.collect_while(|b| b == b'a', 0, true, 0).unwrap();
+    let offset = buffer.collect_while(|b| b == b'a', 0, true).unwrap();
 
     assert_eq!(offset, 0); // After shift, '1' is at position 0
     assert_eq!(&buffer.buf[..buffer.n_bytes], b"123");
@@ -439,7 +441,7 @@ fn test_collect_while_immediate_rejection() {
     buffer.read_more().unwrap();
 
     // Try to collect alphabetic from position 0, but first byte is '1'
-    let offset = buffer.collect_while(|b| b.is_ascii_alphabetic(), 0, true, 0).unwrap();
+    let offset = buffer.collect_while(|b| b.is_ascii_alphabetic(), 0, true).unwrap();
 
     assert_eq!(offset, 0); // Immediate rejection
     assert_eq!(buffer.n_shifted_out, 0);
@@ -454,7 +456,7 @@ fn test_collect_while_empty_buffer() {
     buffer.read_more().unwrap();
 
     // Collect from empty buffer
-    let offset = buffer.collect_while(|b| b.is_ascii_alphabetic(), 0, true, 0).unwrap();
+    let offset = buffer.collect_while(|b| b.is_ascii_alphabetic(), 0, true).unwrap();
 
     assert_eq!(offset, 0);
     assert_eq!(buffer.n_bytes, 0);
@@ -469,7 +471,7 @@ fn test_collect_while_rejection_in_full_buffer() {
     buffer.read_more().unwrap();
 
     // Buffer is full (4 bytes), but finds rejection without needing to shift
-    let offset = buffer.collect_while(|b| b == b'a', 0, true, 0).unwrap();
+    let offset = buffer.collect_while(|b| b == b'a', 0, true).unwrap();
 
     assert_eq!(offset, 3); // Stops at '1'
     assert_eq!(&buffer.buf[..3], b"aaa");
@@ -477,20 +479,20 @@ fn test_collect_while_rejection_in_full_buffer() {
 }
 
 #[test]
-fn test_collect_while_preserves_prefix() {
+fn test_collect_while_discards_prefix() {
     let input = "PREFIXaaaaa123";
     let mut reader = input.as_bytes();
     let mut buf = [0u8; 8];
     let mut buffer = Buffer::new(&mut reader, &mut buf);
     buffer.read_more().unwrap();
 
-    // Collect 'a's starting from position 6, shift to position 6 to keep PREFIX intact
-    let offset = buffer.collect_while(|b| b == b'a', 6, true, 6).unwrap();
+    // Collect 'a's starting from position 6 (after "PREFIX")
+    // When buffer fills, shift discards "PREFIX" + collected 'a's
+    let offset = buffer.collect_while(|b| b == b'a', 6, true).unwrap();
 
-    assert_eq!(offset, 6);
-    assert_eq!(&buffer.buf[..6], b"PREFIX");
-    assert_eq!(&buffer.buf[..buffer.n_bytes], b"PREFIX12");
-    assert_eq!(buffer.n_shifted_out, 5); // 5 'a's shifted out
+    assert_eq!(offset, 0); // After shift, rejection at position 0
+    assert_eq!(&buffer.buf[..buffer.n_bytes], b"123");
+    assert_eq!(buffer.n_shifted_out, 11); // 6 ('PREFIX') + 5 ('a's) shifted out
 }
 
 #[test]
@@ -501,7 +503,7 @@ fn test_collect_while_no_shift_allowed() {
     let mut buffer = Buffer::new(&mut reader, &mut buf);
 
     // Try to collect all 'a's with allow_shift = false - should fail when buffer fills
-    let result = buffer.collect_while(|b| b == b'a', 0, false, 0);
+    let result = buffer.collect_while(|b| b == b'a', 0, false);
 
     assert!(result.is_err());
     if let Err(e) = result {
@@ -517,7 +519,7 @@ fn test_collect_while_rejection_after_multiple_reads() {
     let mut buffer = Buffer::new(&mut reader, &mut buf);
 
     // Needs to read multiple times, then finds rejection
-    let offset = buffer.collect_while(|b| b == b'a', 0, true, 0).unwrap();
+    let offset = buffer.collect_while(|b| b == b'a', 0, true).unwrap();
 
     assert_eq!(offset, 0); // After shifting
     assert_eq!(&buffer.buf[..buffer.n_bytes], b"1");

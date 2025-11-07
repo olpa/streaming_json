@@ -126,20 +126,19 @@ impl<'buf, R: Read> Buffer<'buf, R> {
     /// Collect bytes while a predicate is true, starting at the given position.
     /// Returns the offset of the first rejected byte, or EOF.
     /// If buffer is full with all accepted bytes, it's an error.
-    /// The function can optionally shift the buffer once to the target position to discard unneeded bytes.
+    /// The function can optionally shift the buffer once to discard bytes before start_pos.
     ///
     /// # Arguments
     ///
     /// * `predicate` - A function that returns true if the byte should be accepted
     /// * `start_pos` - The position in the buffer to start collecting from
-    /// * `allow_shift` - If true, allows shifting the buffer once when it fills up
-    /// * `shift_target_pos` - The position to shift to if more space is needed (only used if `allow_shift` is true)
+    /// * `allow_shift` - If true, allows shifting the buffer once when it fills up (discards bytes before start_pos)
     ///
     /// # Errors
     ///
     /// Returns `ErrorType::BufferFull` if the buffer fills up with all accepted bytes.
     /// Also returns errors from the underlying reader.
-    pub fn collect_while<F>(&mut self, predicate: F, start_pos: usize, allow_shift: bool, shift_target_pos: usize) -> RJiterResult<usize>
+    pub fn collect_while<F>(&mut self, predicate: F, start_pos: usize, allow_shift: bool) -> RJiterResult<usize>
     where
         F: Fn(u8) -> bool,
     {
@@ -166,13 +165,14 @@ impl<'buf, R: Read> Buffer<'buf, R> {
                     // Shifting not allowed or already shifted, cannot make progress - error!
                     return Err(Error {
                         error_type: ErrorType::BufferFull,
-                        index: self.n_shifted_out + shift_target_pos,
+                        index: self.n_shifted_out,
                     });
                 }
-                // Shift once to make space
-                self.shift_buffer(shift_target_pos, self.n_bytes);
+                // Shift once to make space, discarding everything before start_pos
+                // After shift, everything moves left by start_pos positions
+                self.shift_buffer(0, start_pos);
                 shifted = true;
-                i = shift_target_pos;
+                i = i - start_pos; // Adjust i to account for the shift
             }
 
             // Try to read more
