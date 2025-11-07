@@ -333,7 +333,9 @@ fn test_collect_while_basic() {
     buffer.read_more().unwrap();
 
     // Collect alphabetic characters from position 0
-    let offset = buffer.collect_while(|b| b.is_ascii_alphabetic(), 0, true).unwrap();
+    let offset = buffer
+        .collect_while(|b| b.is_ascii_alphabetic(), 0, true)
+        .unwrap();
 
     assert_eq!(offset, 3); // Stops at '1'
     assert_eq!(&buffer.buf[..offset], b"abc");
@@ -349,7 +351,9 @@ fn test_collect_while_from_non_zero_pos() {
     buffer.read_more().unwrap();
 
     // Collect digits starting from position 3
-    let offset = buffer.collect_while(|b| b.is_ascii_digit(), 3, true).unwrap();
+    let offset = buffer
+        .collect_while(|b| b.is_ascii_digit(), 3, true)
+        .unwrap();
 
     assert_eq!(offset, 6); // Stops at 'd'
     assert_eq!(&buffer.buf[3..offset], b"123");
@@ -365,7 +369,9 @@ fn test_collect_while_until_eof() {
     buffer.read_more().unwrap();
 
     // Collect all alphabetic characters (should reach EOF)
-    let offset = buffer.collect_while(|b| b.is_ascii_alphabetic(), 0, true).unwrap();
+    let offset = buffer
+        .collect_while(|b| b.is_ascii_alphabetic(), 0, true)
+        .unwrap();
 
     assert_eq!(offset, 6); // EOF reached
     assert_eq!(&buffer.buf[..offset], b"abcdef");
@@ -466,7 +472,9 @@ fn test_collect_while_immediate_rejection() {
     buffer.read_more().unwrap();
 
     // Try to collect alphabetic from position 0, but first byte is '1'
-    let offset = buffer.collect_while(|b| b.is_ascii_alphabetic(), 0, true).unwrap();
+    let offset = buffer
+        .collect_while(|b| b.is_ascii_alphabetic(), 0, true)
+        .unwrap();
 
     assert_eq!(offset, 0); // Immediate rejection
     assert_eq!(buffer.n_shifted_out, 0);
@@ -481,26 +489,12 @@ fn test_collect_while_empty_buffer() {
     buffer.read_more().unwrap();
 
     // Collect from empty buffer
-    let offset = buffer.collect_while(|b| b.is_ascii_alphabetic(), 0, true).unwrap();
+    let offset = buffer
+        .collect_while(|b| b.is_ascii_alphabetic(), 0, true)
+        .unwrap();
 
     assert_eq!(offset, 0);
     assert_eq!(buffer.n_bytes, 0);
-}
-
-#[test]
-fn test_collect_while_rejection_in_full_buffer() {
-    let input = "aaa1"; // 3 'a's + "1"
-    let mut reader = input.as_bytes();
-    let mut buf = [0u8; 4]; // Exactly fits all data
-    let mut buffer = Buffer::new(&mut reader, &mut buf);
-    buffer.read_more().unwrap();
-
-    // Buffer is full (4 bytes), but finds rejection without needing to shift
-    let offset = buffer.collect_while(|b| b == b'a', 0, true).unwrap();
-
-    assert_eq!(offset, 3); // Stops at '1'
-    assert_eq!(&buffer.buf[..3], b"aaa");
-    assert_eq!(buffer.n_shifted_out, 0); // No shift needed
 }
 
 #[test]

@@ -126,19 +126,24 @@ impl<'buf, R: Read> Buffer<'buf, R> {
     /// Collect bytes while a predicate is true, starting at the given position.
     /// Returns the offset of the first rejected byte, or EOF.
     /// If buffer is full with all accepted bytes, it's an error.
-    /// The function can optionally shift the buffer once to discard bytes before start_pos.
+    /// The function can optionally shift the buffer once to discard bytes before `start_pos`.
     ///
     /// # Arguments
     ///
     /// * `predicate` - A function that returns true if the byte should be accepted
     /// * `start_pos` - The position in the buffer to start collecting from
-    /// * `allow_shift` - If true, allows shifting the buffer once when it fills up (discards bytes before start_pos)
+    /// * `allow_shift` - If true, allows shifting the buffer once when it fills up (discards bytes before `start_pos`)
     ///
     /// # Errors
     ///
     /// Returns `ErrorType::BufferFull` if the buffer fills up with all accepted bytes.
     /// Also returns errors from the underlying reader.
-    pub fn collect_while<F>(&mut self, predicate: F, start_pos: usize, allow_shift: bool) -> RJiterResult<usize>
+    pub fn collect_while<F>(
+        &mut self,
+        predicate: F,
+        start_pos: usize,
+        allow_shift: bool,
+    ) -> RJiterResult<usize>
     where
         F: Fn(u8) -> bool,
     {
@@ -172,7 +177,7 @@ impl<'buf, R: Read> Buffer<'buf, R> {
                 // After shift, everything moves left by start_pos positions
                 self.shift_buffer(0, start_pos);
                 shifted = true;
-                i = i - start_pos; // Adjust i to account for the shift
+                i -= start_pos; // Adjust i to account for the shift
             }
 
             // Try to read more
