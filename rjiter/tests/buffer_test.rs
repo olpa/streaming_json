@@ -529,3 +529,224 @@ fn test_collect_while_rejection_after_multiple_reads() {
     assert_eq!(&buffer.buf[..buffer.n_bytes], b"aaaa1");
     assert_eq!(buffer.n_shifted_out, 1);
 }
+
+#[test]
+fn test_collect_count_basic() {
+    let input = "abcdefghi";
+    let mut reader = input.as_bytes();
+    let mut buf = [0u8; 16];
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+    buffer.read_more().unwrap();
+
+    // Collect exactly 3 bytes from position 0
+    let offset = buffer.collect_count(3, 0, true).unwrap();
+
+    assert_eq!(offset, 3);
+    assert_eq!(&buffer.buf[..offset], b"abc");
+    assert_eq!(buffer.n_shifted_out, 0);
+}
+
+#[test]
+fn test_collect_count_from_non_zero_pos() {
+    let input = "abcdefghi";
+    let mut reader = input.as_bytes();
+    let mut buf = [0u8; 16];
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+    buffer.read_more().unwrap();
+
+    // Collect 3 bytes starting from position 2
+    let offset = buffer.collect_count(3, 2, true).unwrap();
+
+    assert_eq!(offset, 5); // 2 + 3
+    assert_eq!(&buffer.buf[2..offset], b"cde");
+    assert_eq!(buffer.n_shifted_out, 0);
+}
+
+#[test]
+fn test_collect_count_until_eof() {
+    let input = "abc";
+    let mut reader = input.as_bytes();
+    let mut buf = [0u8; 16];
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+    buffer.read_more().unwrap();
+
+    // Try to collect 10 bytes but only 3 available
+    let offset = buffer.collect_count(10, 0, true).unwrap();
+
+    assert_eq!(offset, 3); // EOF reached
+    assert_eq!(&buffer.buf[..offset], b"abc");
+    assert_eq!(buffer.n_bytes, 3);
+}
+
+#[test]
+fn test_collect_count_exact_match() {
+    let input = "abcdef";
+    let mut reader = input.as_bytes();
+    let mut buf = [0u8; 16];
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+    buffer.read_more().unwrap();
+
+    // Collect exactly all available bytes
+    let offset = buffer.collect_count(6, 0, true).unwrap();
+
+    assert_eq!(offset, 6);
+    assert_eq!(&buffer.buf[..offset], b"abcdef");
+}
+
+#[test]
+fn test_collect_count_zero_bytes() {
+    let input = "abcdef";
+    let mut reader = input.as_bytes();
+    let mut buf = [0u8; 16];
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+    buffer.read_more().unwrap();
+
+    // Collect 0 bytes
+    let offset = buffer.collect_count(0, 0, true).unwrap();
+
+    assert_eq!(offset, 0);
+    assert_eq!(buffer.n_shifted_out, 0);
+}
+
+#[test]
+fn test_collect_count_with_shift_from_pos2() {
+    let input = "XXabcdefgh"; // "XX" prefix + 8 bytes
+    let mut reader = input.as_bytes();
+    let mut buf = [0u8; 5]; // Small buffer to force shifting
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+
+    // Collect 4 bytes starting from position 2
+    // When buffer fills, shift discards the "XX" prefix
+    let offset = buffer.collect_count(4, 2, true).unwrap();
+
+    assert_eq!(offset, 4); // After shift, collected bytes are at 0-3
+    assert_eq!(&buffer.buf[..offset], b"abcd");
+    assert_eq!(&buffer.buf[..buffer.n_bytes], b"abcde");
+    assert_eq!(buffer.n_shifted_out, 2); // "XX" shifted out
+}
+
+#[test]
+fn test_collect_count_with_shift_from_pos1() {
+    let input = "Xabcdefgh"; // "X" prefix + 8 bytes
+    let mut reader = input.as_bytes();
+    let mut buf = [0u8; 5]; // Small buffer to force shifting
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+
+    // Collect 4 bytes starting from position 1
+    // Buffer initially reads "Xabcd" (5 bytes), which already contains the 4 bytes needed
+    let offset = buffer.collect_count(4, 1, true).unwrap();
+
+    assert_eq!(offset, 5); // Bytes are at positions 1-4
+    assert_eq!(&buffer.buf[1..offset], b"abcd");
+    assert_eq!(buffer.n_shifted_out, 0); // No shift needed
+}
+
+#[test]
+fn test_collect_count_buffer_too_small_from_pos0() {
+    let input = "abcdefgh";
+    let mut reader = input.as_bytes();
+    let mut buf = [0u8; 3]; // Buffer too small to hold 5 bytes
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+
+    // Try to collect 5 bytes from position 0 - buffer too small
+    let result = buffer.collect_count(5, 0, true);
+
+    assert!(result.is_err());
+    if let Err(e) = result {
+        assert!(matches!(e.error_type, rjiter::error::ErrorType::BufferFull));
+    }
+}
+
+#[test]
+fn test_collect_count_buffer_too_small_even_with_shift() {
+    let input = "XXabcdefgh"; // "XX" prefix + 8 bytes
+    let mut reader = input.as_bytes();
+    let mut buf = [0u8; 4]; // Buffer can hold at most 4 bytes total
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+
+    // Try to collect 5 bytes from position 2
+    // Even after shifting "XX", buffer can only hold 4 bytes
+    let result = buffer.collect_count(5, 2, true);
+
+    assert!(result.is_err());
+    if let Err(e) = result {
+        assert!(matches!(e.error_type, rjiter::error::ErrorType::BufferFull));
+    }
+}
+
+#[test]
+fn test_collect_count_no_shift_allowed() {
+    let input = "XXabcdefgh"; // "XX" prefix + 8 bytes
+    let mut reader = input.as_bytes();
+    let mut buf = [0u8; 5]; // Buffer that would need shifting to collect 4 bytes from pos 2
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+
+    // Try to collect 4 bytes from position 2 with allow_shift = false
+    // Buffer fills with "XXabc", needs more data but shifting is not allowed
+    let result = buffer.collect_count(4, 2, false);
+
+    assert!(result.is_err());
+    if let Err(e) = result {
+        assert!(matches!(e.error_type, rjiter::error::ErrorType::BufferFull));
+    }
+}
+
+#[test]
+fn test_collect_count_with_one_byte_reader() {
+    let input = b"abcdefgh";
+    let mut reader = OneByteReader::new(input.iter().copied());
+    let mut buf = [0u8; 10];
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+
+    // Collect 5 bytes - needs multiple reads (one byte at a time)
+    let offset = buffer.collect_count(5, 0, true).unwrap();
+
+    assert_eq!(offset, 5);
+    assert_eq!(&buffer.buf[..offset], b"abcde");
+    assert_eq!(buffer.n_shifted_out, 0);
+}
+
+#[test]
+fn test_collect_count_empty_buffer() {
+    let input = "";
+    let mut reader = input.as_bytes();
+    let mut buf = [0u8; 16];
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+    buffer.read_more().unwrap();
+
+    // Try to collect from empty buffer
+    let offset = buffer.collect_count(5, 0, true).unwrap();
+
+    assert_eq!(offset, 0); // EOF immediately
+    assert_eq!(buffer.n_bytes, 0);
+}
+
+#[test]
+fn test_collect_count_eof_from_non_zero_pos() {
+    let input = "abc";
+    let mut reader = input.as_bytes();
+    let mut buf = [0u8; 16];
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+    buffer.read_more().unwrap();
+
+    // Try to collect 10 bytes from position 1, only 2 bytes available
+    let offset = buffer.collect_count(10, 1, true).unwrap();
+
+    assert_eq!(offset, 3); // EOF reached at position 3 (start 1 + collected 2)
+    assert_eq!(&buffer.buf[1..offset], b"bc");
+}
+
+#[test]
+fn test_collect_count_shift_and_multiple_reads() {
+    let input = b"XXabcdefgh"; // "XX" prefix + 8 bytes
+    let mut reader = OneByteReader::new(input.iter().copied());
+    let mut buf = [0u8; 5];
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+
+    // Collect 4 bytes from position 2, needs shift and multiple reads
+    let offset = buffer.collect_count(4, 2, true).unwrap();
+
+    assert_eq!(offset, 4); // After shift
+    assert_eq!(&buffer.buf[..offset], b"abcd");
+    assert_eq!(buffer.n_shifted_out, 2);
+}
