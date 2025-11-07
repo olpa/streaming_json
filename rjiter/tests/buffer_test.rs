@@ -1,6 +1,9 @@
 use rjiter::buffer::Buffer;
 use rjiter::jiter::LinePosition;
 
+mod one_byte_reader;
+use one_byte_reader::OneByteReader;
+
 #[test]
 fn test_read_until_full() {
     let input = "abcdef";
@@ -370,46 +373,67 @@ fn test_collect_while_until_eof() {
 }
 
 #[test]
-fn test_collect_while_with_shift() {
-    let input = "XXaaaaaaaaaa123"; // "XX" prefix + 10 'a's + "123"
+fn test_collect_while_with_shift_from_pos2() {
+    let input = "XXaaaa123"; // "XX" prefix + 4 'a's + "123"
     let mut reader = input.as_bytes();
-    let mut buf = [0u8; 6]; // Small buffer to force shifting
+    let mut buf = [0u8; 5]; // Small buffer to force shifting
     let mut buffer = Buffer::new(&mut reader, &mut buf);
 
     // Collect all 'a's starting from position 2 (after "XX")
     // When buffer fills, shift discards the "XX" prefix (everything before pos 2)
     let offset = buffer.collect_while(|b| b == b'a', 2, true).unwrap();
 
-    assert_eq!(offset, 0); // After shift, rejection is at position 0
-    assert_eq!(&buffer.buf[..buffer.n_bytes], b"123");
-    assert_eq!(buffer.n_shifted_out, 12); // 2 ('XX') + 10 ('a's) shifted out
+    assert_eq!(offset, 4); // After shift, rejection is at position 4 (collected 4 'a's)
+    assert_eq!(&buffer.buf[..offset], b"aaaa");
+    assert_eq!(&buffer.buf[..buffer.n_bytes], b"aaaa1");
+    assert_eq!(buffer.n_shifted_out, 2); // Only 2 ('XX') shifted out
 }
 
 #[test]
 fn test_collect_while_with_shift_from_pos1() {
-    let input = "Xaaaaaaaaa123"; // 'X' prefix + 9 'a's + "123"
+    let input = "Xaaaa123"; // 'X' prefix + 4 'a's + "123"
     let mut reader = input.as_bytes();
     let mut buf = [0u8; 5]; // Small buffer to force shifting
     let mut buffer = Buffer::new(&mut reader, &mut buf);
 
     // Collect all 'a's starting from position 1 (after "X")
-    // When buffer fills, shift discards the "X" prefix (everything before pos 1)
+    // Buffer fills with "Xaaaa", then shift discards the "X" prefix (everything before pos 1)
     let offset = buffer.collect_while(|b| b == b'a', 1, true).unwrap();
 
-    assert_eq!(offset, 0); // After shift, rejection is at position 0
-    assert_eq!(&buffer.buf[..buffer.n_bytes], b"123");
-    assert_eq!(buffer.n_shifted_out, 10); // 1 ('X') + 9 ('a's) shifted out
+    assert_eq!(offset, 4); // After shift, rejection is at position 4 (collected 4 'a's)
+    assert_eq!(&buffer.buf[..offset], b"aaaa");
+    assert_eq!(&buffer.buf[..buffer.n_bytes], b"aaaa1");
+    assert_eq!(buffer.n_shifted_out, 1); // Only 1 ('X') shifted out
+}
+
+#[test]
+fn test_collect_while_with_shift_from_pos0() {
+    let input = "aaaaa123"; // 5 'a's + "123"
+    let mut reader = input.as_bytes();
+    let mut buf = [0u8; 5]; // Buffer too small to reach rejection
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+
+    // Collect all 'a's starting from position 0
+    // Even with allow_shift=true, there's no prefix to discard, so shift is useless
+    // Buffer fills with 'a's but can't reach the rejection byte '1'
+    let result = buffer.collect_while(|b| b == b'a', 0, true);
+
+    // Should error because buffer is full and shift from pos 0 doesn't help
+    assert!(result.is_err());
+    if let Err(e) = result {
+        assert!(matches!(e.error_type, rjiter::error::ErrorType::BufferFull));
+    }
 }
 
 #[test]
 fn test_collect_while_buffer_full_error() {
-    let input = "aaaaaaaaaa"; // 10 'a's (all acceptable)
+    let input = "XXaaaaaaaaaa"; // "XX" prefix + 10 'a's (all acceptable after prefix)
     let mut reader = input.as_bytes();
     let mut buf = [0u8; 4]; // Small buffer that will fill up
     let mut buffer = Buffer::new(&mut reader, &mut buf);
 
-    // Try to collect all 'a's - should fail because buffer is full even after shifting
-    let result = buffer.collect_while(|b| b.is_ascii_alphabetic(), 0, true);
+    // Try to collect all 'a's from pos 2 - shift discards "XX" but buffer still too small
+    let result = buffer.collect_while(|b| b.is_ascii_alphabetic(), 2, true);
 
     assert!(result.is_err());
     if let Err(e) = result {
@@ -419,17 +443,18 @@ fn test_collect_while_buffer_full_error() {
 
 #[test]
 fn test_collect_while_rejection_after_read() {
-    let input = "aaaaaaa123"; // 7 'a's + "123"
-    let mut reader = input.as_bytes();
+    let input = b"aaa1"; // 3 'a's + "1"
+    let mut reader = OneByteReader::new(input.iter().copied());
     let mut buf = [0u8; 4]; // Small buffer
     let mut buffer = Buffer::new(&mut reader, &mut buf);
 
-    // Collect 'a's - needs to read multiple times before finding '1'
+    // Collect 'a's - needs to read multiple times (one byte at a time) to find rejection
     let offset = buffer.collect_while(|b| b == b'a', 0, true).unwrap();
 
-    assert_eq!(offset, 0); // After shift, '1' is at position 0
-    assert_eq!(&buffer.buf[..buffer.n_bytes], b"123");
-    assert_eq!(buffer.n_shifted_out, 7);
+    assert_eq!(offset, 3); // Rejection at position 3
+    assert_eq!(&buffer.buf[..offset], b"aaa");
+    assert_eq!(&buffer.buf[..buffer.n_bytes], b"aaa1");
+    assert_eq!(buffer.n_shifted_out, 0); // No shift needed
 }
 
 #[test]
@@ -479,23 +504,6 @@ fn test_collect_while_rejection_in_full_buffer() {
 }
 
 #[test]
-fn test_collect_while_discards_prefix() {
-    let input = "PREFIXaaaaa123";
-    let mut reader = input.as_bytes();
-    let mut buf = [0u8; 8];
-    let mut buffer = Buffer::new(&mut reader, &mut buf);
-    buffer.read_more().unwrap();
-
-    // Collect 'a's starting from position 6 (after "PREFIX")
-    // When buffer fills, shift discards "PREFIX" + collected 'a's
-    let offset = buffer.collect_while(|b| b == b'a', 6, true).unwrap();
-
-    assert_eq!(offset, 0); // After shift, rejection at position 0
-    assert_eq!(&buffer.buf[..buffer.n_bytes], b"123");
-    assert_eq!(buffer.n_shifted_out, 11); // 6 ('PREFIX') + 5 ('a's) shifted out
-}
-
-#[test]
 fn test_collect_while_no_shift_allowed() {
     let input = "aaaa123"; // 4 'a's + "123"
     let mut reader = input.as_bytes();
@@ -513,15 +521,17 @@ fn test_collect_while_no_shift_allowed() {
 
 #[test]
 fn test_collect_while_rejection_after_multiple_reads() {
-    let input = "aaa1"; // 3 'a's + "1"
-    let mut reader = input.as_bytes();
-    let mut buf = [0u8; 2]; // Very small buffer
+    let input = b"Xaaaa111"; // 'X' prefix + 4 'a's + "111"
+    let mut reader = OneByteReader::new(input.iter().copied());
+    let mut buf = [0u8; 5];
     let mut buffer = Buffer::new(&mut reader, &mut buf);
 
-    // Needs to read multiple times, then finds rejection
-    let offset = buffer.collect_while(|b| b == b'a', 0, true).unwrap();
+    // Needs to read multiple times (one byte at a time) before finding rejection
+    // When buffer fills with "Xa", shift discards 'X', continues with 'a's
+    let offset = buffer.collect_while(|b| b == b'a', 1, true).unwrap();
 
-    assert_eq!(offset, 0); // After shifting
-    assert_eq!(&buffer.buf[..buffer.n_bytes], b"1");
-    assert_eq!(buffer.n_shifted_out, 3);
+    assert_eq!(offset, 4); // Rejection at position 4 (after shift and more reads)
+    assert_eq!(&buffer.buf[..offset], b"aaaa");
+    assert_eq!(&buffer.buf[..buffer.n_bytes], b"aaaa1");
+    assert_eq!(buffer.n_shifted_out, 1);
 }

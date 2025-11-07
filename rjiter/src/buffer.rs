@@ -161,8 +161,8 @@ impl<'buf, R: Read> Buffer<'buf, R> {
             // Check if buffer is full and we need to shift before reading
             if self.n_bytes >= self.buf.len() {
                 // Buffer is full, need to shift to make space
-                if !allow_shift || shifted {
-                    // Shifting not allowed or already shifted, cannot make progress - error!
+                if !allow_shift || shifted || start_pos == 0 {
+                    // Shifting not allowed, already shifted, or start_pos=0 (nothing to discard) - error!
                     return Err(Error {
                         error_type: ErrorType::BufferFull,
                         index: self.n_shifted_out,
