@@ -35,7 +35,7 @@ pub struct DdbConverter<'a, 'workbuf, W: IoWrite> {
     writer: &'a mut W,
     pending_comma: bool,
     pretty: bool,
-    depth: usize, // JSON output nesting depth (for pretty-printing indentation and root level detection)
+    output_depth: usize, // JSON output nesting depth (for pretty-printing indentation and root level detection)
     current_field: Option<&'workbuf [u8]>,
     item_wrapper_mode: ItemWrapperMode, // How to handle "Item" key at top level
     last_error: Option<ConversionError>, // Stores detailed error information
@@ -52,7 +52,7 @@ impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
             writer,
             pending_comma: false,
             pretty,
-            depth: 0,
+            output_depth: 0,
             current_field: None,
             item_wrapper_mode,
             last_error: None,
@@ -117,7 +117,7 @@ impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
 
     fn indent(&mut self) {
         if self.pretty {
-            for _ in 0..self.depth {
+            for _ in 0..self.output_depth {
                 self.write(b"  ");
             }
         }
@@ -126,21 +126,12 @@ impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
 
 type DdbBaton<'a, 'workbuf, W> = &'a RefCell<DdbConverter<'a, 'workbuf, W>>;
 
-/// Handle the end of Item object - write closing brace and newline for JSONL
-fn on_item_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
-    let mut conv = baton.borrow_mut();
-    conv.newline();
-    conv.write(b"}");
-    conv.write(b"\n");
-    Ok(())
-}
-
 /// Handle root object beginning - write opening brace
 fn on_root_object_begin<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
     let mut conv = baton.borrow_mut();
     conv.write(b"{");
     conv.newline();
-    conv.depth = 1;
+    conv.output_depth = 1;
     StreamOp::None
 }
 
@@ -321,7 +312,7 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: 
             }
             conv.write(b"{");
             conv.newline();
-            conv.depth += 1;
+            conv.output_depth += 1;
             conv.pending_comma = false;
             conv.m_depth += 1;  // Track M nesting
             conv.current_type = Some(TypeDesc::M);
@@ -378,7 +369,7 @@ fn find_action_object<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
     current_type: Option<TypeDesc>,
 ) -> Option<Action<DdbBaton<'a, 'workbuf, W>, R>> {
     // Check if this is the root object (depth == 0)
-    if baton.borrow().depth == 0 {
+    if baton.borrow().output_depth == 0 {
         return Some(on_root_object_begin);
     }
 
@@ -598,7 +589,7 @@ fn on_set_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str
 fn on_map_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     let mut conv = baton.borrow_mut();
     conv.newline();
-    conv.depth -= 1;
+    conv.output_depth -= 1;
     conv.indent();
     conv.write(b"}");
     conv.pending_comma = true;
@@ -630,13 +621,10 @@ fn on_type_key_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'stati
 }
 
 fn on_root_object_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
-    let conv = baton.borrow();
-    // If we opened a root object (depth > 0), close it
-    // Both Item wrapper and no-Item cases write the same braces
-    if conv.depth > 0 {
-        drop(conv);
-        on_item_end(baton)?;
-    }
+    let mut conv = baton.borrow_mut();
+    conv.newline();
+    conv.write(b"}");
+    conv.write(b"\n");
     Ok(())
 }
 
@@ -646,12 +634,9 @@ fn find_end_action_object<'a, 'workbuf, W: IoWrite>(
     baton: DdbBaton<'a, 'workbuf, W>,
     phase: Phase,
 ) -> Option<EndAction<DdbBaton<'a, 'workbuf, W>>> {
-    // Check if this is the root object ending (#top in context)
-    let mut ctx = context.clone();
-    if let Some(key) = ctx.next() {
-        if key == b"#top" {
-            return Some(on_root_object_end);
-        }
+    // Check if this is the root object ending (context length == 1)
+    if context.len() == 1 {
+        return Some(on_root_object_end);
     }
 
     // Check if type descriptor object is ending (Phase::TypeKeyConsumed)
@@ -663,8 +648,7 @@ fn find_end_action_object<'a, 'workbuf, W: IoWrite>(
     // Check if this is an M content object ending
     // M content objects end with phase=ExpectingField and key="M" in context
     if phase == Phase::ExpectingField {
-        let mut ctx = context.clone();
-        if let Some(key) = ctx.next() {
+        if let Some(key) = context.clone().next() {
             if key == b"M" {
                 return Some(on_map_end);
             }
