@@ -124,55 +124,60 @@ impl<'buf, R: Read> Buffer<'buf, R> {
     }
 
     /// Collect bytes while a predicate is true, starting at the given position.
-    /// Read-shift-read-shift-read-shift... until predicate returns false or EOF is reached.
-    /// Returns the offset of the first rejected byte, or the offset at EOF.
+    /// Returns the offset of the first rejected byte, or EOF.
+    /// If buffer is full with all accepted bytes, it's an error.
+    /// The function can optionally shift the buffer once to the target position to discard unneeded bytes.
     ///
     /// # Arguments
     ///
-    /// * `pos` - The position in the buffer to start collecting from
     /// * `predicate` - A function that returns true if the byte should be accepted
+    /// * `start_pos` - The position in the buffer to start collecting from
+    /// * `allow_shift` - If true, allows shifting the buffer once when it fills up
+    /// * `shift_target_pos` - The position to shift to if more space is needed (only used if `allow_shift` is true)
     ///
     /// # Errors
     ///
     /// Returns `ErrorType::BufferFull` if the buffer fills up with all accepted bytes.
     /// Also returns errors from the underlying reader.
-    pub fn collect_while<F>(&mut self, pos: usize, predicate: F) -> RJiterResult<usize>
+    pub fn collect_while<F>(&mut self, predicate: F, start_pos: usize, allow_shift: bool, shift_target_pos: usize) -> RJiterResult<usize>
     where
-        F: Fn(&u8) -> bool,
+        F: Fn(u8) -> bool,
     {
-        let mut i = pos;
+        let mut i = start_pos;
+
         loop {
-            // `i >= 0` (`usize`), `self.n_bytes <= buf.len()` (contract)
+            // Check bytes while predicate is true
             #[allow(clippy::indexing_slicing)]
-            while i < self.n_bytes && predicate(&self.buf[i]) {
+            while i < self.n_bytes && predicate(self.buf[i]) {
                 i += 1;
             }
 
             if i < self.n_bytes {
                 // Found rejected byte
-                if i > pos {
-                    self.shift_buffer(pos, i);
-                }
-                return Ok(pos);
+                return Ok(i);
             }
 
-            // Reached end of buffer, shift and read more
-            self.shift_buffer(pos, self.n_bytes);
+            // Reached end of buffer, try to read more
             let n_new = self.read_more()?;
             if n_new == 0 {
-                // EOF reached
-                return Ok(pos);
+                // EOF reached, all bytes were accepted
+                return Ok(self.n_bytes);
             }
 
             // Check if buffer is full after reading
             if self.n_bytes >= self.buf.len() {
-                // Buffer is full and all bytes were accepted - error!
-                return Err(Error {
-                    error_type: ErrorType::BufferFull,
-                    index: self.n_shifted_out + pos,
-                });
+                // Buffer is full
+                if !allow_shift {
+                    // Shifting not allowed, cannot make progress - error!
+                    return Err(Error {
+                        error_type: ErrorType::BufferFull,
+                        index: self.n_shifted_out + shift_target_pos,
+                    });
+                }
+                // Shift once to make space and recurse with allow_shift = false
+                self.shift_buffer(shift_target_pos, self.n_bytes);
+                return self.collect_while(predicate, shift_target_pos, false, shift_target_pos);
             }
-            i = pos;
         }
     }
 }
