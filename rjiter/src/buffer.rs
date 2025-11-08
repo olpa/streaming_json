@@ -95,9 +95,21 @@ impl<'buf, R: Read> Buffer<'buf, R> {
     ///
     /// From the underlying reader.
     pub fn skip_spaces(&mut self, pos: usize) -> RJiterResult<()> {
-        let end_of_whitespace = self.collect_while(|b| b.is_ascii_whitespace(), pos, false)?;
-        if end_of_whitespace > pos {
-            self.shift_buffer(pos, end_of_whitespace);
+        loop {
+            match self.collect_while(|b| b.is_ascii_whitespace(), pos, false) {
+                Ok(end_of_whitespace) => {
+                    // Found non-whitespace or EOF
+                    if end_of_whitespace > pos {
+                        self.shift_buffer(pos, end_of_whitespace);
+                    }
+                    break;
+                }
+                Err(e) if matches!(e.error_type, ErrorType::BufferFull) => {
+                    // Buffer is full of whitespace, shift and continue
+                    self.shift_buffer(pos, self.n_bytes);
+                }
+                Err(e) => return Err(e),
+            }
         }
         Ok(())
     }
