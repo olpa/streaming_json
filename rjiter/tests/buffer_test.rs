@@ -425,10 +425,10 @@ fn test_collect_while_with_shift_from_pos0() {
     let result = buffer.collect_while(|b| b == b'a', 0, true);
 
     // Should error because buffer is full and shift from pos 0 doesn't help
-    assert!(result.is_err());
-    if let Err(e) = result {
-        assert!(matches!(e.error_type, rjiter::error::ErrorType::BufferFull));
-    }
+    assert_eq!(
+        result.unwrap_err().error_type,
+        rjiter::error::ErrorType::BufferFull
+    );
 }
 
 #[test]
@@ -441,10 +441,10 @@ fn test_collect_while_buffer_full_error() {
     // Try to collect all 'a's from pos 2 - shift discards "XX" but buffer still too small
     let result = buffer.collect_while(|b| b.is_ascii_alphabetic(), 2, true);
 
-    assert!(result.is_err());
-    if let Err(e) = result {
-        assert!(matches!(e.error_type, rjiter::error::ErrorType::BufferFull));
-    }
+    assert_eq!(
+        result.unwrap_err().error_type,
+        rjiter::error::ErrorType::BufferFull
+    );
 }
 
 #[test]
@@ -507,10 +507,10 @@ fn test_collect_while_no_shift_allowed() {
     // Try to collect all 'a's with allow_shift = false - should fail when buffer fills
     let result = buffer.collect_while(|b| b == b'a', 0, false);
 
-    assert!(result.is_err());
-    if let Err(e) = result {
-        assert!(matches!(e.error_type, rjiter::error::ErrorType::BufferFull));
-    }
+    assert_eq!(
+        result.unwrap_err().error_type,
+        rjiter::error::ErrorType::BufferFull
+    );
 }
 
 #[test]
@@ -651,10 +651,10 @@ fn test_collect_count_buffer_too_small_from_pos0() {
     // Try to collect 5 bytes from position 0 - buffer too small
     let result = buffer.collect_count(5, 0, true);
 
-    assert!(result.is_err());
-    if let Err(e) = result {
-        assert!(matches!(e.error_type, rjiter::error::ErrorType::BufferFull));
-    }
+    assert_eq!(
+        result.unwrap_err().error_type,
+        rjiter::error::ErrorType::BufferFull
+    );
 }
 
 #[test]
@@ -668,10 +668,10 @@ fn test_collect_count_buffer_too_small_even_with_shift() {
     // Even after shifting "XX", buffer can only hold 4 bytes
     let result = buffer.collect_count(5, 2, true);
 
-    assert!(result.is_err());
-    if let Err(e) = result {
-        assert!(matches!(e.error_type, rjiter::error::ErrorType::BufferFull));
-    }
+    assert_eq!(
+        result.unwrap_err().error_type,
+        rjiter::error::ErrorType::BufferFull
+    );
 }
 
 #[test]
@@ -685,10 +685,10 @@ fn test_collect_count_no_shift_allowed() {
     // Buffer fills with "XXabc", needs more data but shifting is not allowed
     let result = buffer.collect_count(4, 2, false);
 
-    assert!(result.is_err());
-    if let Err(e) = result {
-        assert!(matches!(e.error_type, rjiter::error::ErrorType::BufferFull));
-    }
+    assert_eq!(
+        result.unwrap_err().error_type,
+        rjiter::error::ErrorType::BufferFull
+    );
 }
 
 #[test]

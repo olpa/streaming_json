@@ -104,7 +104,7 @@ impl<'buf, R: Read> Buffer<'buf, R> {
                     }
                     break;
                 }
-                Err(e) if matches!(e.error_type, ErrorType::BufferFull) => {
+                Err(e) if e.error_type == ErrorType::BufferFull => {
                     // Buffer is full of whitespace, shift and continue
                     self.shift_buffer(pos, self.n_bytes);
                 }
