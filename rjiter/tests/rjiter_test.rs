@@ -1063,3 +1063,121 @@ fn next_key_bytes() {
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some(&b"key"[..]));
 }
+
+//
+// lookahead_while tests
+//
+
+#[test]
+fn test_lookahead_while_without_shift() {
+    let input = "12345abc";
+    let mut buffer = [0u8; 16];
+    let mut reader = input.as_bytes();
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    // Record the position before lookahead
+    let pos_before = rjiter.current_index();
+
+    // Lookahead for digits
+    let result = rjiter.lookahead_while(|b| b.is_ascii_digit());
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), b"12345");
+
+    // Verify that the position hasn't changed (lookahead doesn't consume)
+    let pos_after = rjiter.current_index();
+    assert_eq!(pos_before, pos_after, "Position changed after lookahead");
+
+    // Verify that peek still returns the first character
+    let peek_result = rjiter.peek();
+    assert!(peek_result.is_ok());
+    assert_eq!(peek_result.unwrap(), Peek::new(b'1'));
+
+    // Position should still be unchanged after peek
+    assert_eq!(rjiter.current_index(), pos_before);
+}
+
+#[test]
+fn test_lookahead_while_with_shift() {
+    let input = "   12345abc";
+    let mut buffer = [0u8; 16];
+    let mut reader = input.as_bytes();
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    // Skip the spaces first by peeking past them
+    let _ = rjiter.peek(); // This will internally handle spaces
+
+    // Record the position before lookahead (after spaces have been skipped)
+    let pos_before = rjiter.current_index();
+
+    // Now lookahead for digits
+    let result = rjiter.lookahead_while(|b| b.is_ascii_digit());
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), b"12345");
+
+    // Verify that the position hasn't changed after lookahead
+    let pos_after = rjiter.current_index();
+    assert_eq!(pos_before, pos_after, "Position changed after lookahead with shift");
+
+    // Verify that we can still peek at the current position
+    let peek_result = rjiter.peek();
+    assert!(peek_result.is_ok());
+    assert_eq!(peek_result.unwrap(), Peek::new(b'1'));
+
+    // Position should still be unchanged after peek
+    assert_eq!(rjiter.current_index(), pos_before);
+}
+
+#[test]
+fn test_lookahead_while_buffer_full() {
+    // Create input with many digits that exceed buffer size
+    let input = "123456789012345678901234567890abc";
+    let mut buffer = [0u8; 4]; // Small buffer
+    let mut reader = input.as_bytes();
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    // Try to lookahead - should fail with BufferFull since allow_shift is false
+    let result = rjiter.lookahead_while(|b| b.is_ascii_digit());
+    assert!(result.is_err());
+
+    let err = result.unwrap_err();
+    assert_eq!(err.error_type, rjiter::error::ErrorType::BufferFull);
+}
+
+#[test]
+fn test_lookahead_while_with_buffer_read() {
+    // Test case where lookahead needs to read more data from the reader
+    // This tests the bug where start_pos becomes invalid after buffer changes
+
+    // Start with some JSON that will position us mid-buffer, then lookahead
+    let input = r#"{"key":"value","num":12345}"#;
+    let mut buffer = [0u8; 20];  // Buffer large enough to hold the lookahead result
+    let mut reader = OneByteReader::new(input.bytes());
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    // Parse the object to advance into the buffer
+    assert_eq!(rjiter.next_object().unwrap(), Some("key"));
+    assert_eq!(rjiter.next_str().unwrap(), "value");
+    assert_eq!(rjiter.next_key().unwrap(), Some("num"));
+
+    // Now we're positioned at the number. The buffer has been read and possibly shifted.
+    // Record position before lookahead
+    let pos_before = rjiter.current_index();
+
+    // Lookahead for digits - this may trigger reads that change buffer.n_bytes
+    // and cause create_new_jiter() to be called
+    let result = rjiter.lookahead_while(|b| b.is_ascii_digit());
+    assert!(result.is_ok());
+
+    // This should return all digits
+    let digits = result.unwrap();
+    assert_eq!(digits, b"12345", "Lookahead should return all digits");
+
+    // Verify position is unchanged
+    let pos_after = rjiter.current_index();
+    assert_eq!(pos_before, pos_after, "Position changed after lookahead");
+
+    // Verify we can still read the number correctly
+    let int_result = rjiter.next_int();
+    assert!(int_result.is_ok());
+    assert_eq!(int_result.unwrap(), rjiter::jiter::NumberInt::Int(12345));
+}

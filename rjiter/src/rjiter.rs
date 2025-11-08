@@ -712,6 +712,77 @@ impl<'rj, R: Read> RJiter<'rj, R> {
     }
 
     //  ------------------------------------------------------------
+    // Lookahead
+    //
+
+    /// Lookahead bytes while a predicate is true, without consuming them.
+    /// Returns a slice of the bytes that matched the predicate.
+    ///
+    /// This is a wrapper around `Buffer::collect_while` that returns a slice
+    /// instead of an offset. The bytes are not consumed from the buffer.
+    ///
+    /// # Arguments
+    ///
+    /// * `predicate` - A function that returns true if the byte should be accepted
+    ///
+    /// # Errors
+    ///
+    /// Returns `ErrorType::BufferFull` if the buffer fills up with all accepted bytes.
+    /// Also returns errors from the underlying reader.
+    pub fn lookahead_while<F>(&mut self, predicate: F) -> RJiterResult<&'rj [u8]>
+    where
+        F: Fn(u8) -> bool,
+    {
+        let change_flag = ChangeFlag::new(&self.buffer);
+
+        // jiter.current_index() returns position within its slice view of the buffer
+        let jiter_start_pos = self.jiter.current_index();
+
+        // Allow collect_while to shift if needed
+        let end_pos = self.buffer.collect_while(predicate, jiter_start_pos, true)?;
+
+        // Calculate the length of matched content
+        let match_length = end_pos - jiter_start_pos;
+
+        // Fast path: if buffer didn't change, return slice immediately
+        if !change_flag.is_changed(&self.buffer) {
+            #[allow(clippy::indexing_slicing)]
+            let slice = &self.buffer.buf[jiter_start_pos..jiter_start_pos + match_length];
+
+            #[allow(unsafe_code)]
+            let slice_with_lifetime = unsafe {
+                core::mem::transmute::<&[u8], &'rj [u8]>(slice)
+            };
+
+            return Ok(slice_with_lifetime);
+        }
+
+        // Slow path: buffer changed
+        // collect_while may or may not have shifted. We need to check and shift if needed.
+
+        // If jiter_start_pos > 0, we need to shift the buffer so data starts at position 0
+        // (collect_while only shifts when buffer is full, not just when reading more data)
+        if jiter_start_pos > 0 {
+            self.buffer.shift_buffer(0, jiter_start_pos);
+        }
+
+        // Recreate jiter so it sees the updated buffer
+        self.create_new_jiter();
+        // After create_new_jiter(), jiter is at position 0
+
+        // The matched bytes are at position 0 with length match_length
+        #[allow(clippy::indexing_slicing)]
+        let slice = &self.buffer.buf[0..match_length];
+
+        #[allow(unsafe_code)]
+        let slice_with_lifetime = unsafe {
+            core::mem::transmute::<&[u8], &'rj [u8]>(slice)
+        };
+
+        Ok(slice_with_lifetime)
+    }
+
+    //  ------------------------------------------------------------
     // Skip token
     //
 
