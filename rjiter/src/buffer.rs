@@ -95,30 +95,9 @@ impl<'buf, R: Read> Buffer<'buf, R> {
     ///
     /// From the underlying reader.
     pub fn skip_spaces(&mut self, pos: usize) -> RJiterResult<()> {
-        let mut i = pos;
-        loop {
-            // `i >= 0` (`usize`), `self.n_bytes <= buf.len()` (contract)
-            #[allow(clippy::indexing_slicing)]
-            while i < self.n_bytes && self.buf[i].is_ascii_whitespace() {
-                i += 1;
-            }
-
-            if i < self.n_bytes {
-                // Found non-whitespace
-                if i > pos {
-                    self.shift_buffer(pos, i);
-                }
-                break;
-            }
-
-            // Reached end of buffer, shift and read more
-            self.shift_buffer(pos, self.n_bytes);
-            let n_new = self.read_more()?;
-            if n_new == 0 {
-                // EOF reached
-                break;
-            }
-            i = self.n_bytes - n_new;
+        let end_of_whitespace = self.collect_while(|b| b.is_ascii_whitespace(), pos, false)?;
+        if end_of_whitespace > pos {
+            self.shift_buffer(pos, end_of_whitespace);
         }
         Ok(())
     }
@@ -184,6 +163,77 @@ impl<'buf, R: Read> Buffer<'buf, R> {
             let n_new = self.read_more()?;
             if n_new == 0 {
                 // EOF reached, all bytes were accepted
+                return Ok(self.n_bytes);
+            }
+        }
+    }
+
+    /// Collect exactly `count` bytes starting at the given position, or until EOF.
+    /// Returns the offset after the collected bytes (start_pos + actual_collected).
+    /// If buffer is too small to hold the requested bytes, it's an error.
+    /// The function can optionally shift the buffer once to discard bytes before `start_pos`.
+    ///
+    /// # Arguments
+    ///
+    /// * `count` - The number of bytes to collect
+    /// * `start_pos` - The position in the buffer to start collecting from
+    /// * `allow_shift` - If true, allows shifting the buffer once when it fills up (discards bytes before `start_pos`)
+    ///
+    /// # Errors
+    ///
+    /// Returns `ErrorType::BufferFull` if the buffer is too small to hold the requested bytes.
+    /// Also returns errors from the underlying reader.
+    pub fn collect_count(
+        &mut self,
+        count: usize,
+        start_pos: usize,
+        allow_shift: bool,
+    ) -> RJiterResult<usize> {
+        let mut target = start_pos + count;
+        let mut current_start = start_pos;
+        let mut shifted = false;
+
+        loop {
+            if self.n_bytes >= target {
+                // We have collected enough bytes
+                return Ok(target);
+            }
+
+            // Need more data
+            // Check if buffer is full and we need to shift before reading
+            if self.n_bytes >= self.buf.len() {
+                // Buffer is full, need to shift to make space
+                if !allow_shift || shifted || current_start == 0 {
+                    // Shifting not allowed, already shifted, or start_pos=0 (nothing to discard) - error!
+                    return Err(Error {
+                        error_type: ErrorType::BufferFull,
+                        index: self.n_shifted_out,
+                    });
+                }
+
+                // Check if even after shifting, the buffer would be too small
+                let available_after_shift = self.buf.len();
+                if count > available_after_shift {
+                    // Even after shifting, buffer is too small for the requested count
+                    return Err(Error {
+                        error_type: ErrorType::BufferFull,
+                        index: self.n_shifted_out,
+                    });
+                }
+
+                // Shift once to make space, discarding everything before current_start
+                // After shift, everything moves left by current_start positions
+                self.shift_buffer(0, current_start);
+                shifted = true;
+                // Adjust target to account for the shift
+                target -= current_start;
+                current_start = 0;
+            }
+
+            // Try to read more
+            let n_new = self.read_more()?;
+            if n_new == 0 {
+                // EOF reached before collecting all requested bytes
                 return Ok(self.n_bytes);
             }
         }
