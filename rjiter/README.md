@@ -115,9 +115,16 @@ assert!(finish.is_ok());
 ```
 
 
-## Skip tokens
+## Lookahead and skip
 
-For the case when JSON fragments are mixed with known text, `RJiter` provides the function `known_skip_token`.
+`RJiter` provides functions to peek ahead and skip bytes:
+
+- `lookahead_while(predicate)` - Lookahead while predicate matches
+- `lookahead_n(count)` - Lookahead exactly n bytes
+- `skip_n_bytes(count)` - Skip and consume n bytes
+- `known_skip_token(token)` - Skip specific token
+
+These are useful when JSON fragments are mixed with known text:
 
 ```rust
 use rjiter::{RJiter, Result as RJiterResult};
