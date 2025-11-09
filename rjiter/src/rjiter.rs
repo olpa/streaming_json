@@ -729,7 +729,7 @@ impl<'rj, R: Read> RJiter<'rj, R> {
     ///
     /// Returns `ErrorType::BufferFull` if the buffer fills up with all accepted bytes.
     /// Also returns errors from the underlying reader.
-    pub fn lookahead_while<F>(&mut self, predicate: F) -> RJiterResult<&'rj [u8]>
+    pub fn lookahead_while<F>(&mut self, predicate: F) -> RJiterResult<&[u8]>
     where
         F: Fn(u8) -> bool,
     {
@@ -758,12 +758,7 @@ impl<'rj, R: Read> RJiter<'rj, R> {
         #[allow(clippy::indexing_slicing)]
         let slice = &self.buffer.buf[actual_start..end_pos];
 
-        #[allow(unsafe_code)]
-        let slice_with_lifetime = unsafe {
-            core::mem::transmute::<&[u8], &'rj [u8]>(slice)
-        };
-
-        Ok(slice_with_lifetime)
+        Ok(slice)
     }
 
     //  ------------------------------------------------------------
