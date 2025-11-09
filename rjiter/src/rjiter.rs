@@ -843,51 +843,22 @@ impl<'rj, R: Read> RJiter<'rj, R> {
     /// # Errors
     /// `IoError` or `RJiterError(ExpectedSomeIdent)`
     pub fn known_skip_token(&mut self, token: &[u8]) -> RJiterResult<()> {
-        let change_flag = ChangeFlag::new(&self.buffer);
-        let mut pos = self.jiter.current_index();
-        let mut err_flag = false;
+        // Lookahead the expected number of bytes
+        let lookahead = self.lookahead_n(token.len())?;
 
-        // Read enough bytes to have the token
-        if pos + token.len() >= self.buffer.n_bytes {
-            self.buffer.shift_buffer(0, pos);
-            pos = 0;
-        }
-        while self.buffer.n_bytes < pos + token.len() {
-            let n_new_bytes = self.buffer.read_more()?;
-            if n_new_bytes == 0 {
-                // Not an error for the caller, just a normal end of the json
-                // The code should create a new Jiter. Doing so below
-                err_flag = true;
-                break;
-            }
-        }
+        // Check if the lookahead matches the token
+        let found = lookahead == token;
 
-        // Find the token
-        let found = if err_flag {
-            false
+        // If found, skip the bytes to consume them
+        if found {
+            self.skip_n_bytes(token.len())?;
+            Ok(())
         } else {
-            // `pos` is `jiter.current_index()` or `0`
-            #[allow(clippy::indexing_slicing)]
-            let buf_view = &mut self.buffer.buf[pos..self.buffer.n_bytes];
-            buf_view.starts_with(token)
-        };
-
-        // Sync the Jiter
-        if found {
-            self.buffer.shift_buffer(0, pos + token.len());
+            Err(RJiterError::from_json_error(
+                self.current_index(),
+                JsonErrorType::ExpectedSomeIdent,
+            ))
         }
-        if change_flag.is_changed(&self.buffer) {
-            self.create_new_jiter();
-        }
-
-        // Result
-        if found {
-            return Ok(());
-        }
-        Err(RJiterError::from_json_error(
-            self.current_index(),
-            JsonErrorType::ExpectedSomeIdent,
-        ))
     }
 }
 
