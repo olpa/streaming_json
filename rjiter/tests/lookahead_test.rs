@@ -364,3 +364,211 @@ fn test_lookahead_n_exact_buffer_size() {
     let bytes = result.unwrap().to_vec();
     assert_eq!(bytes, b"1234567890");
 }
+
+//
+// skip_n_bytes tests
+//
+
+/// Test 1: No read, no shift - skip bytes already in buffer from the start
+#[test]
+fn test_skip_n_bytes_no_read_no_shift() {
+    let input = b"1234567890abcdef";
+    let mut buffer = [0u8; 32];
+    let mut reader = input.as_slice();
+
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    // Record position before skip
+    let pos_before = rjiter.current_index();
+    assert_eq!(pos_before, 0);
+
+    // Skip 5 bytes
+    let result = rjiter.skip_n_bytes(5);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), 5);
+
+    // Position should have advanced by 5
+    let pos_after = rjiter.current_index();
+    assert_eq!(pos_after, 5);
+
+    // Verify we're now positioned at '6'
+    let peek_result = rjiter.peek();
+    assert!(peek_result.is_ok());
+    assert_eq!(peek_result.unwrap(), Peek::new(b'6'));
+
+    // Skip 3 more bytes
+    let result = rjiter.skip_n_bytes(3);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), 3);
+
+    // Position should be at 8
+    assert_eq!(rjiter.current_index(), 8);
+
+    // Verify we're at '9'
+    let peek_result = rjiter.peek();
+    assert!(peek_result.is_ok());
+    assert_eq!(peek_result.unwrap(), Peek::new(b'9'));
+}
+
+/// Test 2: Read but no shift - skip bytes that require reading but buffer has space
+#[test]
+fn test_skip_n_bytes_read_no_shift() {
+    let input = b"1234567890abcdefghij";
+    let mut buffer = [0u8; 32]; // Large buffer
+    let mut reader = OneByteReader::new(input.iter().copied());
+
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    // Record position before skip
+    let pos_before = rjiter.current_index();
+    assert_eq!(pos_before, 0);
+
+    // Skip 10 bytes - OneByteReader will force multiple reads
+    let result = rjiter.skip_n_bytes(10);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), 10);
+
+    // Position should have advanced by 10
+    let pos_after = rjiter.current_index();
+    assert_eq!(pos_after, 10);
+
+    // Verify we're now positioned at 'a'
+    let peek_result = rjiter.peek();
+    assert!(peek_result.is_ok());
+    assert_eq!(peek_result.unwrap(), Peek::new(b'a'));
+}
+
+/// Test 3: Read and shift - skip bytes requiring both reading and buffer shifting
+#[test]
+fn test_skip_n_bytes_read_and_shift() {
+    let input = b"false1234567890abcdefghij";
+    let mut buffer = [0u8; 12]; // Small buffer to force shifting
+    let mut reader = OneByteReader::new(input.iter().copied());
+
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    // First, consume the "false" token to move the jiter position forward
+    let result = rjiter.next_bool();
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), false);
+
+    // Now we're at position 5 (after "false")
+    let pos_before = rjiter.current_index();
+    assert_eq!(pos_before, 5);
+
+    // Skip 8 bytes - this should trigger both reading and shifting
+    let result = rjiter.skip_n_bytes(8);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), 8);
+
+    // Position should have advanced by 8
+    let pos_after = rjiter.current_index();
+    assert_eq!(pos_after, 13);
+
+    // Verify we're now positioned at '9'
+    let peek_result = rjiter.peek();
+    assert!(peek_result.is_ok());
+    assert_eq!(peek_result.unwrap(), Peek::new(b'9'));
+}
+
+/// Test 4: Skip to EOF - request more bytes than available
+#[test]
+fn test_skip_n_bytes_eof() {
+    let input = b"12345";
+    let mut buffer = [0u8; 32];
+    let mut reader = input.as_slice();
+
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    // Try to skip more bytes than available
+    let result = rjiter.skip_n_bytes(10);
+    assert!(result.is_ok());
+    // Should only skip 5 bytes (all available)
+    assert_eq!(result.unwrap(), 5);
+
+    // Position should be at end
+    assert_eq!(rjiter.current_index(), 5);
+}
+
+/// Test 5: Skip zero bytes
+#[test]
+fn test_skip_n_bytes_zero() {
+    let input = b"1234567890";
+    let mut buffer = [0u8; 16];
+    let mut reader = input.as_slice();
+
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    let pos_before = rjiter.current_index();
+
+    // Skip 0 bytes
+    let result = rjiter.skip_n_bytes(0);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), 0);
+
+    // Position should be unchanged
+    assert_eq!(rjiter.current_index(), pos_before);
+}
+
+/// Test 6: Skip after consuming some data
+#[test]
+fn test_skip_n_bytes_after_consume() {
+    let input = br#"{"key":"value"}"#;
+    let mut buffer = [0u8; 32];
+    let mut reader = input.as_slice();
+
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    // Consume the opening brace and key
+    let obj = rjiter.next_object().unwrap();
+    assert_eq!(obj, Some("key"));
+
+    let pos_before = rjiter.current_index();
+
+    // Skip the value (7 bytes: "value")
+    let result = rjiter.skip_n_bytes(7);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), 7);
+
+    // Position should have advanced by 7
+    assert_eq!(rjiter.current_index(), pos_before + 7);
+}
+
+/// Test 7: Small buffer - should work by skipping incrementally
+#[test]
+fn test_skip_n_bytes_small_buffer() {
+    // String: "1234567890abcdefghijklmnopqrstuvwxyz" (36 chars total)
+    // Index:   0123456789012345678901234567890123456
+    //                    1111111111222222222233333333
+    let input = b"1234567890abcdefghijklmnopqrstuvwxyz";
+    let mut buffer = [0u8; 8]; // Small buffer
+    let mut reader = input.as_slice();
+
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    // Skip more bytes than buffer can hold - should work incrementally
+    let result = rjiter.skip_n_bytes(20);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), 20);
+
+    // Position should have advanced by 20
+    assert_eq!(rjiter.current_index(), 20);
+
+    // Index 20 is 'k' (after "1234567890abcdefghij")
+    let peek_result = rjiter.peek();
+    assert!(peek_result.is_ok());
+    assert_eq!(peek_result.unwrap(), Peek::new(b'k'));
+
+    // Skip 10 more bytes with the small buffer
+    let result = rjiter.skip_n_bytes(10);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), 10);
+
+    // Position should be at 30
+    assert_eq!(rjiter.current_index(), 30);
+
+    // Index 30 is 'u' (after "1234567890abcdefghijklmnopqrst")
+    let peek_result = rjiter.peek();
+    assert!(peek_result.is_ok());
+    assert_eq!(peek_result.unwrap(), Peek::new(b'u'));
+}

@@ -804,6 +804,35 @@ impl<'rj, R: Read> RJiter<'rj, R> {
         Ok(slice)
     }
 
+    /// Skip exactly `count` bytes, consuming them from the buffer.
+    /// Returns the number of bytes actually skipped (may be less than `count` if EOF is reached).
+    ///
+    /// This function skips bytes incrementally, so it works even with small buffers.
+    /// It uses `Buffer::skip_n` to find the position, then shifts to consume the bytes.
+    ///
+    /// # Arguments
+    ///
+    /// * `count` - The number of bytes to skip
+    ///
+    /// # Errors
+    ///
+    /// Returns errors from the underlying reader.
+    pub fn skip_n_bytes(&mut self, count: usize) -> RJiterResult<usize> {
+        // jiter.current_index() returns position within its slice view of the buffer
+        let start_pos = self.jiter.current_index();
+
+        // Use Buffer::skip_n to get the new position and bytes skipped
+        let (new_pos, bytes_skipped) = self.buffer.skip_n(count, start_pos)?;
+
+        // Shift the buffer to consume the skipped bytes
+        self.buffer.shift_buffer(0, new_pos);
+
+        // Create new jiter positioned at position 0 (after shift)
+        self.create_new_jiter();
+
+        Ok(bytes_skipped)
+    }
+
     //  ------------------------------------------------------------
     // Skip token
     //
