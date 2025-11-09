@@ -1181,3 +1181,207 @@ fn test_lookahead_while_with_buffer_read() {
     assert!(int_result.is_ok());
     assert_eq!(int_result.unwrap(), rjiter::jiter::NumberInt::Int(12345));
 }
+
+//
+// lookahead_n tests
+//
+
+/// Test 1: Normal get - lookahead n bytes that are already in buffer
+#[test]
+fn test_lookahead_n_normal_get() {
+    let input = b"1234567890abcdef";
+    let mut buffer = [0u8; 32];
+    let mut reader = input.as_slice();
+
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    // Lookahead 5 bytes
+    let result = rjiter.lookahead_n(5);
+    assert!(result.is_ok());
+    let bytes = result.unwrap().to_vec(); // Copy to avoid borrow issues
+    assert_eq!(bytes, b"12345");
+
+    // Lookahead should not consume - we can lookahead again
+    let result = rjiter.lookahead_n(3);
+    assert!(result.is_ok());
+    let bytes = result.unwrap().to_vec();
+    assert_eq!(bytes, b"123");
+
+    // Lookahead larger amount
+    let result = rjiter.lookahead_n(10);
+    assert!(result.is_ok());
+    let bytes = result.unwrap().to_vec();
+    assert_eq!(bytes, b"1234567890");
+}
+
+/// Test 2: Buffer too small - request more bytes than buffer can hold
+#[test]
+fn test_lookahead_n_buffer_too_small() {
+    let input = b"1234567890abcdef";
+    let mut buffer = [0u8; 8]; // Small buffer
+    let mut reader = input.as_slice();
+
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    // Try to lookahead more bytes than buffer can hold
+    let result = rjiter.lookahead_n(20);
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert_eq!(err.error_type, rjiter::error::ErrorType::BufferFull);
+}
+
+/// Test 3: Get to EOF, less than n - request more bytes than available
+#[test]
+fn test_lookahead_n_eof_less_than_n() {
+    let input = b"12345";
+    let mut buffer = [0u8; 32];
+    let mut reader = input.as_slice();
+
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    // Try to lookahead more bytes than available
+    let result = rjiter.lookahead_n(10);
+    assert!(result.is_ok());
+    let bytes = result.unwrap().to_vec();
+    // Should return only what's available (5 bytes)
+    assert_eq!(bytes, b"12345");
+    assert_eq!(bytes.len(), 5);
+}
+
+/// Test 4: Shift in collect_count - buffer needs to shift to make room
+#[test]
+fn test_lookahead_n_shift_in_collect() {
+    let input = b"false1234567890abcdefghij";
+    let mut buffer = [0u8; 12]; // Small buffer to force shifting
+    let mut reader = OneByteReader::new(input.iter().copied());
+
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    // First, consume the "false" token to move the jiter position forward
+    let result = rjiter.next_bool();
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), false);
+
+    // Now we're at position 5 (after "false")
+    // The buffer has limited space, so requesting many bytes should trigger shift
+    let result = rjiter.lookahead_n(8);
+    assert!(result.is_ok());
+    let bytes = result.unwrap().to_vec();
+    // Should successfully get 8 bytes starting from current position
+    assert_eq!(bytes, b"12345678");
+}
+
+/// Test 5: Read in collect_count - needs to read more data from reader
+#[test]
+fn test_lookahead_n_read_in_collect() {
+    // Use ChunkReader to control when data becomes available
+    let data = b"1234567890abcdefghijklmnop".to_vec();
+    let mut buffer = [0u8; 32];
+    // ChunkReader with interrupt at 'f' - splits data into chunks
+    let mut reader = ChunkReader::new(&data, b'f');
+
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    // Request 15 bytes - should require reading across the chunk boundary
+    let result = rjiter.lookahead_n(15);
+    assert!(result.is_ok());
+    let bytes = result.unwrap().to_vec();
+    assert_eq!(bytes, b"1234567890abcde");
+}
+
+/// Test 6: Lookahead after consuming some data
+#[test]
+fn test_lookahead_n_after_consume() {
+    let input = br#"{"key":"value"}"#;
+    let mut buffer = [0u8; 32];
+    let mut reader = input.as_slice();
+
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    // Consume the opening brace
+    let obj = rjiter.next_object().unwrap();
+    assert_eq!(obj, Some("key"));
+
+    // Now lookahead at the value
+    let result = rjiter.lookahead_n(7);
+    assert!(result.is_ok());
+    let bytes = result.unwrap().to_vec();
+    assert_eq!(bytes, b"\"value\"");
+}
+
+/// Test 7: Lookahead zero bytes
+#[test]
+fn test_lookahead_n_zero_bytes() {
+    let input = b"1234567890";
+    let mut buffer = [0u8; 16];
+    let mut reader = input.as_slice();
+
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    // Lookahead 0 bytes
+    let result = rjiter.lookahead_n(0);
+    assert!(result.is_ok());
+    let bytes = result.unwrap().to_vec();
+    assert_eq!(bytes.len(), 0);
+}
+
+/// Test 8: Multiple lookaheads with different sizes
+#[test]
+fn test_lookahead_n_multiple_sizes() {
+    let input = b"abcdefghijklmnop";
+    let mut buffer = [0u8; 32];
+    let mut reader = input.as_slice();
+
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    // First lookahead
+    {
+        let bytes = rjiter.lookahead_n(3).unwrap();
+        assert_eq!(bytes, b"abc");
+    }
+
+    // Second lookahead - larger
+    {
+        let bytes = rjiter.lookahead_n(7).unwrap();
+        assert_eq!(bytes, b"abcdefg");
+    }
+
+    // Third lookahead - smaller again
+    {
+        let bytes = rjiter.lookahead_n(2).unwrap();
+        assert_eq!(bytes, b"ab");
+    }
+}
+
+/// Test 9: Lookahead with OneByteReader (forces multiple reads)
+#[test]
+fn test_lookahead_n_one_byte_reader() {
+    let input = b"The quick brown fox";
+    let mut buffer = [0u8; 32];
+    let mut reader = OneByteReader::new(input.iter().copied());
+
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    // Request 10 bytes - OneByteReader only reads 1 byte at a time
+    let result = rjiter.lookahead_n(10);
+    assert!(result.is_ok());
+    let bytes = result.unwrap().to_vec();
+    assert_eq!(bytes, b"The quick ");
+    assert_eq!(bytes.len(), 10);
+}
+
+/// Test 10: Lookahead exact buffer size
+#[test]
+fn test_lookahead_n_exact_buffer_size() {
+    let input = b"1234567890abcdefghij";
+    let mut buffer = [0u8; 10];
+    let mut reader = input.as_slice();
+
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+
+    // Request exact buffer size
+    let result = rjiter.lookahead_n(10);
+    assert!(result.is_ok());
+    let bytes = result.unwrap().to_vec();
+    assert_eq!(bytes, b"1234567890");
+}

@@ -761,6 +761,49 @@ impl<'rj, R: Read> RJiter<'rj, R> {
         Ok(slice)
     }
 
+    /// Lookahead exactly `count` bytes without consuming them.
+    /// Returns a slice of the requested bytes, or fewer if EOF is reached.
+    ///
+    /// This is a wrapper around `Buffer::collect_count` that returns a slice
+    /// instead of an offset. The bytes are not consumed from the buffer.
+    ///
+    /// # Arguments
+    ///
+    /// * `count` - The number of bytes to lookahead
+    ///
+    /// # Errors
+    ///
+    /// Returns `ErrorType::BufferFull` if the buffer is too small to hold the requested bytes.
+    /// Also returns errors from the underlying reader.
+    pub fn lookahead_n(&mut self, count: usize) -> RJiterResult<&[u8]> {
+        let change_flag = ChangeFlag::new(&self.buffer);
+
+        // jiter.current_index() returns position within its slice view of the buffer
+        let start_pos = self.jiter.current_index();
+        let n_shifted_before = self.buffer.n_shifted_out;
+
+        // Allow collect_count to shift if needed
+        let (mut actual_start, mut end_pos) = self.buffer.collect_count(count, start_pos, true)?;
+
+        // If buffer changed, it either shifted in collect_count or just read more data
+        if change_flag.is_changed(&self.buffer) {
+            // If collect_count didn't shift but we need to (start_pos > 0), shift now
+            if n_shifted_before == self.buffer.n_shifted_out && start_pos > 0 {
+                self.buffer.shift_buffer(0, start_pos);
+                // After manual shift, adjust positions
+                end_pos -= start_pos;
+                actual_start = 0;
+            }
+            // Note: if collect_count shifted, actual_start is already 0
+            self.create_new_jiter();
+        }
+
+        #[allow(clippy::indexing_slicing)]
+        let slice = &self.buffer.buf[actual_start..end_pos];
+
+        Ok(slice)
+    }
+
     //  ------------------------------------------------------------
     // Skip token
     //
