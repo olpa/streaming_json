@@ -254,6 +254,64 @@ impl<'buf, R: Read> Buffer<'buf, R> {
             }
         }
     }
+
+    /// Skip exactly `count` bytes starting at the given position, or until EOF.
+    /// Returns the new position in the buffer after skipping.
+    ///
+    /// This function works incrementally and can skip any number of bytes regardless
+    /// of buffer size. It repeatedly shifts and reads as needed when the buffer is too small.
+    /// When bytes fit in the buffer, it just returns the new position without shifting.
+    ///
+    /// # Arguments
+    ///
+    /// * `count` - The number of bytes to skip
+    /// * `start_pos` - The position in the buffer to start skipping from
+    ///
+    /// # Errors
+    ///
+    /// Returns errors from the underlying reader.
+    pub fn skip_n(&mut self, count: usize, start_pos: usize) -> RJiterResult<(usize, usize)> {
+        let mut remaining = count;
+        let mut current_pos = start_pos;
+        let mut total_skipped = 0;
+
+        while remaining > 0 {
+            // How many bytes are available in the buffer from current position?
+            let available = if current_pos < self.n_bytes {
+                self.n_bytes - current_pos
+            } else {
+                0
+            };
+
+            if available >= remaining {
+                // We have enough bytes in the buffer to complete the skip
+                total_skipped += remaining;
+                return Ok((current_pos + remaining, total_skipped));
+            }
+
+            // Not enough bytes - account for what we have
+            if available > 0 {
+                total_skipped += available;
+                remaining -= available;
+                current_pos += available;
+            }
+
+            // Only shift if buffer is full (no space to read more)
+            if self.n_bytes == self.buf.len() {
+                self.shift_buffer(0, current_pos);
+                current_pos = 0;
+            }
+
+            // Try to read more data
+            let n_new = self.read_more()?;
+            if n_new == 0 {
+                // EOF reached - return current position and how many we actually skipped
+                return Ok((current_pos, total_skipped));
+            }
+        }
+
+        Ok((current_pos, total_skipped))
+    }
 }
 
 impl<R: Read> core::fmt::Debug for Buffer<'_, R> {

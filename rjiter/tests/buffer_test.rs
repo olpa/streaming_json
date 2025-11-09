@@ -750,3 +750,205 @@ fn test_collect_count_shift_and_multiple_reads() {
     assert_eq!(&buffer.buf[..offset], b"abcd");
     assert_eq!(buffer.n_shifted_out, 2);
 }
+
+//
+// skip_n tests
+//
+
+#[test]
+fn test_skip_n_basic() {
+    let input = "abcdefghi";
+    let mut reader = input.as_bytes();
+    let mut buf = [0u8; 16];
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+    buffer.read_more().unwrap();
+
+    // Skip 3 bytes from position 0 - bytes fit, no shift
+    let (new_pos, bytes_skipped) = buffer.skip_n(3, 0).unwrap();
+
+    assert_eq!(new_pos, 3); // New position, no shift
+    assert_eq!(bytes_skipped, 3); // Skipped 3 bytes
+    assert_eq!(&buffer.buf[..buffer.n_bytes], b"abcdefghi"); // Buffer unchanged
+    assert_eq!(buffer.n_shifted_out, 0);
+}
+
+#[test]
+fn test_skip_n_from_non_zero_pos() {
+    let input = "abcdefghi";
+    let mut reader = input.as_bytes();
+    let mut buf = [0u8; 16];
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+    buffer.read_more().unwrap();
+
+    // Skip 3 bytes starting from position 2 - bytes fit, no shift
+    let (new_pos, bytes_skipped) = buffer.skip_n(3, 2).unwrap();
+
+    assert_eq!(new_pos, 5); // New position, no shift
+    assert_eq!(bytes_skipped, 3);
+    assert_eq!(&buffer.buf[..buffer.n_bytes], b"abcdefghi"); // Buffer unchanged
+    assert_eq!(buffer.n_shifted_out, 0);
+}
+
+#[test]
+fn test_skip_n_until_eof() {
+    let input = "abc";
+    let mut reader = input.as_bytes();
+    let mut buf = [0u8; 16];
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+    buffer.read_more().unwrap();
+
+    // Try to skip 10 bytes but only 3 available - hits EOF
+    // With optimization: buffer not full, so no shift before EOF
+    let (new_pos, bytes_skipped) = buffer.skip_n(10, 0).unwrap();
+
+    assert_eq!(new_pos, 3); // Position after skipping all 3 bytes
+    assert_eq!(bytes_skipped, 3); // Only 3 bytes available
+    assert_eq!(&buffer.buf[..buffer.n_bytes], b"abc"); // Bytes still in buffer
+    assert_eq!(buffer.n_shifted_out, 0); // No shift needed
+}
+
+#[test]
+fn test_skip_n_exact_match() {
+    let input = "abcdef";
+    let mut reader = input.as_bytes();
+    let mut buf = [0u8; 16];
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+    buffer.read_more().unwrap();
+
+    // Skip exactly all available bytes - bytes fit, no shift
+    let (new_pos, bytes_skipped) = buffer.skip_n(6, 0).unwrap();
+
+    assert_eq!(new_pos, 6); // New position, no shift
+    assert_eq!(bytes_skipped, 6);
+    assert_eq!(&buffer.buf[..buffer.n_bytes], b"abcdef"); // Buffer unchanged
+    assert_eq!(buffer.n_shifted_out, 0);
+}
+
+#[test]
+fn test_skip_n_zero_bytes() {
+    let input = "abcdef";
+    let mut reader = input.as_bytes();
+    let mut buf = [0u8; 16];
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+    buffer.read_more().unwrap();
+
+    // Skip 0 bytes
+    let (new_pos, bytes_skipped) = buffer.skip_n(0, 0).unwrap();
+
+    assert_eq!(new_pos, 0);
+    assert_eq!(bytes_skipped, 0);
+    assert_eq!(&buffer.buf[..buffer.n_bytes], b"abcdef");
+    assert_eq!(buffer.n_shifted_out, 0);
+}
+
+#[test]
+fn test_skip_n_small_buffer_incremental() {
+    let input = "abcdefghijklmnopqrstuvwxyz"; // 26 bytes
+    let mut reader = input.as_bytes();
+    let mut buf = [0u8; 5]; // Small buffer
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+
+    // Skip 20 bytes - requires multiple iterations (shifts and reads)
+    // After shifting 15 bytes (3 iterations of 5), buffer has 5 bytes left "pqrst"
+    // Can skip final 5 bytes without shifting
+    let (new_pos, bytes_skipped) = buffer.skip_n(20, 0).unwrap();
+
+    assert_eq!(new_pos, 5); // Position in current buffer (shifted 15, skipped last 5)
+    assert_eq!(bytes_skipped, 20); // All 20 bytes skipped
+    assert_eq!(buffer.n_shifted_out, 15); // Only 15 bytes shifted
+    assert_eq!(&buffer.buf[..buffer.n_bytes], b"pqrst"); // Last chunk in buffer
+}
+
+#[test]
+fn test_skip_n_small_buffer_with_one_byte_reader() {
+    let input = b"abcdefghijklmnop"; // 16 bytes
+    let mut reader = OneByteReader::new(input.iter().copied());
+    let mut buf = [0u8; 4]; // Small buffer
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+
+    // Skip 10 bytes - OneByteReader reads 1 byte at a time
+    // With optimization: buffer fills to 4 bytes before shifting
+    // After "abcd" (shift), "efgh" (shift), "ij" remain
+    let (new_pos, bytes_skipped) = buffer.skip_n(10, 0).unwrap();
+
+    assert_eq!(new_pos, 2); // Position in current buffer
+    assert_eq!(bytes_skipped, 10); // All 10 bytes skipped
+    assert_eq!(buffer.n_shifted_out, 8); // 8 bytes shifted (2 shifts of 4)
+    assert_eq!(&buffer.buf[..buffer.n_bytes], b"ij"); // Last 2 bytes in buffer
+}
+
+#[test]
+fn test_skip_n_from_pos_then_skip_more() {
+    let input = "abcdefghijklmnop";
+    let mut reader = input.as_bytes();
+    let mut buf = [0u8; 16];
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+    buffer.read_more().unwrap();
+
+    // First skip from position 2 - bytes fit, no shift
+    let (new_pos1, bytes_skipped1) = buffer.skip_n(3, 2).unwrap();
+    assert_eq!(new_pos1, 5); // New position
+    assert_eq!(bytes_skipped1, 3);
+    assert_eq!(&buffer.buf[..buffer.n_bytes], b"abcdefghijklmnop");
+    assert_eq!(buffer.n_shifted_out, 0);
+
+    // Then skip more from new position - bytes fit, no shift
+    let (new_pos2, bytes_skipped2) = buffer.skip_n(4, new_pos1).unwrap();
+    assert_eq!(new_pos2, 9); // New position
+    assert_eq!(bytes_skipped2, 4);
+    assert_eq!(&buffer.buf[..buffer.n_bytes], b"abcdefghijklmnop");
+    assert_eq!(buffer.n_shifted_out, 0);
+}
+
+#[test]
+fn test_skip_n_empty_buffer() {
+    let input = "";
+    let mut reader = input.as_bytes();
+    let mut buf = [0u8; 16];
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+    buffer.read_more().unwrap();
+
+    // Try to skip from empty buffer
+    let (new_pos, bytes_skipped) = buffer.skip_n(5, 0).unwrap();
+
+    assert_eq!(new_pos, 0);
+    assert_eq!(bytes_skipped, 0); // No bytes to skip
+    assert_eq!(buffer.n_bytes, 0);
+    assert_eq!(buffer.n_shifted_out, 0);
+}
+
+#[test]
+fn test_skip_n_eof_from_non_zero_pos() {
+    let input = "abcdef";
+    let mut reader = input.as_bytes();
+    let mut buf = [0u8; 16];
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+    buffer.read_more().unwrap();
+
+    // Skip from position 4, trying to skip 10 bytes but only 2 available - hits EOF
+    // With optimization: buffer not full, so no shift before EOF
+    let (new_pos, bytes_skipped) = buffer.skip_n(10, 4).unwrap();
+
+    assert_eq!(new_pos, 6); // Position after skipping 2 bytes from pos 4
+    assert_eq!(bytes_skipped, 2); // Only 2 bytes available from position 4
+    assert_eq!(&buffer.buf[..buffer.n_bytes], b"abcdef"); // Bytes still in buffer
+    assert_eq!(buffer.n_shifted_out, 0); // No shift needed
+}
+
+#[test]
+fn test_skip_n_very_small_buffer_many_bytes() {
+    let input = "abcdefghijklmnopqrstuvwxyz0123456789"; // 36 bytes
+    let mut reader = input.as_bytes();
+    let mut buf = [0u8; 3]; // Very small buffer
+    let mut buffer = Buffer::new(&mut reader, &mut buf);
+
+    // Skip 30 bytes - requires many iterations with 3-byte buffer
+    // After 9 shifts (27 bytes shifted), buffer has bytes 27-29 = "123"
+    // Final iteration: available=3 >= remaining(3), returns position 3
+    let (new_pos, bytes_skipped) = buffer.skip_n(30, 0).unwrap();
+
+    assert_eq!(new_pos, 3); // Position in current buffer (end of 3-byte buffer)
+    assert_eq!(bytes_skipped, 30); // All 30 bytes skipped
+    assert_eq!(buffer.n_shifted_out, 27); // 27 bytes shifted
+    assert_eq!(&buffer.buf[..buffer.n_bytes], b"123"); // Bytes 27-29 in buffer
+}
