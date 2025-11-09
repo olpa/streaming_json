@@ -736,43 +736,29 @@ impl<'rj, R: Read> RJiter<'rj, R> {
         let change_flag = ChangeFlag::new(&self.buffer);
 
         // jiter.current_index() returns position within its slice view of the buffer
-        let jiter_start_pos = self.jiter.current_index();
+        let mut start_pos = self.jiter.current_index();
+        let n_shifted_before = self.buffer.n_shifted_out;
 
         // Allow collect_while to shift if needed
-        let end_pos = self.buffer.collect_while(predicate, jiter_start_pos, true)?;
+        let mut end_pos = self.buffer.collect_while(predicate, start_pos, true)?;
 
-        // Calculate the length of matched content
-        let match_length = end_pos - jiter_start_pos;
-
-        // Fast path: if buffer didn't change, return slice immediately
-        if !change_flag.is_changed(&self.buffer) {
-            #[allow(clippy::indexing_slicing)]
-            let slice = &self.buffer.buf[jiter_start_pos..jiter_start_pos + match_length];
-
-            #[allow(unsafe_code)]
-            let slice_with_lifetime = unsafe {
-                core::mem::transmute::<&[u8], &'rj [u8]>(slice)
-            };
-
-            return Ok(slice_with_lifetime);
+        // If buffer changed, it either shifted in collect_while or just read more data
+        if change_flag.is_changed(&self.buffer) {
+            // If collect_while didn't shift but we need to (start_pos > 0), shift now
+            if n_shifted_before == self.buffer.n_shifted_out && start_pos > 0 {
+                self.buffer.shift_buffer(0, start_pos);
+                // After manual shift, adjust positions
+                end_pos -= start_pos;
+                start_pos = 0;
+            } else if n_shifted_before != self.buffer.n_shifted_out {
+                // collect_while shifted, data is now at position 0
+                start_pos = 0;
+            }
+            self.create_new_jiter();
         }
 
-        // Slow path: buffer changed
-        // collect_while may or may not have shifted. We need to check and shift if needed.
-
-        // If jiter_start_pos > 0, we need to shift the buffer so data starts at position 0
-        // (collect_while only shifts when buffer is full, not just when reading more data)
-        if jiter_start_pos > 0 {
-            self.buffer.shift_buffer(0, jiter_start_pos);
-        }
-
-        // Recreate jiter so it sees the updated buffer
-        self.create_new_jiter();
-        // After create_new_jiter(), jiter is at position 0
-
-        // The matched bytes are at position 0 with length match_length
         #[allow(clippy::indexing_slicing)]
-        let slice = &self.buffer.buf[0..match_length];
+        let slice = &self.buffer.buf[start_pos..end_pos];
 
         #[allow(unsafe_code)]
         let slice_with_lifetime = unsafe {
