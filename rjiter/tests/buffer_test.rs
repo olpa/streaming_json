@@ -333,12 +333,12 @@ fn test_collect_while_basic() {
     buffer.read_more().unwrap();
 
     // Collect alphabetic characters from position 0
-    let offset = buffer
+    let (start, offset) = buffer
         .collect_while(|b| b.is_ascii_alphabetic(), 0, true)
         .unwrap();
 
-    assert_eq!(offset, 3); // Stops at '1'
-    assert_eq!(&buffer.buf[..offset], b"abc");
+    assert_eq!((start, offset), (0, 3)); // Stops at '1'
+    assert_eq!(&buffer.buf[start..offset], b"abc");
     assert_eq!(buffer.n_shifted_out, 0);
 }
 
@@ -351,12 +351,12 @@ fn test_collect_while_from_non_zero_pos() {
     buffer.read_more().unwrap();
 
     // Collect digits starting from position 3
-    let offset = buffer
+    let (start, offset) = buffer
         .collect_while(|b| b.is_ascii_digit(), 3, true)
         .unwrap();
 
-    assert_eq!(offset, 6); // Stops at 'd'
-    assert_eq!(&buffer.buf[3..offset], b"123");
+    assert_eq!((start, offset), (3, 6)); // Stops at 'd'
+    assert_eq!(&buffer.buf[start..offset], b"123");
     assert_eq!(buffer.n_shifted_out, 0);
 }
 
@@ -369,12 +369,12 @@ fn test_collect_while_until_eof() {
     buffer.read_more().unwrap();
 
     // Collect all alphabetic characters (should reach EOF)
-    let offset = buffer
+    let (start, offset) = buffer
         .collect_while(|b| b.is_ascii_alphabetic(), 0, true)
         .unwrap();
 
-    assert_eq!(offset, 6); // EOF reached
-    assert_eq!(&buffer.buf[..offset], b"abcdef");
+    assert_eq!((start, offset), (0, 6)); // EOF reached
+    assert_eq!(&buffer.buf[start..offset], b"abcdef");
     assert_eq!(buffer.n_bytes, 6);
 }
 
@@ -387,9 +387,9 @@ fn test_collect_while_with_shift_from_pos2() {
 
     // Collect all 'a's starting from position 2 (after "XX")
     // When buffer fills, shift discards the "XX" prefix (everything before pos 2)
-    let offset = buffer.collect_while(|b| b == b'a', 2, true).unwrap();
+    let (start, offset) = buffer.collect_while(|b| b == b'a', 2, true).unwrap();
 
-    assert_eq!(offset, 4); // After shift, rejection is at position 4 (collected 4 'a's)
+    assert_eq!((start, offset), (0, 4)); // After shift, data starts at 0, rejection is at position 4 (collected 4 'a's)
     assert_eq!(&buffer.buf[..offset], b"aaaa");
     assert_eq!(&buffer.buf[..buffer.n_bytes], b"aaaa1");
     assert_eq!(buffer.n_shifted_out, 2); // Only 2 ('XX') shifted out
@@ -404,9 +404,9 @@ fn test_collect_while_with_shift_from_pos1() {
 
     // Collect all 'a's starting from position 1 (after "X")
     // Buffer fills with "Xaaaa", then shift discards the "X" prefix (everything before pos 1)
-    let offset = buffer.collect_while(|b| b == b'a', 1, true).unwrap();
+    let (start, offset) = buffer.collect_while(|b| b == b'a', 1, true).unwrap();
 
-    assert_eq!(offset, 4); // After shift, rejection is at position 4 (collected 4 'a's)
+    assert_eq!((start, offset), (0, 4)); // After shift, data starts at 0, rejection is at position 4 (collected 4 'a's)
     assert_eq!(&buffer.buf[..offset], b"aaaa");
     assert_eq!(&buffer.buf[..buffer.n_bytes], b"aaaa1");
     assert_eq!(buffer.n_shifted_out, 1); // Only 1 ('X') shifted out
@@ -455,9 +455,9 @@ fn test_collect_while_rejection_after_read() {
     let mut buffer = Buffer::new(&mut reader, &mut buf);
 
     // Collect 'a's - needs to read multiple times (one byte at a time) to find rejection
-    let offset = buffer.collect_while(|b| b == b'a', 0, true).unwrap();
+    let (start, offset) = buffer.collect_while(|b| b == b'a', 0, true).unwrap();
 
-    assert_eq!(offset, 3); // Rejection at position 3
+    assert_eq!((start, offset), (0, 3)); // Rejection at position 3
     assert_eq!(&buffer.buf[..offset], b"aaa");
     assert_eq!(&buffer.buf[..buffer.n_bytes], b"aaa1");
     assert_eq!(buffer.n_shifted_out, 0); // No shift needed
@@ -472,11 +472,11 @@ fn test_collect_while_immediate_rejection() {
     buffer.read_more().unwrap();
 
     // Try to collect alphabetic from position 0, but first byte is '1'
-    let offset = buffer
+    let (start, offset) = buffer
         .collect_while(|b| b.is_ascii_alphabetic(), 0, true)
         .unwrap();
 
-    assert_eq!(offset, 0); // Immediate rejection
+    assert_eq!((start, offset), (0, 0)); // Immediate rejection
     assert_eq!(buffer.n_shifted_out, 0);
 }
 
@@ -489,11 +489,11 @@ fn test_collect_while_empty_buffer() {
     buffer.read_more().unwrap();
 
     // Collect from empty buffer
-    let offset = buffer
+    let (start, offset) = buffer
         .collect_while(|b| b.is_ascii_alphabetic(), 0, true)
         .unwrap();
 
-    assert_eq!(offset, 0);
+    assert_eq!((start, offset), (0, 0));
     assert_eq!(buffer.n_bytes, 0);
 }
 
@@ -522,9 +522,9 @@ fn test_collect_while_rejection_after_multiple_reads() {
 
     // Needs to read multiple times (one byte at a time) before finding rejection
     // When buffer fills with "Xa", shift discards 'X', continues with 'a's
-    let offset = buffer.collect_while(|b| b == b'a', 1, true).unwrap();
+    let (start, offset) = buffer.collect_while(|b| b == b'a', 1, true).unwrap();
 
-    assert_eq!(offset, 4); // Rejection at position 4 (after shift and more reads)
+    assert_eq!((start, offset), (0, 4)); // After shift, data starts at 0, rejection at position 4
     assert_eq!(&buffer.buf[..offset], b"aaaa");
     assert_eq!(&buffer.buf[..buffer.n_bytes], b"aaaa1");
     assert_eq!(buffer.n_shifted_out, 1);
@@ -539,10 +539,10 @@ fn test_collect_count_basic() {
     buffer.read_more().unwrap();
 
     // Collect exactly 3 bytes from position 0
-    let offset = buffer.collect_count(3, 0, true).unwrap();
+    let (start, offset) = buffer.collect_count(3, 0, true).unwrap();
 
-    assert_eq!(offset, 3);
-    assert_eq!(&buffer.buf[..offset], b"abc");
+    assert_eq!((start, offset), (0, 3));
+    assert_eq!(&buffer.buf[start..offset], b"abc");
     assert_eq!(buffer.n_shifted_out, 0);
 }
 
@@ -555,10 +555,10 @@ fn test_collect_count_from_non_zero_pos() {
     buffer.read_more().unwrap();
 
     // Collect 3 bytes starting from position 2
-    let offset = buffer.collect_count(3, 2, true).unwrap();
+    let (start, offset) = buffer.collect_count(3, 2, true).unwrap();
 
-    assert_eq!(offset, 5); // 2 + 3
-    assert_eq!(&buffer.buf[2..offset], b"cde");
+    assert_eq!((start, offset), (2, 5)); // 2 + 3
+    assert_eq!(&buffer.buf[start..offset], b"cde");
     assert_eq!(buffer.n_shifted_out, 0);
 }
 
@@ -571,10 +571,10 @@ fn test_collect_count_until_eof() {
     buffer.read_more().unwrap();
 
     // Try to collect 10 bytes but only 3 available
-    let offset = buffer.collect_count(10, 0, true).unwrap();
+    let (start, offset) = buffer.collect_count(10, 0, true).unwrap();
 
-    assert_eq!(offset, 3); // EOF reached
-    assert_eq!(&buffer.buf[..offset], b"abc");
+    assert_eq!((start, offset), (0, 3)); // EOF reached
+    assert_eq!(&buffer.buf[start..offset], b"abc");
     assert_eq!(buffer.n_bytes, 3);
 }
 
@@ -587,10 +587,10 @@ fn test_collect_count_exact_match() {
     buffer.read_more().unwrap();
 
     // Collect exactly all available bytes
-    let offset = buffer.collect_count(6, 0, true).unwrap();
+    let (start, offset) = buffer.collect_count(6, 0, true).unwrap();
 
-    assert_eq!(offset, 6);
-    assert_eq!(&buffer.buf[..offset], b"abcdef");
+    assert_eq!((start, offset), (0, 6));
+    assert_eq!(&buffer.buf[start..offset], b"abcdef");
 }
 
 #[test]
@@ -602,9 +602,9 @@ fn test_collect_count_zero_bytes() {
     buffer.read_more().unwrap();
 
     // Collect 0 bytes
-    let offset = buffer.collect_count(0, 0, true).unwrap();
+    let (start, offset) = buffer.collect_count(0, 0, true).unwrap();
 
-    assert_eq!(offset, 0);
+    assert_eq!((start, offset), (0, 0));
     assert_eq!(buffer.n_shifted_out, 0);
 }
 
@@ -617,9 +617,9 @@ fn test_collect_count_with_shift_from_pos2() {
 
     // Collect 4 bytes starting from position 2
     // When buffer fills, shift discards the "XX" prefix
-    let offset = buffer.collect_count(4, 2, true).unwrap();
+    let (start, offset) = buffer.collect_count(4, 2, true).unwrap();
 
-    assert_eq!(offset, 4); // After shift, collected bytes are at 0-3
+    assert_eq!((start, offset), (0, 4)); // After shift, collected bytes are at 0-3
     assert_eq!(&buffer.buf[..offset], b"abcd");
     assert_eq!(&buffer.buf[..buffer.n_bytes], b"abcde");
     assert_eq!(buffer.n_shifted_out, 2); // "XX" shifted out
@@ -634,10 +634,10 @@ fn test_collect_count_with_shift_from_pos1() {
 
     // Collect 4 bytes starting from position 1
     // Buffer initially reads "Xabcd" (5 bytes), which already contains the 4 bytes needed
-    let offset = buffer.collect_count(4, 1, true).unwrap();
+    let (start, offset) = buffer.collect_count(4, 1, true).unwrap();
 
-    assert_eq!(offset, 5); // Bytes are at positions 1-4
-    assert_eq!(&buffer.buf[1..offset], b"abcd");
+    assert_eq!((start, offset), (1, 5)); // Bytes are at positions 1-4
+    assert_eq!(&buffer.buf[start..offset], b"abcd");
     assert_eq!(buffer.n_shifted_out, 0); // No shift needed
 }
 
@@ -699,10 +699,10 @@ fn test_collect_count_with_one_byte_reader() {
     let mut buffer = Buffer::new(&mut reader, &mut buf);
 
     // Collect 5 bytes - needs multiple reads (one byte at a time)
-    let offset = buffer.collect_count(5, 0, true).unwrap();
+    let (start, offset) = buffer.collect_count(5, 0, true).unwrap();
 
-    assert_eq!(offset, 5);
-    assert_eq!(&buffer.buf[..offset], b"abcde");
+    assert_eq!((start, offset), (0, 5));
+    assert_eq!(&buffer.buf[start..offset], b"abcde");
     assert_eq!(buffer.n_shifted_out, 0);
 }
 
@@ -715,9 +715,9 @@ fn test_collect_count_empty_buffer() {
     buffer.read_more().unwrap();
 
     // Try to collect from empty buffer
-    let offset = buffer.collect_count(5, 0, true).unwrap();
+    let (start, offset) = buffer.collect_count(5, 0, true).unwrap();
 
-    assert_eq!(offset, 0); // EOF immediately
+    assert_eq!((start, offset), (0, 0)); // EOF immediately
     assert_eq!(buffer.n_bytes, 0);
 }
 
@@ -730,10 +730,10 @@ fn test_collect_count_eof_from_non_zero_pos() {
     buffer.read_more().unwrap();
 
     // Try to collect 10 bytes from position 1, only 2 bytes available
-    let offset = buffer.collect_count(10, 1, true).unwrap();
+    let (start, offset) = buffer.collect_count(10, 1, true).unwrap();
 
-    assert_eq!(offset, 3); // EOF reached at position 3 (start 1 + collected 2)
-    assert_eq!(&buffer.buf[1..offset], b"bc");
+    assert_eq!((start, offset), (1, 3)); // EOF reached at position 3 (start 1 + collected 2)
+    assert_eq!(&buffer.buf[start..offset], b"bc");
 }
 
 #[test]
@@ -744,9 +744,9 @@ fn test_collect_count_shift_and_multiple_reads() {
     let mut buffer = Buffer::new(&mut reader, &mut buf);
 
     // Collect 4 bytes from position 2, needs shift and multiple reads
-    let offset = buffer.collect_count(4, 2, true).unwrap();
+    let (start, offset) = buffer.collect_count(4, 2, true).unwrap();
 
-    assert_eq!(offset, 4); // After shift
+    assert_eq!((start, offset), (0, 4)); // After shift
     assert_eq!(&buffer.buf[..offset], b"abcd");
     assert_eq!(buffer.n_shifted_out, 2);
 }

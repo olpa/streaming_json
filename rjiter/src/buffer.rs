@@ -97,7 +97,7 @@ impl<'buf, R: Read> Buffer<'buf, R> {
     pub fn skip_spaces(&mut self, pos: usize) -> RJiterResult<()> {
         loop {
             match self.collect_while(|b| b.is_ascii_whitespace(), pos, false) {
-                Ok(end_of_whitespace) => {
+                Ok((_start_pos, end_of_whitespace)) => {
                     // Found non-whitespace or EOF
                     if end_of_whitespace > pos {
                         self.shift_buffer(pos, end_of_whitespace);
@@ -115,7 +115,8 @@ impl<'buf, R: Read> Buffer<'buf, R> {
     }
 
     /// Collect bytes while a predicate is true, starting at the given position.
-    /// Returns the offset of the first rejected byte, or EOF.
+    /// Returns a tuple of (start_position, end_position) where end_position is the offset
+    /// of the first rejected byte, or EOF.
     /// If buffer is full with all accepted bytes, it's an error.
     /// The function can optionally shift the buffer once to discard bytes before `start_pos`.
     ///
@@ -134,11 +135,12 @@ impl<'buf, R: Read> Buffer<'buf, R> {
         predicate: F,
         start_pos: usize,
         allow_shift: bool,
-    ) -> RJiterResult<usize>
+    ) -> RJiterResult<(usize, usize)>
     where
         F: Fn(u8) -> bool,
     {
         let mut i = start_pos;
+        let mut current_start = start_pos;
         let mut shifted = false;
 
         loop {
@@ -150,7 +152,7 @@ impl<'buf, R: Read> Buffer<'buf, R> {
 
             if i < self.n_bytes {
                 // Found rejected byte
-                return Ok(i);
+                return Ok((current_start, i));
             }
 
             // Reached end of buffer, need more data
@@ -169,19 +171,21 @@ impl<'buf, R: Read> Buffer<'buf, R> {
                 self.shift_buffer(0, start_pos);
                 shifted = true;
                 i -= start_pos; // Adjust i to account for the shift
+                current_start = 0; // After shift, data starts at position 0
             }
 
             // Try to read more
             let n_new = self.read_more()?;
             if n_new == 0 {
                 // EOF reached, all bytes were accepted
-                return Ok(self.n_bytes);
+                return Ok((current_start, self.n_bytes));
             }
         }
     }
 
     /// Collect exactly `count` bytes starting at the given position, or until EOF.
-    /// Returns the offset after the collected bytes (start_pos + actual_collected).
+    /// Returns a tuple of (start_position, end_position) where end_position is the offset
+    /// after the collected bytes (start_pos + actual_collected).
     /// If buffer is too small to hold the requested bytes, it's an error.
     /// The function can optionally shift the buffer once to discard bytes before `start_pos`.
     ///
@@ -200,7 +204,7 @@ impl<'buf, R: Read> Buffer<'buf, R> {
         count: usize,
         start_pos: usize,
         allow_shift: bool,
-    ) -> RJiterResult<usize> {
+    ) -> RJiterResult<(usize, usize)> {
         let mut target = start_pos + count;
         let mut current_start = start_pos;
         let mut shifted = false;
@@ -208,7 +212,7 @@ impl<'buf, R: Read> Buffer<'buf, R> {
         loop {
             if self.n_bytes >= target {
                 // We have collected enough bytes
-                return Ok(target);
+                return Ok((current_start, target));
             }
 
             // Need more data
@@ -246,7 +250,7 @@ impl<'buf, R: Read> Buffer<'buf, R> {
             let n_new = self.read_more()?;
             if n_new == 0 {
                 // EOF reached before collecting all requested bytes
-                return Ok(self.n_bytes);
+                return Ok((current_start, self.n_bytes));
             }
         }
     }

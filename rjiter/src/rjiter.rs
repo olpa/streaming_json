@@ -736,11 +736,11 @@ impl<'rj, R: Read> RJiter<'rj, R> {
         let change_flag = ChangeFlag::new(&self.buffer);
 
         // jiter.current_index() returns position within its slice view of the buffer
-        let mut start_pos = self.jiter.current_index();
+        let start_pos = self.jiter.current_index();
         let n_shifted_before = self.buffer.n_shifted_out;
 
         // Allow collect_while to shift if needed
-        let mut end_pos = self.buffer.collect_while(predicate, start_pos, true)?;
+        let (mut actual_start, mut end_pos) = self.buffer.collect_while(predicate, start_pos, true)?;
 
         // If buffer changed, it either shifted in collect_while or just read more data
         if change_flag.is_changed(&self.buffer) {
@@ -749,16 +749,14 @@ impl<'rj, R: Read> RJiter<'rj, R> {
                 self.buffer.shift_buffer(0, start_pos);
                 // After manual shift, adjust positions
                 end_pos -= start_pos;
-                start_pos = 0;
-            } else if n_shifted_before != self.buffer.n_shifted_out {
-                // collect_while shifted, data is now at position 0
-                start_pos = 0;
+                actual_start = 0;
             }
+            // Note: if collect_while shifted, actual_start is already 0
             self.create_new_jiter();
         }
 
         #[allow(clippy::indexing_slicing)]
-        let slice = &self.buffer.buf[start_pos..end_pos];
+        let slice = &self.buffer.buf[actual_start..end_pos];
 
         #[allow(unsafe_code)]
         let slice_with_lifetime = unsafe {
