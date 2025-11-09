@@ -1485,7 +1485,7 @@ fn stop_early() {
 
 #[test]
 fn lookahead_repair() {
-    let json = r#"{"f": 0, "f": 0.0, "f": 1, "f": 16, "f": 17, "f": 0.42}"#;
+    let json = r#"{"f": 000000, "f": 0.0, "f": 001, "f": 0016, "f": 0017, "f": 0.42}"#;
     let mut reader = json.as_bytes();
     let mut buffer = vec![0u8; 16];
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
@@ -1495,26 +1495,50 @@ fn lookahead_repair() {
 
     // Action function that peeks, checks type, gets number, and writes to output
     fn handle_f_number(rjiter: &mut RJiter<&[u8]>, writer: &RefCell<Vec<u8>>) -> StreamOp {
-        let mut writer = writer.borrow_mut();
+        use rjiter::jiter::{NumberAny, NumberInt};
 
-        // Peek at the value
         let peek = rjiter.peek().unwrap();
+        if !peek.is_num() {
+            return StreamOp::None;
+        }
 
-        // Check if it's a number using is_num()
-        if peek.is_num() {
-            // Get the number
-            let num = rjiter.next_number().unwrap();
-            // Write in brackets to output
-            use rjiter::jiter::{NumberAny, NumberInt};
+        // Helper to write number to output
+        let write_num = |writer: &mut Vec<u8>, num: NumberAny| {
             match num {
                 NumberAny::Int(NumberInt::Int(i)) => write!(writer, "[{}]", i).unwrap(),
                 NumberAny::Int(NumberInt::BigInt(b)) => write!(writer, "[{}]", b).unwrap(),
                 NumberAny::Float(f) => write!(writer, "[{}]", f).unwrap(),
             }
-            StreamOp::ValueIsConsumed
-        } else {
-            StreamOp::None
+        };
+
+        let mut writer = writer.borrow_mut();
+
+        // Try to parse the number
+        if let Ok(num) = rjiter.next_number() {
+            write_num(&mut writer, num);
+            return StreamOp::ValueIsConsumed;
         }
+
+        // Bad number error - repair by skipping leading zeros
+        let n_zeros = rjiter.lookahead_while(|b| b == b'0').unwrap().len();
+        let next_byte = rjiter.lookahead_n(n_zeros + 1).unwrap();
+        let after_zeros = next_byte.get(n_zeros).copied().unwrap_or(b'\0');
+
+        // Determine how many zeros to skip
+        let to_skip = if after_zeros.is_ascii_digit() || after_zeros == b'.' {
+            n_zeros  // "016" -> "16", "0.42" -> ".42"
+        } else {
+            n_zeros.saturating_sub(1)  // "000000" -> "0"
+        };
+
+        if to_skip > 0 {
+            rjiter.skip_n_bytes(to_skip).unwrap();
+        }
+
+        // Parse the repaired number
+        let num = rjiter.next_number().unwrap();
+        write_num(&mut writer, num);
+        StreamOp::ValueIsConsumed
     }
 
     // find_action that matches field "f"
