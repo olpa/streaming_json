@@ -1482,3 +1482,69 @@ fn stop_early() {
         rjiter::jiter::NumberInt::Int(777)
     );
 }
+
+#[test]
+fn lookahead_repair() {
+    let json = r#"{"f": 0, "f": 0.0, "f": 1, "f": 16, "f": 17, "f": 0.42}"#;
+    let mut reader = json.as_bytes();
+    let mut buffer = vec![0u8; 16];
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
+    let writer_cell = RefCell::new(Vec::new());
+
+    // Action function that peeks, checks type, gets number, and writes to output
+    fn handle_f_number(rjiter: &mut RJiter<&[u8]>, writer: &RefCell<Vec<u8>>) -> StreamOp {
+        let mut writer = writer.borrow_mut();
+
+        // Peek at the value
+        let peek = rjiter.peek().unwrap();
+
+        // Check if it's a number using is_num()
+        if peek.is_num() {
+            // Get the number
+            let num = rjiter.next_number().unwrap();
+            // Write in brackets to output
+            use rjiter::jiter::{NumberAny, NumberInt};
+            match num {
+                NumberAny::Int(NumberInt::Int(i)) => write!(writer, "[{}]", i).unwrap(),
+                NumberAny::Int(NumberInt::BigInt(b)) => write!(writer, "[{}]", b).unwrap(),
+                NumberAny::Float(f) => write!(writer, "[{}]", f).unwrap(),
+            }
+            StreamOp::ValueIsConsumed
+        } else {
+            StreamOp::None
+        }
+    }
+
+    // find_action that matches field "f"
+    let find_action = |_structural_pseudoname: StructuralPseudoname,
+                       context: ContextIter,
+                       _baton: &RefCell<Vec<u8>>|
+     -> Option<Action<&RefCell<Vec<u8>>, &[u8]>> {
+        // Check if the key is "f" (ignoring context)
+        if let Some(key) = context.into_iter().next() {
+            (key == b"f").then(|| handle_f_number as Action<&RefCell<Vec<u8>>, &[u8]>)
+        } else {
+            None
+        }
+    };
+
+    let find_end_action = |_structural_pseudoname: StructuralPseudoname,
+                           _context: ContextIter,
+                           _baton: &RefCell<Vec<u8>>|
+     -> Option<EndAction<&RefCell<Vec<u8>>>> { None };
+
+    scan(
+        find_action,
+        find_end_action,
+        &mut rjiter,
+        &writer_cell,
+        &mut scan_stack,
+        &Options::new(),
+    )
+    .unwrap();
+
+    let output = String::from_utf8(writer_cell.borrow().to_vec()).unwrap();
+    assert_eq!(output, "[0][0][1][16][17][0.42]");
+}
