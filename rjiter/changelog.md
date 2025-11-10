@@ -1,3 +1,8 @@
+## [1.2.1] - 2025-11-10
+
+- New functions `lookahead_while`,`lookahead_n`, `skip_n_bytes`
+
+
 ## [1.2.0] - 2025-10-22
 
 - Support `no_std` environment
