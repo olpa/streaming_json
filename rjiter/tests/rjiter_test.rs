@@ -446,7 +446,6 @@ fn handle_buffer_end_pos_in_finish() {
 // Skip token
 //
 
-
 #[test]
 fn skip_tokens_example_for_readme() {
     let json_data = r#"
@@ -1031,4 +1030,3 @@ fn next_key_bytes() {
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some(&b"key"[..]));
 }
-

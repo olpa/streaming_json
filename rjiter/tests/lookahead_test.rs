@@ -95,7 +95,10 @@ fn test_lookahead_while_with_shift() {
 
     // Verify that the position hasn't changed after lookahead
     let pos_after = rjiter.current_index();
-    assert_eq!(pos_before, pos_after, "Position changed after lookahead with shift");
+    assert_eq!(
+        pos_before, pos_after,
+        "Position changed after lookahead with shift"
+    );
 
     // Verify that we can still peek at the current position
     let peek_result = rjiter.peek();
@@ -129,7 +132,7 @@ fn test_lookahead_while_with_buffer_read() {
 
     // Start with some JSON that will position us mid-buffer, then lookahead
     let input = r#"{"key":"value","num":12345}"#;
-    let mut buffer = [0u8; 20];  // Buffer large enough to hold the lookahead result
+    let mut buffer = [0u8; 20]; // Buffer large enough to hold the lookahead result
     let mut reader = OneByteReader::new(input.bytes());
     let mut rjiter = RJiter::new(&mut reader, &mut buffer);
 

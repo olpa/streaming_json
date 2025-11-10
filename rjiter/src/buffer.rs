@@ -115,7 +115,7 @@ impl<'buf, R: Read> Buffer<'buf, R> {
     }
 
     /// Collect bytes while a predicate is true, starting at the given position.
-    /// Returns a tuple of (start_position, end_position) where end_position is the offset
+    /// Returns a tuple of (`start_position`, `end_position`) where `end_position` is the offset
     /// of the first rejected byte, or EOF.
     /// If buffer is full with all accepted bytes, it's an error.
     /// The function can optionally shift the buffer once to discard bytes before `start_pos`.
@@ -184,8 +184,8 @@ impl<'buf, R: Read> Buffer<'buf, R> {
     }
 
     /// Collect exactly `count` bytes starting at the given position, or until EOF.
-    /// Returns a tuple of (start_position, end_position) where end_position is the offset
-    /// after the collected bytes (start_pos + actual_collected).
+    /// Returns a tuple of (`start_position`, `end_position`) where `end_position` is the offset
+    /// after the collected bytes (`start_pos` + `actual_collected`).
     /// If buffer is too small to hold the requested bytes, it's an error.
     /// The function can optionally shift the buffer once to discard bytes before `start_pos`.
     ///
@@ -277,11 +277,7 @@ impl<'buf, R: Read> Buffer<'buf, R> {
 
         while remaining > 0 {
             // How many bytes are available in the buffer from current position?
-            let available = if current_pos < self.n_bytes {
-                self.n_bytes - current_pos
-            } else {
-                0
-            };
+            let available = self.n_bytes.saturating_sub(current_pos);
 
             if available >= remaining {
                 // We have enough bytes in the buffer to complete the skip

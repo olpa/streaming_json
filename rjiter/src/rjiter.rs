@@ -740,7 +740,8 @@ impl<'rj, R: Read> RJiter<'rj, R> {
         let n_shifted_before = self.buffer.n_shifted_out;
 
         // Allow collect_while to shift if needed
-        let (mut actual_start, mut end_pos) = self.buffer.collect_while(predicate, start_pos, true)?;
+        let (mut actual_start, mut end_pos) =
+            self.buffer.collect_while(predicate, start_pos, true)?;
 
         // If buffer changed, it either shifted in collect_while or just read more data
         if change_flag.is_changed(&self.buffer) {
