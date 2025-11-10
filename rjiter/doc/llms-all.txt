@@ -334,6 +334,64 @@ Bounding quotes are not included in the output.
 pub fn write_long_str<W: embedded_io::Write>(&mut self, writer: &mut W) -> RJiterResult<()>
 ```
 
+#### lookahead_while
+Lookahead bytes while a predicate is true, without consuming them.
+Returns a slice of the bytes that matched the predicate.
+
+This is a wrapper around `Buffer::collect_while` that returns a slice
+instead of an offset. The bytes are not consumed from the buffer.
+
+# Arguments
+
+* `predicate` - A function that returns true if the byte should be accepted
+
+# Errors
+
+Returns `ErrorType::BufferFull` if the buffer fills up with all accepted bytes.
+Also returns errors from the underlying reader.
+```rust
+pub fn lookahead_while<F>(&mut self, predicate: F) -> RJiterResult<&[u8]>
+where
+    F: Fn(u8) -> bool
+```
+
+#### lookahead_n
+Lookahead exactly `count` bytes without consuming them.
+Returns a slice of the requested bytes, or fewer if EOF is reached.
+
+This is a wrapper around `Buffer::collect_count` that returns a slice
+instead of an offset. The bytes are not consumed from the buffer.
+
+# Arguments
+
+* `count` - The number of bytes to lookahead
+
+# Errors
+
+Returns `ErrorType::BufferFull` if the buffer is too small to hold the requested bytes.
+Also returns errors from the underlying reader.
+```rust
+pub fn lookahead_n(&mut self, count: usize) -> RJiterResult<&[u8]>
+```
+
+#### skip_n_bytes
+Skip exactly `count` bytes, consuming them from the buffer.
+Returns the number of bytes actually skipped (may be less than `count` if EOF is reached).
+
+This function skips bytes incrementally, so it works even with small buffers.
+It uses `Buffer::skip_n` to find the position, then shifts to consume the bytes.
+
+# Arguments
+
+* `count` - The number of bytes to skip
+
+# Errors
+
+Returns errors from the underlying reader.
+```rust
+pub fn skip_n_bytes(&mut self, count: usize) -> RJiterResult<usize>
+```
+
 #### known_skip_token
 Skip the token if found, otherwise return an error.
 `RJiter` should be positioned at the beginning of the potential token using `peek()` or `finish()`

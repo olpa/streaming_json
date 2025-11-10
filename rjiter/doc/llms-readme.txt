@@ -53,9 +53,12 @@ rjiter.finish()?;       // Ensures all JSON is consumed
 - `next_null()` / `known_null()` - Read null values
 - `next_bytes()` / `known_bytes()` - Read raw bytes
 
-### 3. Skipping Methods
+### 3. Skipping and Lookahead Methods
 - `next_skip()` / `known_skip()` - Skip any JSON value
 - `known_skip_token()` - Skip specific text token
+- `skip_n_bytes()` - Skip and consume n bytes
+- `lookahead_while()` - Lookahead bytes while predicate matches
+- `lookahead_n()` - Lookahead exactly n bytes
 
 ### 4. Long String Handling
 - `write_long_bytes()` - Stream raw JSON string bytes to writer
