@@ -604,6 +604,8 @@ fn on_map_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str
 }
 
 fn on_type_key_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
+    // Called for the phase "TypeKeyConsumed"
+
     // Type key value ended (for literal types: S, N, B, BOOL, NULL)
     // Restore phase based on context
     let mut conv = baton.borrow_mut();
@@ -656,6 +658,11 @@ fn find_end_action_key<'a, 'workbuf, W: IoWrite>(
     baton: DdbBaton<'a, 'workbuf, W>,
     phase: Phase,
 ) -> Option<EndAction<DdbBaton<'a, 'workbuf, W>>> {
+    // Early exit: if phase is TypeKeyConsumed, restore phase regardless of key
+    if phase == Phase::TypeKeyConsumed {
+        return Some(on_type_key_end);
+    }
+
     let mut ctx = context.clone();
     let key = ctx.next()?;
 
@@ -668,9 +675,6 @@ fn find_end_action_key<'a, 'workbuf, W: IoWrite>(
             if phase == Phase::ExpectingTypeKey {
                 // M type key ending - transition to TypeKeyConsumed
                 Some(on_transition_to_type_key_consumed)
-            } else if phase == Phase::TypeKeyConsumed {
-                // Type descriptor object ending - restore phase
-                Some(on_type_key_end)
             } else if phase == Phase::ExpectingField {
                 // M content object ending - write closing brace
                 Some(on_map_end)
@@ -679,58 +683,41 @@ fn find_end_action_key<'a, 'workbuf, W: IoWrite>(
             }
         }
         b"L" | b"SS" | b"NS" | b"BS" => {
-            if phase == Phase::TypeKeyConsumed {
-                // Type descriptor object ending - restore phase
-                Some(on_type_key_end)
-            } else {
-                // These types have array values handled by Array structural end actions
-                // Distinguish between type keys and field names using parent context:
-                // - Type keys have regular field names as parents
-                // - Field names have type keys or structural markers as parents
-                let mut ctx = context.clone();
-                ctx.next(); // Skip current key
-                if let Some(parent) = ctx.next() {
-                    // Check if parent is a type descriptor or structural marker
-                    let is_type_or_marker = parent == b"#top" || parent == b"#array"
-                        || parent == b"M" || parent == b"L"
-                        || parent == b"SS" || parent == b"NS" || parent == b"BS"
-                        || parent == b"S" || parent == b"N" || parent == b"B"
-                        || parent == b"BOOL" || parent == b"NULL";
+            // These types have array values handled by Array structural end actions
+            // Distinguish between type keys and field names using parent context:
+            // - Type keys have regular field names as parents
+            // - Field names have type keys or structural markers as parents
+            let mut ctx = context.clone();
+            ctx.next(); // Skip current key
+            if let Some(parent) = ctx.next() {
+                // Check if parent is a type descriptor or structural marker
+                let is_type_or_marker = parent == b"#top" || parent == b"#array"
+                    || parent == b"M" || parent == b"L"
+                    || parent == b"SS" || parent == b"NS" || parent == b"BS"
+                    || parent == b"S" || parent == b"N" || parent == b"B"
+                    || parent == b"BOOL" || parent == b"NULL";
 
-                    if is_type_or_marker {
-                        // This is a field name
-                        None
-                    } else {
-                        // Parent is a regular field name, so this is a type key
-                        Some(on_transition_to_type_key_consumed)
-                    }
-                } else {
+                if is_type_or_marker {
+                    // This is a field name
                     None
+                } else {
+                    // Parent is a regular field name, so this is a type key
+                    Some(on_transition_to_type_key_consumed)
                 }
+            } else {
+                None
             }
         }
         b"Item" => {
-            if phase == Phase::TypeKeyConsumed {
-                // Type descriptor object ending - restore phase
-                Some(on_type_key_end)
-            } else {
-                // Check if this is the Item wrapper (parent is #top) or a field named "Item"
-                if let Some(parent) = ctx.next() {
-                    if parent == b"#top" {
-                        // At top level - check item_wrapper_mode
-                        let mode = baton.borrow().item_wrapper_mode;
-                        if mode == ItemWrapperMode::AsWrapper {
-                            None  // Transparent - Item wrapper has no end action
-                        } else {
-                            // AsField mode - distinguish type key from field name using phase
-                            if phase == Phase::ExpectingTypeKey {
-                                Some(on_transition_to_type_key_consumed)
-                            } else {
-                                None
-                            }
-                        }
+            // Check if this is the Item wrapper (parent is #top) or a field named "Item"
+            if let Some(parent) = ctx.next() {
+                if parent == b"#top" {
+                    // At top level - check item_wrapper_mode
+                    let mode = baton.borrow().item_wrapper_mode;
+                    if mode == ItemWrapperMode::AsWrapper {
+                        None  // Transparent - Item wrapper has no end action
                     } else {
-                        // Field named "Item" inside M - distinguish type key from field name
+                        // AsField mode - distinguish type key from field name using phase
                         if phase == Phase::ExpectingTypeKey {
                             Some(on_transition_to_type_key_consumed)
                         } else {
@@ -738,15 +725,19 @@ fn find_end_action_key<'a, 'workbuf, W: IoWrite>(
                         }
                     }
                 } else {
-                    None
+                    // Field named "Item" inside M - distinguish type key from field name
+                    if phase == Phase::ExpectingTypeKey {
+                        Some(on_transition_to_type_key_consumed)
+                    } else {
+                        None
+                    }
                 }
+            } else {
+                None
             }
         }
         _ => {
-            if phase == Phase::TypeKeyConsumed {
-                // Type descriptor object ending - restore phase
-                Some(on_type_key_end)
-            } else if phase == Phase::ExpectingTypeKey {
+            if phase == Phase::ExpectingTypeKey {
                 // Literal type key ending (S, N, BOOL, NULL, B) - transition to TypeKeyConsumed
                 Some(on_transition_to_type_key_consumed)
             } else {
