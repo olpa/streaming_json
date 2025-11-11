@@ -361,6 +361,11 @@ fn on_error<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, _baton: D
     StreamOp::Error("Validation error (see stored error)")
 }
 
+// Generic end action error handler
+fn on_end_error<W: IoWrite>(_baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
+    Err("Validation error (see stored error)")
+}
+
 /// Handle Object structural pseudoname
 fn find_action_object<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
     _context: ContextIter,
@@ -658,7 +663,7 @@ fn find_end_action_key<'a, 'workbuf, W: IoWrite>(
     baton: DdbBaton<'a, 'workbuf, W>,
     phase: Phase,
 ) -> Option<EndAction<DdbBaton<'a, 'workbuf, W>>> {
-    // Early exit: if phase is TypeKeyConsumed, restore phase regardless of key
+    // If phase is TypeKeyConsumed, restore phase regardless of key
     if phase == Phase::TypeKeyConsumed {
         return Some(on_type_key_end);
     }
@@ -677,7 +682,18 @@ fn find_end_action_key<'a, 'workbuf, W: IoWrite>(
         };
     }
 
-    // At this point, phase is ExpectingField or ExpectingValue
+    // ExpectingValue should be impossible in key end actions
+    if phase == Phase::ExpectingValue {
+        let mut conv = baton.borrow_mut();
+        conv.last_error = Some(ConversionError::ParseError {
+            position: 0,
+            context: "Unexpected key end in ExpectingValue phase",
+            unknown_type: None,
+        });
+        return Some(on_end_error);
+    }
+
+    // At this point, phase is ExpectingField
     // Only M content objects need to write closing brace when ending
 
     match key {
