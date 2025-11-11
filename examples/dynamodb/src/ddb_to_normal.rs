@@ -682,6 +682,17 @@ fn find_end_action_key<'a, 'workbuf, W: IoWrite>(
         };
     }
 
+    // Early exit: if phase is ExpectingField
+    if phase == Phase::ExpectingField {
+        if key == b"Item" {
+            todo!("Item in ExpectingField");
+        } else if key == b"M" {
+            return Some(on_map_end);
+        } else {
+            panic!("Unexpected key in ExpectingField: {:?}", core::str::from_utf8(key));
+        }
+    }
+
     // ExpectingValue should be impossible in key end actions
     if phase == Phase::ExpectingValue {
         let mut conv = baton.borrow_mut();
@@ -693,37 +704,8 @@ fn find_end_action_key<'a, 'workbuf, W: IoWrite>(
         return Some(on_end_error);
     }
 
-    // At this point, phase is ExpectingField
-    // Only M content objects need to write closing brace when ending
-
-    match key {
-        b"M" => {
-            // M content object ending - write closing brace
-            Some(on_map_end)
-        }
-        b"Item" => {
-            // Check if this is the Item wrapper (parent is #top)
-            if let Some(parent) = context.next() {
-                if parent == b"#top" {
-                    // At top level - check item_wrapper_mode
-                    let mode = baton.borrow().item_wrapper_mode;
-                    if mode == ItemWrapperMode::AsWrapper {
-                        None  // Transparent - Item wrapper has no end action
-                    } else {
-                        None  // AsField mode - field name ending, no action
-                    }
-                } else {
-                    None  // Field named "Item" inside M - no action
-                }
-            } else {
-                None
-            }
-        }
-        _ => {
-            // Field name ending - no action needed, phase stays as-is
-            None
-        }
-    }
+    // This point should never be reached
+    None
 }
 
 fn find_end_action<'a, 'workbuf, W: IoWrite>(
