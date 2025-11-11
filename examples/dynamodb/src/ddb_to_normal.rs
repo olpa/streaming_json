@@ -654,7 +654,7 @@ fn on_transition_to_type_key_consumed<W: IoWrite>(baton: DdbBaton<'_, '_, W>) ->
 
 /// Handle end-actions for keys - this is where all end-action logic resides
 fn find_end_action_key<'a, 'workbuf, W: IoWrite>(
-    context: ContextIter,
+    mut context: ContextIter,
     baton: DdbBaton<'a, 'workbuf, W>,
     phase: Phase,
 ) -> Option<EndAction<DdbBaton<'a, 'workbuf, W>>> {
@@ -663,87 +663,49 @@ fn find_end_action_key<'a, 'workbuf, W: IoWrite>(
         return Some(on_type_key_end);
     }
 
-    let mut ctx = context.clone();
-    let key = ctx.next()?;
+    let key = context.next()?;
 
-    // Use Phase to distinguish key types:
-    // - Literal type keys (S, N, BOOL, NULL, B) end with Phase::ExpectingTypeKey → transition to TypeKeyConsumed
-    // - Container type keys (M, L, SS, NS, BS) end with Phase::ExpectingField → call end action now
+    // Early exit: if phase is ExpectingTypeKey
+    // Container type keys (M, L, SS, NS, BS) return None (handled elsewhere)
+    // Literal type keys (S, N, BOOL, NULL, B) transition to TypeKeyConsumed
+    if phase == Phase::ExpectingTypeKey {
+        let is_container_type = matches!(key, b"M" | b"L" | b"SS" | b"NS" | b"BS");
+        return if is_container_type {
+            None
+        } else {
+            Some(on_transition_to_type_key_consumed)
+        };
+    }
+
+    // At this point, phase is ExpectingField or ExpectingValue
+    // Only M content objects need to write closing brace when ending
 
     match key {
         b"M" => {
-            if phase == Phase::ExpectingTypeKey {
-                // M type key ending - transition to TypeKeyConsumed
-                Some(on_transition_to_type_key_consumed)
-            } else if phase == Phase::ExpectingField {
-                // M content object ending - write closing brace
-                Some(on_map_end)
-            } else {
-                None
-            }
-        }
-        b"L" | b"SS" | b"NS" | b"BS" => {
-            // These types have array values handled by Array structural end actions
-            // Distinguish between type keys and field names using parent context:
-            // - Type keys have regular field names as parents
-            // - Field names have type keys or structural markers as parents
-            let mut ctx = context.clone();
-            ctx.next(); // Skip current key
-            if let Some(parent) = ctx.next() {
-                // Check if parent is a type descriptor or structural marker
-                let is_type_or_marker = parent == b"#top" || parent == b"#array"
-                    || parent == b"M" || parent == b"L"
-                    || parent == b"SS" || parent == b"NS" || parent == b"BS"
-                    || parent == b"S" || parent == b"N" || parent == b"B"
-                    || parent == b"BOOL" || parent == b"NULL";
-
-                if is_type_or_marker {
-                    // This is a field name
-                    None
-                } else {
-                    // Parent is a regular field name, so this is a type key
-                    Some(on_transition_to_type_key_consumed)
-                }
-            } else {
-                None
-            }
+            // M content object ending - write closing brace
+            Some(on_map_end)
         }
         b"Item" => {
-            // Check if this is the Item wrapper (parent is #top) or a field named "Item"
-            if let Some(parent) = ctx.next() {
+            // Check if this is the Item wrapper (parent is #top)
+            if let Some(parent) = context.next() {
                 if parent == b"#top" {
                     // At top level - check item_wrapper_mode
                     let mode = baton.borrow().item_wrapper_mode;
                     if mode == ItemWrapperMode::AsWrapper {
                         None  // Transparent - Item wrapper has no end action
                     } else {
-                        // AsField mode - distinguish type key from field name using phase
-                        if phase == Phase::ExpectingTypeKey {
-                            Some(on_transition_to_type_key_consumed)
-                        } else {
-                            None
-                        }
+                        None  // AsField mode - field name ending, no action
                     }
                 } else {
-                    // Field named "Item" inside M - distinguish type key from field name
-                    if phase == Phase::ExpectingTypeKey {
-                        Some(on_transition_to_type_key_consumed)
-                    } else {
-                        None
-                    }
+                    None  // Field named "Item" inside M - no action
                 }
             } else {
                 None
             }
         }
         _ => {
-            if phase == Phase::ExpectingTypeKey {
-                // Literal type key ending (S, N, BOOL, NULL, B) - transition to TypeKeyConsumed
-                Some(on_transition_to_type_key_consumed)
-            } else {
-                // Field name ending - no action needed, phase stays as-is
-                None
-            }
+            // Field name ending - no action needed, phase stays as-is
+            None
         }
     }
 }
