@@ -9,12 +9,24 @@ use u8pool::U8Pool;
 use crate::ConversionError;
 
 /// What phase of parsing we're in
+///
+/// Begin-transitions:
+/// - `ExpectingField` -> `ExpectingTypeKey`
+/// - `ExpectingTypeKey`->
+///    - if in "M", then `ExpectingField`
+///    - otherwise, `ExpectingValue`
+/// - `ExpectingValue` ->
+///    - if in a set or a list, `ExpectingValue`
+///    - otherwise, error
+/// - `TypeKeyConsumed` ->
+///    - if in "M", then `ExpectingField`
+///    - otherwise, error
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Phase {
-    ExpectingField,        // Expecting a field key
-    ExpectingTypeKey,      // Expecting type key (after field key, or in L array)
-    ExpectingValue,        // After type key, expecting the value (only for sets: SS, NS, BS)
-    TypeKeyConsumed,       // Type key ended, waiting for type descriptor object to end
+    ExpectingField,
+    ExpectingTypeKey,
+    ExpectingValue,
+    TypeKeyConsumed,
 }
 
 /// How to handle "Item" key at top level
