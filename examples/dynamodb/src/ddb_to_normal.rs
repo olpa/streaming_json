@@ -693,19 +693,14 @@ fn find_end_action_key<'a, 'workbuf, W: IoWrite>(
         }
     }
 
-    // ExpectingValue should be impossible in key end actions
-    if phase == Phase::ExpectingValue {
-        let mut conv = baton.borrow_mut();
-        conv.last_error = Some(ConversionError::ParseError {
-            position: 0,
-            context: "Unexpected key end in ExpectingValue phase",
-            unknown_type: None,
-        });
-        return Some(on_end_error);
-    }
-
-    // This point should never be reached
-    None
+    // This point should never be reached - return error
+    let mut conv = baton.borrow_mut();
+    conv.last_error = Some(ConversionError::ParseError {
+        position: 0,
+        context: "Unexpected phase in find_end_action_key",
+        unknown_type: None,
+    });
+    Some(on_end_error)
 }
 
 fn find_end_action<'a, 'workbuf, W: IoWrite>(
