@@ -21,6 +21,12 @@ use crate::ConversionError;
 /// - `TypeKeyConsumed` ->
 ///    - if in "M", then `ExpectingField`
 ///    - otherwise, error
+///
+/// End-transitions:
+/// - `ExpectingValue` -> `TypeKeyConsumed`
+/// - `TypeKeyConsumed` -> `ExpectingField`
+/// - `ExpectingField` -> `TypeKeyConsumed`
+/// - `ExpectingTypeKey` -> error
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Phase {
     ExpectingField,
