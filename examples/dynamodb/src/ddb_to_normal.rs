@@ -26,6 +26,7 @@ use crate::ConversionError;
 /// - `ExpectingValue` -> `TypeKeyConsumed`
 /// - `TypeKeyConsumed` ->
 ///    - if in "#array", then `ExpectingTypeKey`
+///    - if in "M", then `ExpectingField` (with writing "}" as a side effect)
 ///    - otherwise, `ExpectingField`
 /// - `ExpectingField` -> `TypeKeyConsumed`
 /// - `ExpectingTypeKey` ->
@@ -67,7 +68,6 @@ pub struct DdbConverter<'a, 'workbuf, W: IoWrite> {
 
     phase: Phase,
     current_type: Option<TypeDesc>,
-    m_depth: usize, // Nesting depth of M objects (for distinguishing M from field named "M")
 }
 
 impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
@@ -82,7 +82,6 @@ impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
             last_error: None,
             phase: Phase::ExpectingField,
             current_type: None,
-            m_depth: 0,
         }
     }
 
@@ -326,7 +325,6 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: 
             conv.newline();
             conv.output_depth += 1;
             conv.pending_comma = false;
-            conv.m_depth += 1;  // Track M nesting
             conv.current_type = Some(TypeDesc::M);
             conv.phase = Phase::ExpectingField;
             StreamOp::None
@@ -515,21 +513,7 @@ fn find_action_key<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
             Some(on_type_key)
         }
         Phase::TypeKeyConsumed => {
-            // Transition: TypeKeyConsumed -> if in "M", then ExpectingField; otherwise, error
-            let m_depth = baton.borrow().m_depth;
-
-            if m_depth == 0 {
-                // Error: not in M
-                let mut conv = baton.borrow_mut();
-                conv.last_error = Some(ConversionError::ParseError {
-                    position: 0,
-                    context: "Unexpected key in TypeKeyConsumed phase (not in M)",
-                    unknown_type: None,
-                });
-                return Some(on_error);
-            }
-
-            // In M, transition to ExpectingField
+            // Transition: TypeKeyConsumed -> ExpectingField (must be in M object)
             // Store the key
             let mut conv = baton.borrow_mut();
             #[allow(unsafe_code)]
@@ -677,9 +661,6 @@ fn on_map_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str
     conv.write(b"}");
     conv.pending_comma = true;
 
-    // Decrement M depth
-    conv.m_depth = conv.m_depth.saturating_sub(1);
-
     // Transition to ExpectingValue (M container value is consumed)
     conv.current_type = None;
     conv.phase = Phase::ExpectingValue;
@@ -690,15 +671,9 @@ fn on_type_key_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'stati
     // Called for the phase "TypeKeyConsumed"
 
     // Type key value ended (for literal types: S, N, B, BOOL, NULL)
-    // Restore phase based on context
+    // Transition to ExpectingField
     let mut conv = baton.borrow_mut();
-    // Priority: M object (if we're in one, expect another field)
-    // Otherwise: root (expect a field)
-    conv.phase = if conv.m_depth > 0 {
-        Phase::ExpectingField
-    } else {
-        Phase::ExpectingField
-    };
+    conv.phase = Phase::ExpectingField;
     Ok(())
 }
 
@@ -730,18 +705,26 @@ fn find_end_action_object<'a, 'workbuf, W: IoWrite>(
         return Some(on_root_object_end);
     }
 
-    // Check if we're ending an M container (m_depth > 0)
-    let m_depth = baton.borrow().m_depth;
-    if m_depth > 0 {
+    // Check if we're ending an M container (phase = ExpectingField)
+    // M containers end in ExpectingField phase (waiting for next field)
+    if phase == Phase::ExpectingField {
         return Some(on_map_end);
     }
 
-    // Check if we're ending a type descriptor object in an array
-    // (TypeKeyConsumed phase + in array context)
+    // Check if we're ending a type descriptor object (TypeKeyConsumed phase)
     if phase == Phase::TypeKeyConsumed {
         let mut ctx = context.clone();
-        if ctx.next() == Some(b"#array") {
+        let parent = ctx.next();
+
+        if parent == Some(b"#array") {
+            // In array context - transition to ExpectingTypeKey
             return Some(on_type_key_end_in_array);
+        } else if parent == Some(b"M") {
+            // In M context - write "}" and transition to ExpectingField
+            return Some(on_map_end);
+        } else {
+            // Otherwise - transition to ExpectingField
+            return Some(on_type_key_end);
         }
     }
 
@@ -780,14 +763,16 @@ fn find_end_action_key<'a, 'workbuf, W: IoWrite>(
                     }
                 }
             }
-            // Transition: TypeKeyConsumed -> if in "#array", then ExpectingTypeKey; otherwise, ExpectingField
-            // Check if we're in an array context
+            // Transition: TypeKeyConsumed -> if in "#array", then ExpectingTypeKey; if in "M", then ExpectingField; otherwise, ExpectingField
+            // Check context
             let mut ctx = context.clone();
             ctx.next(); // Skip the current key
-            let in_array = ctx.next() == Some(b"#array");
+            let parent = ctx.next();
 
-            if in_array {
+            if parent == Some(b"#array") {
                 Some(on_type_key_end_in_array)
+            } else if parent == Some(b"M") {
+                Some(on_type_key_end)
             } else {
                 Some(on_type_key_end)
             }
