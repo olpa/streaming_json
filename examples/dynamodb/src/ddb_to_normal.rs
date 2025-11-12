@@ -753,6 +753,15 @@ fn find_end_action_key<'a, 'workbuf, W: IoWrite>(
             Some(on_transition_to_type_key_consumed)
         }
         Phase::TypeKeyConsumed => {
+            // Check for Item at top with AsWrapper - early return without side effects
+            if key == b"Item" {
+                let mode = baton.borrow().item_wrapper_mode;
+                if mode == ItemWrapperMode::AsWrapper {
+                    if let Some(b"#top") = context.next() {
+                        return None;
+                    }
+                }
+            }
             // Transition: TypeKeyConsumed -> ExpectingField
             Some(on_type_key_end)
         }
