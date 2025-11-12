@@ -16,7 +16,7 @@ use crate::ConversionError;
 ///    - if in "M", then `ExpectingField`
 ///    - otherwise, `ExpectingValue`
 /// - `ExpectingValue` ->
-///    - if in a set or a list, `ExpectingValue`
+///    - if in a set (SS, NS), `ExpectingValue`
 ///    - otherwise, error
 /// - `TypeKeyConsumed` ->
 ///    - if in "M", then `ExpectingField`
@@ -24,9 +24,16 @@ use crate::ConversionError;
 ///
 /// End-transitions:
 /// - `ExpectingValue` -> `TypeKeyConsumed`
-/// - `TypeKeyConsumed` -> `ExpectingField`
+/// - `TypeKeyConsumed` ->
+///    - if in "#array", then `ExpectingTypeKey`
+///    - otherwise, `ExpectingField`
 /// - `ExpectingField` -> `TypeKeyConsumed`
-/// - `ExpectingTypeKey` -> error
+/// - `ExpectingTypeKey` ->
+///    - for literal types (S, N, BOOL, NULL, B): `TypeKeyConsumed`
+///    - for container types (M, L, SS, NS, BS): no transition (handled by container end)
+/// - End of array (L type):
+///   - `ExpectingTypeKey` -> `ExpectingValue`
+///   - otherwise, error
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Phase {
     ExpectingField,
@@ -61,7 +68,6 @@ pub struct DdbConverter<'a, 'workbuf, W: IoWrite> {
     phase: Phase,
     current_type: Option<TypeDesc>,
     m_depth: usize, // Nesting depth of M objects (for distinguishing M from field named "M")
-    l_depth: usize, // Nesting depth of L arrays (for determining phase after literals)
 }
 
 impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
@@ -77,7 +83,6 @@ impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
             phase: Phase::ExpectingField,
             current_type: None,
             m_depth: 0,
-            l_depth: 0,
         }
     }
 
@@ -245,10 +250,8 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: 
             Err(msg) => return StreamOp::Error(msg),
         };
 
-        // Write comma if in L array
-        if conv.l_depth > 0 {
-            conv.write_comma_if_pending();
-        }
+        // Write comma (pending_comma tracks whether we need it)
+        conv.write_comma_if_pending();
 
         // Consume the value
         if let Err(e) = rjiter.known_bool(peek) {
@@ -265,14 +268,12 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: 
 
     match type_key {
         b"S" | b"B" => {
-            let write_comma_if_pending = conv.l_depth > 0;
-            let result = write_string_value(rjiter, &mut conv, true, write_comma_if_pending, "S/B (string) type", "S/B (string) type");
+            let result = write_string_value(rjiter, &mut conv, true, true, "S/B (string) type", "S/B (string) type");
             conv.current_type = None;
             result
         }
         b"N" => {
-            let write_comma_if_pending = conv.l_depth > 0;
-            let result = write_string_value(rjiter, &mut conv, false, write_comma_if_pending, "N (number) type", "N (number) type");
+            let result = write_string_value(rjiter, &mut conv, false, true, "N (number) type", "N (number) type");
             conv.current_type = None;
             result
         }
@@ -311,23 +312,16 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: 
         }
         b"L" => {
             // L type - write opening bracket here (parent handles it, not find_action_array)
-            // Write comma if in L array (nested L)
-            if conv.l_depth > 0 {
-                conv.write_comma_if_pending();
-            }
+            conv.write_comma_if_pending();
             conv.write(b"[");
             conv.pending_comma = false;
-            conv.l_depth += 1;  // Track L nesting
             conv.current_type = Some(TypeDesc::L);
             conv.phase = Phase::ExpectingTypeKey;  // In L, we expect type keys (type descriptors are ignored)
             StreamOp::None
         }
         b"M" => {
             // M type - write opening brace here (parent handles it, not find_action_object)
-            // Write comma if in L array
-            if conv.l_depth > 0 {
-                conv.write_comma_if_pending();
-            }
+            conv.write_comma_if_pending();
             conv.write(b"{");
             conv.newline();
             conv.output_depth += 1;
@@ -386,7 +380,7 @@ fn on_end_error<W: IoWrite>(_baton: DdbBaton<'_, '_, W>) -> Result<(), &'static 
 
 /// Handle Object structural pseudoname
 fn find_action_object<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
-    _context: ContextIter,
+    context: ContextIter,
     baton: DdbBaton<'a, 'workbuf, W>,
     phase: Phase,
     current_type: Option<TypeDesc>,
@@ -428,14 +422,24 @@ fn find_action_object<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
             None
         }
         Phase::TypeKeyConsumed => {
-            // Error: we're waiting for a type descriptor object to end, shouldn't begin a new object
-            let mut conv = baton.borrow_mut();
-            conv.store_parse_error(
-                0,
-                "Invalid DynamoDB JSON format: unexpected nested object in type descriptor",
-                None,
-            );
-            Some(on_error)
+            // In array context, TypeKeyConsumed allows new type descriptor objects
+            // Check if we're in an array
+            let mut ctx = context.clone();
+            let first = ctx.next();
+
+            if first == Some(b"#array") {
+                // In array - allow type descriptor objects
+                None
+            } else {
+                // Not in array - error
+                let mut conv = baton.borrow_mut();
+                conv.store_parse_error(
+                    0,
+                    "Invalid DynamoDB JSON format: unexpected nested object in type descriptor",
+                    None,
+                );
+                Some(on_error)
+            }
         }
     }
 }
@@ -482,22 +486,18 @@ fn find_action_key<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
             Some(on_type_key)
         }
         Phase::ExpectingValue => {
-            // Transition: ExpectingValue -> if in a set or a list, ExpectingValue; otherwise, error
-            let (current_type, l_depth) = {
-                let conv = baton.borrow();
-                (conv.current_type, conv.l_depth)
-            };
+            // Transition: ExpectingValue -> if in a set, ExpectingValue; otherwise, error
+            let current_type = baton.borrow().current_type;
 
-            // Check if we're in a set (SS, NS) or list (L)
+            // Check if we're in a set (SS, NS)
             let in_set = matches!(current_type, Some(TypeDesc::SS) | Some(TypeDesc::NS));
-            let in_list = l_depth > 0;
 
-            if !in_set && !in_list {
-                // Error: not in a set or list
+            if !in_set {
+                // Error: not in a set
                 let mut conv = baton.borrow_mut();
                 conv.last_error = Some(ConversionError::ParseError {
                     position: 0,
-                    context: "Unexpected key in ExpectingValue phase (not in set or list)",
+                    context: "Unexpected key in ExpectingValue phase (not in set)",
                     unknown_type: None,
                 });
                 return Some(on_error);
@@ -643,14 +643,17 @@ fn on_unexpected_atom<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>,
 
 fn on_list_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     let mut conv = baton.borrow_mut();
+
+    // Validate: ending an array is only allowed in ExpectingTypeKey phase
+    if conv.phase != Phase::ExpectingTypeKey {
+        return Err("Invalid phase when ending L array (expected ExpectingTypeKey)");
+    }
+
     conv.write(b"]");
     conv.pending_comma = true;
 
-    // Decrement L depth
-    conv.l_depth = conv.l_depth.saturating_sub(1);
-
-    // Ending L array - restore phase based on whether we're still in another L
-    conv.phase = if conv.l_depth > 0 { Phase::ExpectingTypeKey } else { Phase::ExpectingField };
+    // Transition: ExpectingTypeKey -> ExpectingValue (at end of array)
+    conv.phase = Phase::ExpectingValue;
     conv.current_type = None;
     Ok(())
 }
@@ -660,9 +663,9 @@ fn on_set_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str
     conv.write(b"]");
     conv.pending_comma = true;
 
-    // Ending SS/NS set - restore phase based on whether we're in an L array
+    // Ending SS/NS set - transition to ExpectingValue
     conv.current_type = None;
-    conv.phase = if conv.l_depth > 0 { Phase::ExpectingTypeKey } else { Phase::ExpectingField };
+    conv.phase = Phase::ExpectingValue;
     Ok(())
 }
 
@@ -677,9 +680,9 @@ fn on_map_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str
     // Decrement M depth
     conv.m_depth = conv.m_depth.saturating_sub(1);
 
-    // Restore phase based on whether we're in an L array
+    // Transition to ExpectingValue (M container value is consumed)
     conv.current_type = None;
-    conv.phase = if conv.l_depth > 0 { Phase::ExpectingTypeKey } else { Phase::ExpectingField };
+    conv.phase = Phase::ExpectingValue;
     Ok(())
 }
 
@@ -690,15 +693,21 @@ fn on_type_key_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'stati
     // Restore phase based on context
     let mut conv = baton.borrow_mut();
     // Priority: M object (if we're in one, expect another field)
-    // Otherwise: L array (expect another type descriptor)
     // Otherwise: root (expect a field)
     conv.phase = if conv.m_depth > 0 {
         Phase::ExpectingField
-    } else if conv.l_depth > 0 {
-        Phase::ExpectingTypeKey
     } else {
         Phase::ExpectingField
     };
+    Ok(())
+}
+
+fn on_type_key_end_in_array<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
+    // Called for the phase "TypeKeyConsumed" when in an array context
+
+    // Type key value ended in array - transition to ExpectingTypeKey
+    let mut conv = baton.borrow_mut();
+    conv.phase = Phase::ExpectingTypeKey;
     Ok(())
 }
 
@@ -714,7 +723,7 @@ fn on_root_object_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'st
 fn find_end_action_object<'a, 'workbuf, W: IoWrite>(
     context: ContextIter,
     baton: DdbBaton<'a, 'workbuf, W>,
-    _phase: Phase,
+    phase: Phase,
 ) -> Option<EndAction<DdbBaton<'a, 'workbuf, W>>> {
     // Check if this is the root object ending (context length == 1)
     if context.len() == 1 {
@@ -725,6 +734,15 @@ fn find_end_action_object<'a, 'workbuf, W: IoWrite>(
     let m_depth = baton.borrow().m_depth;
     if m_depth > 0 {
         return Some(on_map_end);
+    }
+
+    // Check if we're ending a type descriptor object in an array
+    // (TypeKeyConsumed phase + in array context)
+    if phase == Phase::TypeKeyConsumed {
+        let mut ctx = context.clone();
+        if ctx.next() == Some(b"#array") {
+            return Some(on_type_key_end_in_array);
+        }
     }
 
     // All other object end actions return None
@@ -762,8 +780,17 @@ fn find_end_action_key<'a, 'workbuf, W: IoWrite>(
                     }
                 }
             }
-            // Transition: TypeKeyConsumed -> ExpectingField
-            Some(on_type_key_end)
+            // Transition: TypeKeyConsumed -> if in "#array", then ExpectingTypeKey; otherwise, ExpectingField
+            // Check if we're in an array context
+            let mut ctx = context.clone();
+            ctx.next(); // Skip the current key
+            let in_array = ctx.next() == Some(b"#array");
+
+            if in_array {
+                Some(on_type_key_end_in_array)
+            } else {
+                Some(on_type_key_end)
+            }
         }
         Phase::ExpectingField => {
             // Transition: ExpectingField -> TypeKeyConsumed
@@ -790,9 +817,9 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
     context: ContextIter,
     baton: DdbBaton<'a, 'workbuf, W>,
 ) -> Option<EndAction<DdbBaton<'a, 'workbuf, W>>> {
-    let (phase, current_type, l_depth) = {
+    let (phase, current_type) = {
         let conv = baton.borrow();
-        (conv.phase, conv.current_type, conv.l_depth)
+        (conv.phase, conv.current_type)
     };
 
     #[cfg(feature = "std")]
@@ -806,11 +833,11 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
     match structural {
         StructuralPseudoname::Array => {
             // Check if we're ending an L array or a set (SS, NS, BS)
-            // L arrays use l_depth since current_type is cleared for L
-            // Sets use current_type since they maintain it
-            if l_depth > 0 {
+            // L arrays end in ExpectingTypeKey phase (since they contain type descriptors)
+            // Sets end in ExpectingValue phase (since they contain raw values)
+            if phase == Phase::ExpectingTypeKey {
                 Some(on_list_end)
-            } else if current_type == Some(TypeDesc::SS) || current_type == Some(TypeDesc::NS) {
+            } else if phase == Phase::ExpectingValue {
                 Some(on_set_end)
             } else {
                 None
