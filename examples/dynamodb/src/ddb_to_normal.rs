@@ -447,7 +447,8 @@ fn find_action_key<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
 ) -> Option<Action<DdbBaton<'a, 'workbuf, W>, R>> {
     let key = context.next()?;
 
-    let action: Option<Action<DdbBaton<'a, 'workbuf, W>, R>> = match phase {
+    // Begin-transitions (based on current phase before processing the key)
+    match phase {
         Phase::ExpectingField => {
             // Check for Item at top with AsWrapper - early return without side effects
             if key == b"Item" {
@@ -458,31 +459,87 @@ fn find_action_key<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
                     }
                 }
             }
+            // Store the key
+            let mut conv = baton.borrow_mut();
+            #[allow(unsafe_code)]
+            let key_slice: &'workbuf [u8] =
+                unsafe { core::mem::transmute::<&[u8], &'workbuf [u8]>(key) };
+            conv.current_field = Some(key_slice);
+            // Transition: ExpectingField -> ExpectingTypeKey
+            // (This transition is handled by on_field_key which sets phase to ExpectingTypeKey)
             Some(on_field_key)
         }
-        Phase::ExpectingTypeKey => Some(on_type_key),
-        _ => {
-            // Unexpected phase - set internal error
+        Phase::ExpectingTypeKey => {
+            // Store the key
             let mut conv = baton.borrow_mut();
-            conv.last_error = Some(ConversionError::ParseError {
-                position: 0,
-                context: "Unexpected key in phase",
-                unknown_type: None,
-            });
-            None
+            #[allow(unsafe_code)]
+            let key_slice: &'workbuf [u8] =
+                unsafe { core::mem::transmute::<&[u8], &'workbuf [u8]>(key) };
+            conv.current_field = Some(key_slice);
+
+            // Transition: ExpectingTypeKey -> if in "M", then ExpectingField; otherwise, ExpectingValue
+            // Note: The actual transition happens in on_type_key based on the type
+            Some(on_type_key)
         }
-    };
+        Phase::ExpectingValue => {
+            // Transition: ExpectingValue -> if in a set or a list, ExpectingValue; otherwise, error
+            let (current_type, l_depth) = {
+                let conv = baton.borrow();
+                (conv.current_type, conv.l_depth)
+            };
 
-    // Store the key if we have an action to execute
-    if action.is_some() {
-        let mut conv = baton.borrow_mut();
-        #[allow(unsafe_code)]
-        let key_slice: &'workbuf [u8] =
-            unsafe { core::mem::transmute::<&[u8], &'workbuf [u8]>(key) };
-        conv.current_field = Some(key_slice);
+            // Check if we're in a set (SS, NS) or list (L)
+            let in_set = matches!(current_type, Some(TypeDesc::SS) | Some(TypeDesc::NS));
+            let in_list = l_depth > 0;
+
+            if !in_set && !in_list {
+                // Error: not in a set or list
+                let mut conv = baton.borrow_mut();
+                conv.last_error = Some(ConversionError::ParseError {
+                    position: 0,
+                    context: "Unexpected key in ExpectingValue phase (not in set or list)",
+                    unknown_type: None,
+                });
+                return Some(on_error);
+            }
+
+            // Otherwise, continue in ExpectingValue phase
+            // Store the key
+            let mut conv = baton.borrow_mut();
+            #[allow(unsafe_code)]
+            let key_slice: &'workbuf [u8] =
+                unsafe { core::mem::transmute::<&[u8], &'workbuf [u8]>(key) };
+            conv.current_field = Some(key_slice);
+
+            // The phase remains ExpectingValue (handled by the type handler)
+            Some(on_type_key)
+        }
+        Phase::TypeKeyConsumed => {
+            // Transition: TypeKeyConsumed -> if in "M", then ExpectingField; otherwise, error
+            let m_depth = baton.borrow().m_depth;
+
+            if m_depth == 0 {
+                // Error: not in M
+                let mut conv = baton.borrow_mut();
+                conv.last_error = Some(ConversionError::ParseError {
+                    position: 0,
+                    context: "Unexpected key in TypeKeyConsumed phase (not in M)",
+                    unknown_type: None,
+                });
+                return Some(on_error);
+            }
+
+            // In M, transition to ExpectingField
+            // Store the key
+            let mut conv = baton.borrow_mut();
+            #[allow(unsafe_code)]
+            let key_slice: &'workbuf [u8] =
+                unsafe { core::mem::transmute::<&[u8], &'workbuf [u8]>(key) };
+            conv.current_field = Some(key_slice);
+            // Transition happens through on_field_key
+            Some(on_field_key)
+        }
     }
-
-    action
 }
 
 /// Handle Array structural pseudoname
@@ -656,7 +713,7 @@ fn on_root_object_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'st
 /// Handle Object structural pseudoname for end actions
 fn find_end_action_object<'a, 'workbuf, W: IoWrite>(
     context: ContextIter,
-    _baton: DdbBaton<'a, 'workbuf, W>,
+    baton: DdbBaton<'a, 'workbuf, W>,
     _phase: Phase,
 ) -> Option<EndAction<DdbBaton<'a, 'workbuf, W>>> {
     // Check if this is the root object ending (context length == 1)
@@ -664,7 +721,13 @@ fn find_end_action_object<'a, 'workbuf, W: IoWrite>(
         return Some(on_root_object_end);
     }
 
-    // All other object end actions are handled by find_end_action_key
+    // Check if we're ending an M container (m_depth > 0)
+    let m_depth = baton.borrow().m_depth;
+    if m_depth > 0 {
+        return Some(on_map_end);
+    }
+
+    // All other object end actions return None
     None
 }
 
@@ -681,44 +744,36 @@ fn find_end_action_key<'a, 'workbuf, W: IoWrite>(
     baton: DdbBaton<'a, 'workbuf, W>,
     phase: Phase,
 ) -> Option<EndAction<DdbBaton<'a, 'workbuf, W>>> {
-    // If phase is TypeKeyConsumed, restore phase regardless of key
-    if phase == Phase::TypeKeyConsumed {
-        return Some(on_type_key_end);
-    }
-
     let key = context.next()?;
 
-    // Early exit: if phase is ExpectingTypeKey
-    // Container type keys (M, L, SS, NS, BS) return None (handled elsewhere)
-    // Literal type keys (S, N, BOOL, NULL, B) transition to TypeKeyConsumed
-    if phase == Phase::ExpectingTypeKey {
-        let is_container_type = matches!(key, b"M" | b"L" | b"SS" | b"NS" | b"BS");
-        return if is_container_type {
-            None
-        } else {
+    // End-transitions (based on current phase when the key ends)
+    match phase {
+        Phase::ExpectingValue => {
+            // Transition: ExpectingValue -> TypeKeyConsumed
             Some(on_transition_to_type_key_consumed)
-        };
-    }
-
-    // Early exit: if phase is ExpectingField
-    if phase == Phase::ExpectingField {
-        if key == b"Item" {
-            todo!("Item in ExpectingField");
-        } else if key == b"M" {
-            return Some(on_map_end);
-        } else {
-            panic!("Unexpected key in ExpectingField: {:?}", core::str::from_utf8(key));
+        }
+        Phase::TypeKeyConsumed => {
+            // Transition: TypeKeyConsumed -> ExpectingField
+            Some(on_type_key_end)
+        }
+        Phase::ExpectingField => {
+            // Transition: ExpectingField -> TypeKeyConsumed
+            // All field keys (including "M" and "Item" when used as field names) transition to TypeKeyConsumed
+            Some(on_transition_to_type_key_consumed)
+        }
+        Phase::ExpectingTypeKey => {
+            // For type keys ending in ExpectingTypeKey:
+            // - Container types (M, L, SS, NS, BS) are handled by their specific end handlers (return None)
+            // - Literal types (S, N, BOOL, NULL, B) transition to TypeKeyConsumed
+            let is_container_type = matches!(key, b"M" | b"L" | b"SS" | b"NS" | b"BS");
+            if is_container_type {
+                None  // Container end is handled elsewhere
+            } else {
+                // Literal type - transition to TypeKeyConsumed
+                Some(on_transition_to_type_key_consumed)
+            }
         }
     }
-
-    // This point should never be reached - return error
-    let mut conv = baton.borrow_mut();
-    conv.last_error = Some(ConversionError::ParseError {
-        position: 0,
-        context: "Unexpected phase in find_end_action_key",
-        unknown_type: None,
-    });
-    Some(on_end_error)
 }
 
 fn find_end_action<'a, 'workbuf, W: IoWrite>(
