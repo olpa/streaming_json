@@ -9,7 +9,11 @@ fn convert_test_with_pretty(ddb_json: &str, pretty: bool) -> String {
 }
 
 /// Helper function to convert DDB JSON to normal JSON with custom ItemWrapperMode
-fn convert_test_with_mode(ddb_json: &str, pretty: bool, mode: ddb_convert::ItemWrapperMode) -> String {
+fn convert_test_with_mode(
+    ddb_json: &str,
+    pretty: bool,
+    mode: ddb_convert::ItemWrapperMode,
+) -> String {
     let mut reader = ddb_json.as_bytes();
     let mut output = vec![0u8; 4096];
     let mut output_slice = output.as_mut_slice();
@@ -23,10 +27,13 @@ fn convert_test_with_mode(ddb_json: &str, pretty: bool, mode: ddb_convert::ItemW
         &mut context_buffer,
         pretty,
         mode,
-    ).unwrap();
+    )
+    .unwrap();
 
     let bytes_written = 4096 - output_slice.len();
-    std::str::from_utf8(&output[..bytes_written]).unwrap().to_string()
+    std::str::from_utf8(&output[..bytes_written])
+        .unwrap()
+        .to_string()
 }
 
 #[test]
@@ -157,7 +164,8 @@ fn test_empty_list() {
 
 #[test]
 fn test_map_type() {
-    let ddb_json = r#"{"Item":{"metadata": {"M": {"key1": {"S": "value1"}, "key2": {"N": "999"}}}}}"#;
+    let ddb_json =
+        r#"{"Item":{"metadata": {"M": {"key1": {"S": "value1"}, "key2": {"N": "999"}}}}}"#;
     let result = convert_test(ddb_json);
     let expected = r#"{"metadata":{"key1":"value1","key2":999}}
 "#;
@@ -193,7 +201,8 @@ fn test_empty_map() {
 
 #[test]
 fn test_multiple_fields() {
-    let ddb_json = r#"{"Item":{"name": {"S": "Bob"}, "age": {"N": "30"}, "active": {"BOOL": true}}}"#;
+    let ddb_json =
+        r#"{"Item":{"name": {"S": "Bob"}, "age": {"N": "30"}, "active": {"BOOL": true}}}"#;
     let result = convert_test(ddb_json);
     let expected = r#"{"name":"Bob","age":30,"active":true}
 "#;
@@ -380,7 +389,8 @@ fn test_nested_m_fields() {
 
 #[test]
 fn test_mixed_confusing_fields() {
-    let ddb_json = r#"{"Item":{"test": {"M": {"M": {"S": "m"}, "L": {"L": [{"S": "l"}]}, "S": {"S": "s"}}}}}"#;
+    let ddb_json =
+        r#"{"Item":{"test": {"M": {"M": {"S": "m"}, "L": {"L": [{"S": "l"}]}, "S": {"S": "s"}}}}}"#;
     let result = convert_test(ddb_json);
     let expected = r#"{"test":{"M":"m","L":["l"],"S":"s"}}
 "#;
@@ -449,16 +459,28 @@ fn test_error_incomplete_json() {
 
     // Verify the error message is clean and informative
     // Should contain position/index information and describe the error
-    assert!(err_msg.contains("index") || err_msg.contains("position"),
-            "Error message should contain position: {}", err_msg);
-    assert!(err_msg.contains("EOF") || err_msg.contains("parsing") || err_msg.contains("Expected"),
-            "Error message should describe the error: {}", err_msg);
+    assert!(
+        err_msg.contains("index") || err_msg.contains("position"),
+        "Error message should contain position: {}",
+        err_msg
+    );
+    assert!(
+        err_msg.contains("EOF") || err_msg.contains("parsing") || err_msg.contains("Expected"),
+        "Error message should describe the error: {}",
+        err_msg
+    );
 
     // Verify the message doesn't contain noisy debug output
-    assert!(!err_msg.contains("Error {"),
-            "Error message should not contain debug format: {}", err_msg);
-    assert!(!err_msg.contains("error_type:"),
-            "Error message should not contain debug format: {}", err_msg);
+    assert!(
+        !err_msg.contains("Error {"),
+        "Error message should not contain debug format: {}",
+        err_msg
+    );
+    assert!(
+        !err_msg.contains("error_type:"),
+        "Error message should not contain debug format: {}",
+        err_msg
+    );
 }
 
 // Test for Item field with AsField mode (Item is a regular field, not a wrapper)

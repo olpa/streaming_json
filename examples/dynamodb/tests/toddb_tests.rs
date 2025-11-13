@@ -4,7 +4,11 @@ fn convert_to_ddb_test(normal_json: &str, with_item_wrapper: bool) -> String {
 }
 
 /// Helper function to convert normal JSON to DDB JSON with optional pretty printing
-fn convert_to_ddb_test_with_pretty(normal_json: &str, with_item_wrapper: bool, pretty: bool) -> String {
+fn convert_to_ddb_test_with_pretty(
+    normal_json: &str,
+    with_item_wrapper: bool,
+    pretty: bool,
+) -> String {
     let mut reader = normal_json.as_bytes();
     let mut output = vec![0u8; 8192];
     let mut output_slice = output.as_mut_slice();
@@ -18,10 +22,13 @@ fn convert_to_ddb_test_with_pretty(normal_json: &str, with_item_wrapper: bool, p
         &mut context_buffer,
         pretty,
         with_item_wrapper,
-    ).unwrap();
+    )
+    .unwrap();
 
     let bytes_written = 8192 - output_slice.len();
-    std::str::from_utf8(&output[..bytes_written]).unwrap().to_string()
+    std::str::from_utf8(&output[..bytes_written])
+        .unwrap()
+        .to_string()
 }
 
 #[test]
@@ -295,7 +302,8 @@ fn test_roundtrip_int_like_float() {
         &mut context_buffer,
         false,
         ddb_convert::ItemWrapperMode::AsWrapper,
-    ).unwrap();
+    )
+    .unwrap();
 
     let bytes_written = 4096 - output_slice.len();
     let roundtrip_result = std::str::from_utf8(&output[..bytes_written]).unwrap();
@@ -303,22 +311,36 @@ fn test_roundtrip_int_like_float() {
     // Should preserve the float format "4.0", not convert to int "4"
     let expected = r#"{"value":4.0}
 "#;
-    assert_eq!(roundtrip_result, expected,
-        "Int-like floats should be preserved during roundtrip conversion");
+    assert_eq!(
+        roundtrip_result, expected,
+        "Int-like floats should be preserved during roundtrip conversion"
+    );
 }
 
 #[test]
 fn test_roundtrip_various_int_like_floats() {
     // Test various int-like float values
     let test_cases = vec![
-        (r#"{"val": 1.0}"#, r#"{"val":1.0}
-"#),
-        (r#"{"val": 0.0}"#, r#"{"val":0.0}
-"#),
-        (r#"{"val": -5.0}"#, r#"{"val":-5.0}
-"#),
-        (r#"{"val": 100.0}"#, r#"{"val":100.0}
-"#),
+        (
+            r#"{"val": 1.0}"#,
+            r#"{"val":1.0}
+"#,
+        ),
+        (
+            r#"{"val": 0.0}"#,
+            r#"{"val":0.0}
+"#,
+        ),
+        (
+            r#"{"val": -5.0}"#,
+            r#"{"val":-5.0}
+"#,
+        ),
+        (
+            r#"{"val": 100.0}"#,
+            r#"{"val":100.0}
+"#,
+        ),
     ];
 
     for (input, expected) in test_cases {
@@ -339,20 +361,20 @@ fn test_roundtrip_various_int_like_floats() {
             &mut context_buffer,
             false,
             ddb_convert::ItemWrapperMode::AsWrapper,
-        ).unwrap();
+        )
+        .unwrap();
 
         let bytes_written = 4096 - output_slice.len();
         let roundtrip_result = std::str::from_utf8(&output[..bytes_written]).unwrap();
 
-        assert_eq!(roundtrip_result, expected,
-            "Failed for input: {}", input);
+        assert_eq!(roundtrip_result, expected, "Failed for input: {}", input);
     }
 }
 
 // Error handling tests
 #[test]
 fn test_error_incomplete_json_to_ddb() {
-    let normal_json = r#"{"name": "Alice""#;  // Missing closing brace
+    let normal_json = r#"{"name": "Alice""#; // Missing closing brace
     let mut reader = normal_json.as_bytes();
     let mut output = vec![0u8; 4096];
     let mut output_slice = output.as_mut_slice();
@@ -374,14 +396,26 @@ fn test_error_incomplete_json_to_ddb() {
 
     // Verify the error message is clean and informative
     // Should contain position/index information and describe the error
-    assert!(err_msg.contains("index") || err_msg.contains("position"),
-            "Error message should contain position: {}", err_msg);
-    assert!(err_msg.contains("EOF") || err_msg.contains("parsing") || err_msg.contains("expected"),
-            "Error message should describe the error: {}", err_msg);
+    assert!(
+        err_msg.contains("index") || err_msg.contains("position"),
+        "Error message should contain position: {}",
+        err_msg
+    );
+    assert!(
+        err_msg.contains("EOF") || err_msg.contains("parsing") || err_msg.contains("expected"),
+        "Error message should describe the error: {}",
+        err_msg
+    );
 
     // Verify the message doesn't contain noisy debug output
-    assert!(!err_msg.contains("Error {"),
-            "Error message should not contain debug format: {}", err_msg);
-    assert!(!err_msg.contains("error_type:"),
-            "Error message should not contain debug format: {}", err_msg);
+    assert!(
+        !err_msg.contains("Error {"),
+        "Error message should not contain debug format: {}",
+        err_msg
+    );
+    assert!(
+        !err_msg.contains("error_type:"),
+        "Error message should not contain debug format: {}",
+        err_msg
+    );
 }

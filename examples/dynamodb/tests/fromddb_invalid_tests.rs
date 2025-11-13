@@ -389,7 +389,9 @@ fn test_null_type_with_null_value() {
 
     let error_message = format!("{:?}", error);
     assert!(
-        error_message.contains("true") || error_message.contains("NULL") || error_message.contains("True"),
+        error_message.contains("true")
+            || error_message.contains("NULL")
+            || error_message.contains("True"),
         "Error message should explain that NULL type expects true value, got: {}",
         error_message
     );
@@ -403,7 +405,9 @@ fn test_null_type_with_string_value() {
 
     let error_message = format!("{:?}", error);
     assert!(
-        error_message.contains("true") || error_message.contains("NULL") || error_message.contains("True"),
+        error_message.contains("true")
+            || error_message.contains("NULL")
+            || error_message.contains("True"),
         "Error message should explain that NULL type expects true value, got: {}",
         error_message
     );
@@ -417,7 +421,9 @@ fn test_null_type_with_number_value() {
 
     let error_message = format!("{:?}", error);
     assert!(
-        error_message.contains("true") || error_message.contains("NULL") || error_message.contains("True"),
+        error_message.contains("true")
+            || error_message.contains("NULL")
+            || error_message.contains("True"),
         "Error message should explain that NULL type expects true value, got: {}",
         error_message
     );
@@ -435,7 +441,9 @@ fn test_map_type_with_string_value() {
 
     let error_message = format!("{:?}", error);
     assert!(
-        error_message.contains("object") || error_message.contains("M") || error_message.contains("Expected"),
+        error_message.contains("object")
+            || error_message.contains("M")
+            || error_message.contains("Expected"),
         "Error message should explain that M type expects an object value, got: {}",
         error_message
     );
@@ -449,7 +457,9 @@ fn test_map_type_with_number_value() {
 
     let error_message = format!("{:?}", error);
     assert!(
-        error_message.contains("object") || error_message.contains("M") || error_message.contains("Expected"),
+        error_message.contains("object")
+            || error_message.contains("M")
+            || error_message.contains("Expected"),
         "Error message should explain that M type expects an object value, got: {}",
         error_message
     );
@@ -463,7 +473,9 @@ fn test_map_type_with_boolean_value() {
 
     let error_message = format!("{:?}", error);
     assert!(
-        error_message.contains("object") || error_message.contains("M") || error_message.contains("Expected"),
+        error_message.contains("object")
+            || error_message.contains("M")
+            || error_message.contains("Expected"),
         "Error message should explain that M type expects an object value, got: {}",
         error_message
     );
@@ -477,7 +489,9 @@ fn test_map_type_with_null_value() {
 
     let error_message = format!("{:?}", error);
     assert!(
-        error_message.contains("object") || error_message.contains("M") || error_message.contains("Expected"),
+        error_message.contains("object")
+            || error_message.contains("M")
+            || error_message.contains("Expected"),
         "Error message should explain that M type expects an object value, got: {}",
         error_message
     );
@@ -530,7 +544,9 @@ fn test_list_type_with_string_value() {
 
     let error_message = format!("{:?}", error);
     assert!(
-        error_message.contains("array") || error_message.contains("L") || error_message.contains("Expected"),
+        error_message.contains("array")
+            || error_message.contains("L")
+            || error_message.contains("Expected"),
         "Error message should explain that L type expects an array value, got: {}",
         error_message
     );
@@ -544,7 +560,9 @@ fn test_list_type_with_number_value() {
 
     let error_message = format!("{:?}", error);
     assert!(
-        error_message.contains("array") || error_message.contains("L") || error_message.contains("Expected"),
+        error_message.contains("array")
+            || error_message.contains("L")
+            || error_message.contains("Expected"),
         "Error message should explain that L type expects an array value, got: {}",
         error_message
     );
@@ -558,7 +576,9 @@ fn test_list_type_with_boolean_value() {
 
     let error_message = format!("{:?}", error);
     assert!(
-        error_message.contains("array") || error_message.contains("L") || error_message.contains("Expected"),
+        error_message.contains("array")
+            || error_message.contains("L")
+            || error_message.contains("Expected"),
         "Error message should explain that L type expects an array value, got: {}",
         error_message
     );
@@ -572,7 +592,9 @@ fn test_list_type_with_null_value() {
 
     let error_message = format!("{:?}", error);
     assert!(
-        error_message.contains("array") || error_message.contains("L") || error_message.contains("Expected"),
+        error_message.contains("array")
+            || error_message.contains("L")
+            || error_message.contains("Expected"),
         "Error message should explain that L type expects an array value, got: {}",
         error_message
     );
@@ -586,7 +608,9 @@ fn test_list_type_with_object_value() {
 
     let error_message = format!("{:?}", error);
     assert!(
-        error_message.contains("array") || error_message.contains("L") || error_message.contains("Expected"),
+        error_message.contains("array")
+            || error_message.contains("L")
+            || error_message.contains("Expected"),
         "Error message should explain that L type expects an array value, got: {}",
         error_message
     );
@@ -625,7 +649,9 @@ fn test_string_set_with_string_value() {
 
     let error_message = format!("{:?}", error);
     assert!(
-        error_message.contains("array") || error_message.contains("SS") || error_message.contains("Expected"),
+        error_message.contains("array")
+            || error_message.contains("SS")
+            || error_message.contains("Expected"),
         "Error message should explain that SS type expects an array value, got: {}",
         error_message
     );
@@ -639,7 +665,9 @@ fn test_string_set_with_number_value() {
 
     let error_message = format!("{:?}", error);
     assert!(
-        error_message.contains("array") || error_message.contains("SS") || error_message.contains("Expected"),
+        error_message.contains("array")
+            || error_message.contains("SS")
+            || error_message.contains("Expected"),
         "Error message should explain that SS type expects an array value, got: {}",
         error_message
     );
@@ -653,7 +681,9 @@ fn test_string_set_with_array_of_numbers() {
 
     let error_message = format!("{:?}", error);
     assert!(
-        error_message.contains("string") || error_message.contains("SS") || error_message.contains("Expected"),
+        error_message.contains("string")
+            || error_message.contains("SS")
+            || error_message.contains("Expected"),
         "Error message should explain that SS array elements must be strings, got: {}",
         error_message
     );
@@ -690,7 +720,9 @@ fn test_number_set_with_string_value() {
 
     let error_message = format!("{:?}", error);
     assert!(
-        error_message.contains("array") || error_message.contains("NS") || error_message.contains("Expected"),
+        error_message.contains("array")
+            || error_message.contains("NS")
+            || error_message.contains("Expected"),
         "Error message should explain that NS type expects an array value, got: {}",
         error_message
     );
@@ -704,7 +736,9 @@ fn test_number_set_with_number_value() {
 
     let error_message = format!("{:?}", error);
     assert!(
-        error_message.contains("array") || error_message.contains("NS") || error_message.contains("Expected"),
+        error_message.contains("array")
+            || error_message.contains("NS")
+            || error_message.contains("Expected"),
         "Error message should explain that NS type expects an array value, got: {}",
         error_message
     );
@@ -718,7 +752,9 @@ fn test_number_set_with_array_of_numbers() {
 
     let error_message = format!("{:?}", error);
     assert!(
-        error_message.contains("string") || error_message.contains("NS") || error_message.contains("Expected"),
+        error_message.contains("string")
+            || error_message.contains("NS")
+            || error_message.contains("Expected"),
         "Error message should explain that NS array elements must be strings, got: {}",
         error_message
     );
@@ -775,7 +811,9 @@ fn test_binary_set_with_string_value() {
 
     let error_message = format!("{:?}", error);
     assert!(
-        error_message.contains("array") || error_message.contains("BS") || error_message.contains("Expected"),
+        error_message.contains("array")
+            || error_message.contains("BS")
+            || error_message.contains("Expected"),
         "Error message should explain that BS type expects an array value, got: {}",
         error_message
     );
@@ -789,7 +827,9 @@ fn test_binary_set_with_number_value() {
 
     let error_message = format!("{:?}", error);
     assert!(
-        error_message.contains("array") || error_message.contains("BS") || error_message.contains("Expected"),
+        error_message.contains("array")
+            || error_message.contains("BS")
+            || error_message.contains("Expected"),
         "Error message should explain that BS type expects an array value, got: {}",
         error_message
     );
@@ -803,7 +843,9 @@ fn test_binary_set_with_array_of_numbers() {
 
     let error_message = format!("{:?}", error);
     assert!(
-        error_message.contains("string") || error_message.contains("BS") || error_message.contains("Expected"),
+        error_message.contains("string")
+            || error_message.contains("BS")
+            || error_message.contains("Expected"),
         "Error message should explain that BS array elements must be strings, got: {}",
         error_message
     );

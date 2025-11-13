@@ -1,12 +1,12 @@
+use crate::ConversionError;
+use core::cell::RefCell;
 use embedded_io::{Read as IoRead, Write as IoWrite};
 use rjiter::jiter::Peek;
 use rjiter::RJiter;
-use scan_json::{scan, Action, EndAction, Options, StreamOp};
 use scan_json::matcher::StructuralPseudoname;
 use scan_json::stack::ContextIter;
-use core::cell::RefCell;
+use scan_json::{scan, Action, EndAction, Options, StreamOp};
 use u8pool::U8Pool;
-use crate::ConversionError;
 
 pub struct NormalToDdbConverter<'a, 'workbuf, W: IoWrite> {
     writer: &'a mut W,
@@ -60,7 +60,10 @@ impl<'a, 'workbuf, W: IoWrite> NormalToDdbConverter<'a, 'workbuf, W> {
 
 type NormalToDdbBaton<'a, 'workbuf, W> = &'a RefCell<NormalToDdbConverter<'a, 'workbuf, W>>;
 
-fn on_root_object_begin<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: NormalToDdbBaton<'_, '_, W>) -> StreamOp {
+fn on_root_object_begin<R: embedded_io::Read, W: IoWrite>(
+    _rjiter: &mut RJiter<R>,
+    baton: NormalToDdbBaton<'_, '_, W>,
+) -> StreamOp {
     let mut conv = baton.borrow_mut();
     if conv.with_item_wrapper {
         conv.write(b"{");
@@ -80,10 +83,15 @@ fn on_root_object_begin<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R
     StreamOp::None
 }
 
-fn on_root_field_key<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: NormalToDdbBaton<'_, '_, W>) -> StreamOp {
+fn on_root_field_key<R: embedded_io::Read, W: IoWrite>(
+    _rjiter: &mut RJiter<R>,
+    baton: NormalToDdbBaton<'_, '_, W>,
+) -> StreamOp {
     let field_name = {
         let conv = baton.borrow();
-        conv.current_field.expect("current_field should be set").to_vec()
+        conv.current_field
+            .expect("current_field should be set")
+            .to_vec()
     };
 
     let mut conv = baton.borrow_mut();
@@ -98,10 +106,15 @@ fn on_root_field_key<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, 
     StreamOp::None
 }
 
-fn on_nested_field_key<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: NormalToDdbBaton<'_, '_, W>) -> StreamOp {
+fn on_nested_field_key<R: embedded_io::Read, W: IoWrite>(
+    _rjiter: &mut RJiter<R>,
+    baton: NormalToDdbBaton<'_, '_, W>,
+) -> StreamOp {
     let field_name = {
         let conv = baton.borrow();
-        conv.current_field.expect("current_field should be set").to_vec()
+        conv.current_field
+            .expect("current_field should be set")
+            .to_vec()
     };
 
     let mut conv = baton.borrow_mut();
@@ -116,7 +129,10 @@ fn on_nested_field_key<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>
     StreamOp::None
 }
 
-fn on_string_value_toddb<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: NormalToDdbBaton<'_, '_, W>) -> StreamOp {
+fn on_string_value_toddb<R: embedded_io::Read, W: IoWrite>(
+    rjiter: &mut RJiter<R>,
+    baton: NormalToDdbBaton<'_, '_, W>,
+) -> StreamOp {
     let mut conv = baton.borrow_mut();
     conv.indent();
     conv.write(b"\"S\":\"");
@@ -130,10 +146,12 @@ fn on_string_value_toddb<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R
     StreamOp::ValueIsConsumed
 }
 
-fn on_bool_value_toddb<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: NormalToDdbBaton<'_, '_, W>) -> StreamOp {
-    let peek = match rjiter.peek() {
-        Ok(p) => p,
-        Err(_) => return StreamOp::Error("Failed to peek boolean value"),
+fn on_bool_value_toddb<R: embedded_io::Read, W: IoWrite>(
+    rjiter: &mut RJiter<R>,
+    baton: NormalToDdbBaton<'_, '_, W>,
+) -> StreamOp {
+    let Ok(peek) = rjiter.peek() else {
+        return StreamOp::Error("Failed to peek boolean value");
     };
 
     let mut conv = baton.borrow_mut();
@@ -157,10 +175,12 @@ fn on_bool_value_toddb<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>,
     StreamOp::ValueIsConsumed
 }
 
-fn on_null_value_toddb<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: NormalToDdbBaton<'_, '_, W>) -> StreamOp {
-    let peek = match rjiter.peek() {
-        Ok(p) => p,
-        Err(_) => return StreamOp::Error("Failed to peek null value"),
+fn on_null_value_toddb<R: embedded_io::Read, W: IoWrite>(
+    rjiter: &mut RJiter<R>,
+    baton: NormalToDdbBaton<'_, '_, W>,
+) -> StreamOp {
+    let Ok(peek) = rjiter.peek() else {
+        return StreamOp::Error("Failed to peek null value");
     };
     if peek != Peek::Null {
         return StreamOp::Error("Expected null value");
@@ -178,7 +198,10 @@ fn on_null_value_toddb<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>,
     StreamOp::ValueIsConsumed
 }
 
-fn on_atom_value_toddb<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: NormalToDdbBaton<'_, '_, W>) -> StreamOp {
+fn on_atom_value_toddb<R: embedded_io::Read, W: IoWrite>(
+    rjiter: &mut RJiter<R>,
+    baton: NormalToDdbBaton<'_, '_, W>,
+) -> StreamOp {
     // For atoms, we need to write {type:value} wrapper
     // The opening { is written here, closing } is written by type handlers
     {
@@ -189,9 +212,8 @@ fn on_atom_value_toddb<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>,
     }
 
     // Peek to determine the actual type
-    let peek = match rjiter.peek() {
-        Ok(p) => p,
-        Err(_) => return StreamOp::Error("Failed to peek atom value"),
+    let Ok(peek) = rjiter.peek() else {
+        return StreamOp::Error("Failed to peek atom value");
     };
 
     match peek {
@@ -202,9 +224,8 @@ fn on_atom_value_toddb<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>,
         _ => {
             // Use next_number_bytes to preserve the exact string representation
             // This ensures "4.0" stays as "4.0" and doesn't become "4"
-            let number_bytes = match rjiter.next_number_bytes() {
-                Ok(bytes) => bytes,
-                Err(_) => return StreamOp::Error("Failed to parse number"),
+            let Ok(number_bytes) = rjiter.next_number_bytes() else {
+                return StreamOp::Error("Failed to parse number");
             };
 
             let mut conv = baton.borrow_mut();
@@ -222,7 +243,10 @@ fn on_atom_value_toddb<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>,
     }
 }
 
-fn on_array_begin_toddb<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: NormalToDdbBaton<'_, '_, W>) -> StreamOp {
+fn on_array_begin_toddb<R: embedded_io::Read, W: IoWrite>(
+    _rjiter: &mut RJiter<R>,
+    baton: NormalToDdbBaton<'_, '_, W>,
+) -> StreamOp {
     let mut conv = baton.borrow_mut();
     conv.indent();
     conv.write(b"\"L\":[");
@@ -231,7 +255,10 @@ fn on_array_begin_toddb<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R
     StreamOp::None
 }
 
-fn on_array_element_atom<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: NormalToDdbBaton<'_, '_, W>) -> StreamOp {
+fn on_array_element_atom<R: embedded_io::Read, W: IoWrite>(
+    rjiter: &mut RJiter<R>,
+    baton: NormalToDdbBaton<'_, '_, W>,
+) -> StreamOp {
     // Write opening brace for array element type wrapper, then handle the atom value
     {
         let mut conv = baton.borrow_mut();
@@ -245,7 +272,10 @@ fn on_array_element_atom<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R
     on_atom_value_toddb(rjiter, baton)
 }
 
-fn on_array_element_array<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: NormalToDdbBaton<'_, '_, W>) -> StreamOp {
+fn on_array_element_array<R: embedded_io::Read, W: IoWrite>(
+    rjiter: &mut RJiter<R>,
+    baton: NormalToDdbBaton<'_, '_, W>,
+) -> StreamOp {
     // Array inside array - write element wrapper and L type
     {
         let mut conv = baton.borrow_mut();
@@ -256,10 +286,13 @@ fn on_array_element_array<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter
         conv.pending_comma = false;
     }
 
-    on_array_begin_toddb(_rjiter, baton)
+    on_array_begin_toddb(rjiter, baton)
 }
 
-fn on_array_element_object<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: NormalToDdbBaton<'_, '_, W>) -> StreamOp {
+fn on_array_element_object<R: embedded_io::Read, W: IoWrite>(
+    rjiter: &mut RJiter<R>,
+    baton: NormalToDdbBaton<'_, '_, W>,
+) -> StreamOp {
     // Object inside array - write element wrapper and M type
     {
         let mut conv = baton.borrow_mut();
@@ -270,10 +303,13 @@ fn on_array_element_object<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJite
         conv.pending_comma = false;
     }
 
-    on_nested_object_begin_toddb(_rjiter, baton)
+    on_nested_object_begin_toddb(rjiter, baton)
 }
 
-fn on_nested_object_begin_toddb<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: NormalToDdbBaton<'_, '_, W>) -> StreamOp {
+fn on_nested_object_begin_toddb<R: embedded_io::Read, W: IoWrite>(
+    _rjiter: &mut RJiter<R>,
+    baton: NormalToDdbBaton<'_, '_, W>,
+) -> StreamOp {
     let mut conv = baton.borrow_mut();
     conv.indent();
     conv.write(b"\"M\":{");
@@ -301,7 +337,9 @@ fn on_root_object_end<W: IoWrite>(baton: NormalToDdbBaton<'_, '_, W>) -> Result<
     Ok(())
 }
 
-fn on_nested_object_end<W: IoWrite>(baton: NormalToDdbBaton<'_, '_, W>) -> Result<(), &'static str> {
+fn on_nested_object_end<W: IoWrite>(
+    baton: NormalToDdbBaton<'_, '_, W>,
+) -> Result<(), &'static str> {
     let mut conv = baton.borrow_mut();
     conv.newline();
     conv.depth -= 1;
@@ -328,14 +366,18 @@ fn on_array_end_toddb<W: IoWrite>(baton: NormalToDdbBaton<'_, '_, W>) -> Result<
     Ok(())
 }
 
-fn on_array_element_end_toddb<W: IoWrite>(_baton: NormalToDdbBaton<'_, '_, W>) -> Result<(), &'static str> {
+fn on_array_element_end_toddb<W: IoWrite>(
+    _baton: NormalToDdbBaton<'_, '_, W>,
+) -> Result<(), &'static str> {
     // Close the element wrapper with } (for atoms only) - note that the value handler already closed and decreased depth
     // Value handler already wrote the closing } and decreased depth
     // Nothing more to do here
     Ok(())
 }
 
-fn on_object_in_array_end<W: IoWrite>(baton: NormalToDdbBaton<'_, '_, W>) -> Result<(), &'static str> {
+fn on_object_in_array_end<W: IoWrite>(
+    baton: NormalToDdbBaton<'_, '_, W>,
+) -> Result<(), &'static str> {
     // Close the M object with } and then close the element wrapper with }
     let mut conv = baton.borrow_mut();
     conv.newline();
@@ -350,7 +392,9 @@ fn on_object_in_array_end<W: IoWrite>(baton: NormalToDdbBaton<'_, '_, W>) -> Res
     Ok(())
 }
 
-fn on_array_in_array_end<W: IoWrite>(baton: NormalToDdbBaton<'_, '_, W>) -> Result<(), &'static str> {
+fn on_array_in_array_end<W: IoWrite>(
+    baton: NormalToDdbBaton<'_, '_, W>,
+) -> Result<(), &'static str> {
     // Close the L array with ] and the element wrapper with }
     let mut conv = baton.borrow_mut();
     conv.newline();
@@ -395,10 +439,9 @@ fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
                 if parent == b"#top" {
                     // Root-level field
                     return Some(on_root_field_key);
-                } else {
-                    // Nested field (inside any object)
-                    return Some(on_nested_field_key);
                 }
+                // Nested field (inside any object)
+                return Some(on_nested_field_key);
             }
         }
     }
@@ -441,10 +484,9 @@ fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
             } else if first == b"#array" {
                 // Object in array - write element wrapper
                 return Some(on_array_element_object);
-            } else {
-                // Object as a field value - write M type wrapper
-                return Some(on_nested_object_begin_toddb);
             }
+            // Object as a field value - write M type wrapper
+            return Some(on_nested_object_begin_toddb);
         }
     }
 
@@ -482,10 +524,9 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
             if first == b"#array" {
                 // Array inside another array - close with ]} and element wrapper }
                 return Some(on_array_in_array_end);
-            } else {
-                // Root-level or field value array - close with ]}
-                return Some(on_array_end_toddb);
             }
+            // Root-level or field value array - close with ]}
+            return Some(on_array_end_toddb);
         }
     }
 
@@ -506,16 +547,23 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
     None
 }
 
-/// Convert normal JSON to DynamoDB JSON in a streaming manner.
+/// Convert normal JSON to `DynamoDB` JSON in a streaming manner.
 /// Supports JSONL format (newline-delimited JSON) - processes multiple JSON objects.
 ///
 /// # Arguments
 /// * `reader` - Input stream implementing `embedded_io::Read`
 /// * `writer` - Output stream implementing `embedded_io::Write`
 /// * `rjiter_buffer` - Buffer for rjiter to use (recommended: 4096 bytes)
-/// * `context_buffer` - Buffer for scan_json context tracking (recommended: 2048 bytes)
+/// * `context_buffer` - Buffer for `scan_json` context tracking (recommended: 2048 bytes)
 /// * `pretty` - Whether to pretty-print the output (currently unused, may be added later)
 /// * `with_item_wrapper` - Whether to wrap the output in an "Item" key
+///
+/// # Errors
+/// Returns `ConversionError` if:
+/// - Input JSON is malformed or invalid
+/// - Input contains data types that cannot be represented in `DynamoDB` format
+/// - I/O errors occur during reading or writing
+/// - Buffer sizes are insufficient for the input data
 ///
 /// # Returns
 /// `Ok(())` on success, or `Err(ConversionError)` with detailed error information on failure
@@ -532,13 +580,12 @@ pub fn convert_normal_to_ddb<R: IoRead, W: IoWrite>(
     let converter = NormalToDdbConverter::new(writer, with_item_wrapper, pretty);
     let baton = RefCell::new(converter);
 
-    let mut context = U8Pool::new(context_buffer, 32)
-        .map_err(|_| ConversionError::ScanError(
-            scan_json::Error::InternalError {
-                position: 0,
-                message: "Failed to create context pool"
-            }
-        ))?;
+    let mut context = U8Pool::new(context_buffer, 32).map_err(|_| {
+        ConversionError::ScanError(scan_json::Error::InternalError {
+            position: 0,
+            message: "Failed to create context pool",
+        })
+    })?;
 
     scan(
         find_action,
@@ -547,7 +594,8 @@ pub fn convert_normal_to_ddb<R: IoRead, W: IoWrite>(
         &baton,
         &mut context,
         &Options::new(),
-    ).map_err(ConversionError::ScanError)?;
+    )
+    .map_err(ConversionError::ScanError)?;
 
     Ok(())
 }

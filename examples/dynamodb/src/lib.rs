@@ -41,16 +41,40 @@ pub enum ConversionError {
 impl core::fmt::Display for ConversionError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            ConversionError::RJiterError { kind, position, context } => {
-                write!(f, "RJiter error at position {}: {:?} (while {})", position, kind, context)
+            ConversionError::RJiterError {
+                kind,
+                position,
+                context,
+            } => {
+                write!(
+                    f,
+                    "RJiter error at position {}: {:?} (while {})",
+                    position, kind, context
+                )
             }
-            ConversionError::IOError { kind, position, context } => {
-                write!(f, "IO error at position {}: {:?} (while {})", position, kind, context)
+            ConversionError::IOError {
+                kind,
+                position,
+                context,
+            } => {
+                write!(
+                    f,
+                    "IO error at position {}: {:?} (while {})",
+                    position, kind, context
+                )
             }
-            ConversionError::ParseError { position, context, unknown_type } => {
+            ConversionError::ParseError {
+                position,
+                context,
+                unknown_type,
+            } => {
                 if let Some((bytes, len)) = unknown_type {
                     let type_str = std::string::String::from_utf8_lossy(&bytes[..*len]);
-                    write!(f, "Parse error at position {}: {} (unknown type descriptor '{}')", position, context, type_str)
+                    write!(
+                        f,
+                        "Parse error at position {}: {} (unknown type descriptor '{}')",
+                        position, context, type_str
+                    )
                 } else {
                     write!(f, "Parse error at position {}: {}", position, context)
                 }

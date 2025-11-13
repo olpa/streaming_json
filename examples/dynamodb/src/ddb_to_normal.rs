@@ -1,12 +1,12 @@
+use crate::ConversionError;
+use core::cell::RefCell;
 use embedded_io::{Read as IoRead, Write as IoWrite};
 use rjiter::jiter::Peek;
 use rjiter::RJiter;
-use scan_json::{scan, Action, EndAction, Options, StreamOp};
 use scan_json::matcher::StructuralPseudoname;
 use scan_json::stack::ContextIter;
-use core::cell::RefCell;
+use scan_json::{scan, Action, EndAction, Options, StreamOp};
 use u8pool::U8Pool;
-use crate::ConversionError;
 
 /// What phase of parsing we're in
 ///
@@ -33,7 +33,7 @@ use crate::ConversionError;
 ///    - Otherwise -> `ExpectingField`
 /// - From `ExpectingField`:
 ///    - If parent is "#array" -> `ExpectingTypeKey` (M container in array ended)
-///    - If key is "Item" at top with AsWrapper -> no transition (skipped)
+///    - If key is "Item" at top with `AsWrapper` -> no transition (skipped)
 ///    - Otherwise -> `ExpectingValue` (M container ended)
 /// - From `ExpectingTypeKey`:
 ///    - Literal type keys (S, N, B, BOOL, NULL) -> `TypeKeyConsumed`
@@ -55,15 +55,17 @@ enum Phase {
 /// How to handle "Item" key at top level
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ItemWrapperMode {
-    AsWrapper,   // Interpret "Item" at top level as a special wrapper
-    AsField,     // Interpret "Item" at top level as a normal field
+    AsWrapper, // Interpret "Item" at top level as a special wrapper
+    AsField,   // Interpret "Item" at top level as a normal field
 }
 
 /// Type descriptor being processed (only for container types)
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum TypeDesc {
-    SS, NS,  // Sets
-    L, M,    // Nested containers
+    SS,
+    NS, // Sets
+    L,
+    M, // Nested containers
 }
 
 pub struct DdbConverter<'a, 'workbuf, W: IoWrite> {
@@ -103,7 +105,12 @@ impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
     }
 
     #[allow(dead_code)]
-    fn store_io_error(&mut self, kind: embedded_io::ErrorKind, position: usize, context: &'static str) {
+    fn store_io_error(
+        &mut self,
+        kind: embedded_io::ErrorKind,
+        position: usize,
+        context: &'static str,
+    ) {
         self.last_error = Some(ConversionError::IOError {
             kind,
             position,
@@ -111,11 +118,18 @@ impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
         });
     }
 
-    fn store_parse_error(&mut self, position: usize, context: &'static str, unknown_type_bytes: Option<&[u8]>) {
+    fn store_parse_error(
+        &mut self,
+        position: usize,
+        context: &'static str,
+        unknown_type_bytes: Option<&[u8]>,
+    ) {
         let unknown_type = if let Some(bytes) = unknown_type_bytes {
             let len = bytes.len().min(32);
             let mut buffer = [0u8; 32];
-            buffer[..len].copy_from_slice(&bytes[..len]);
+            if let (Some(buf_slice), Some(bytes_slice)) = (buffer.get_mut(..len), bytes.get(..len)) {
+                buf_slice.copy_from_slice(bytes_slice);
+            }
             Some((buffer, len))
         } else {
             None
@@ -158,7 +172,10 @@ impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
 type DdbBaton<'a, 'workbuf, W> = &'a RefCell<DdbConverter<'a, 'workbuf, W>>;
 
 /// Handle root object beginning - write opening brace
-fn on_root_object_begin<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
+fn on_root_object_begin<R: embedded_io::Read, W: IoWrite>(
+    _rjiter: &mut RJiter<R>,
+    baton: DdbBaton<'_, '_, W>,
+) -> StreamOp {
     let mut conv = baton.borrow_mut();
     conv.write(b"{");
     conv.newline();
@@ -167,10 +184,15 @@ fn on_root_object_begin<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R
 }
 
 /// Handle a field key - write the field name and prepare for type descriptor
-fn on_field_key<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
+fn on_field_key<R: embedded_io::Read, W: IoWrite>(
+    _rjiter: &mut RJiter<R>,
+    baton: DdbBaton<'_, '_, W>,
+) -> StreamOp {
     let field_name = {
         let conv = baton.borrow();
-        conv.current_field.expect("current_field should be set").to_vec()
+        conv.current_field
+            .expect("current_field should be set")
+            .to_vec()
     };
 
     let mut conv = baton.borrow_mut();
@@ -229,11 +251,13 @@ fn write_string_value<R: embedded_io::Read, W: IoWrite>(
 }
 
 /// Handle a type key - for literal types, consume and write the value directly
-fn on_type_key<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
+fn on_type_key<R: embedded_io::Read, W: IoWrite>(
+    rjiter: &mut RJiter<R>,
+    baton: DdbBaton<'_, '_, W>,
+) -> StreamOp {
     let mut conv = baton.borrow_mut();
-    let type_key = match conv.current_field {
-        Some(field) => field,
-        None => return StreamOp::Error("current_field should be set for type key"),
+    let Some(type_key) = conv.current_field else {
+        return StreamOp::Error("current_field should be set for type key");
     };
 
     // Helper for boolean-based types (BOOL/NULL): peek bool, consume with known_bool, write output
@@ -276,38 +300,54 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: 
 
     match type_key {
         b"S" | b"B" => {
-            let result = write_string_value(rjiter, &mut conv, true, true, "S/B (string) type", "S/B (string) type");
+            let result = write_string_value(
+                rjiter,
+                &mut conv,
+                true,
+                true,
+                "S/B (string) type",
+                "S/B (string) type",
+            );
             conv.current_type = None;
             conv.phase = Phase::ExpectingValue;
             result
         }
         b"N" => {
-            let result = write_string_value(rjiter, &mut conv, false, true, "N (number) type", "N (number) type");
+            let result = write_string_value(
+                rjiter,
+                &mut conv,
+                false,
+                true,
+                "N (number) type",
+                "N (number) type",
+            );
             conv.current_type = None;
             conv.phase = Phase::ExpectingValue;
             result
         }
         b"BOOL" => {
             let result = handle_bool_based_type(
-                rjiter, &mut conv,
+                rjiter,
+                &mut conv,
                 |peek| match peek {
                     Peek::True => Ok(b"true"),
                     Peek::False => Ok(b"false"),
                     _ => Err("Expected boolean value for BOOL type"),
                 },
-                "BOOL type"
+                "BOOL type",
             );
             conv.phase = Phase::ExpectingValue;
             result
         }
         b"NULL" => {
             let result = handle_bool_based_type(
-                rjiter, &mut conv,
+                rjiter,
+                &mut conv,
                 |peek| match peek {
                     Peek::True => Ok(b"null"),
                     _ => Err("Expected true for NULL type"),
                 },
-                "NULL type"
+                "NULL type",
             );
             conv.phase = Phase::ExpectingValue;
             result
@@ -317,7 +357,7 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: 
             conv.write(b"[");
             conv.pending_comma = false;
             conv.current_type = Some(TypeDesc::SS);
-            conv.phase = Phase::ExpectingValue;  // Stay in ExpectingValue, SS elements are atoms
+            conv.phase = Phase::ExpectingValue; // Stay in ExpectingValue, SS elements are atoms
             StreamOp::None
         }
         b"NS" => {
@@ -325,7 +365,7 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: 
             conv.write(b"[");
             conv.pending_comma = false;
             conv.current_type = Some(TypeDesc::NS);
-            conv.phase = Phase::ExpectingValue;  // Stay in ExpectingValue, NS elements are atoms
+            conv.phase = Phase::ExpectingValue; // Stay in ExpectingValue, NS elements are atoms
             StreamOp::None
         }
         b"L" => {
@@ -334,7 +374,7 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: 
             conv.write(b"[");
             conv.pending_comma = false;
             conv.current_type = Some(TypeDesc::L);
-            conv.phase = Phase::ExpectingTypeKey;  // In L, we expect type keys (type descriptors are ignored)
+            conv.phase = Phase::ExpectingTypeKey; // In L, we expect type keys (type descriptors are ignored)
             StreamOp::None
         }
         b"M" => {
@@ -361,40 +401,43 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: 
 
 // Type descriptor value handlers for set element atoms (SS, NS)
 
-fn on_set_string_element<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
+fn on_set_string_element<R: embedded_io::Read, W: IoWrite>(
+    rjiter: &mut RJiter<R>,
+    baton: DdbBaton<'_, '_, W>,
+) -> StreamOp {
     let mut conv = baton.borrow_mut();
     write_string_value(
         rjiter,
         &mut conv,
-        true,  // with_quotes
-        true,  // write_comma_if_pending: always for set elements (pending_comma handles first element)
+        true, // with_quotes
+        true, // write_comma_if_pending: always for set elements (pending_comma handles first element)
         "peeking SS/BS (string set) element",
         "writing SS/BS (string set) element",
     )
 }
 
-fn on_set_number_element<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
+fn on_set_number_element<R: embedded_io::Read, W: IoWrite>(
+    rjiter: &mut RJiter<R>,
+    baton: DdbBaton<'_, '_, W>,
+) -> StreamOp {
     let mut conv = baton.borrow_mut();
     write_string_value(
         rjiter,
         &mut conv,
-        false,  // with_quotes
-        true,   // write_comma_if_pending: always for set elements (pending_comma handles first element)
+        false, // with_quotes
+        true, // write_comma_if_pending: always for set elements (pending_comma handles first element)
         "peeking NS (number set) element",
         "writing NS (number set) element",
     )
 }
 
 // Generic error handler that returns the stored error
-fn on_error<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, _baton: DdbBaton<'_, '_, W>) -> StreamOp {
+fn on_error<R: embedded_io::Read, W: IoWrite>(
+    _rjiter: &mut RJiter<R>,
+    _baton: DdbBaton<'_, '_, W>,
+) -> StreamOp {
     StreamOp::Error("Validation error (see stored error)")
 }
-
-// Generic end action error handler
-fn on_end_error<W: IoWrite>(_baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
-    Err("Validation error (see stored error)")
-}
-
 /// Handle Object structural pseudoname
 fn find_action_object<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
     context: ContextIter,
@@ -507,7 +550,7 @@ fn find_action_key<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
             let current_type = baton.borrow().current_type;
 
             // Check if we're in a set (SS, NS)
-            let in_set = matches!(current_type, Some(TypeDesc::SS) | Some(TypeDesc::NS));
+            let in_set = matches!(current_type, Some(TypeDesc::SS | TypeDesc::NS));
 
             if !in_set {
                 // Error: not in a set
@@ -554,7 +597,7 @@ fn find_action_array<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
 ) -> Option<Action<DdbBaton<'a, 'workbuf, W>, R>> {
     // Validate context: only allow arrays for SS, NS, L types
     match current_type {
-        Some(TypeDesc::SS) | Some(TypeDesc::NS) => {
+        Some(TypeDesc::SS | TypeDesc::NS) => {
             // Valid: these types expect arrays
             None
         }
@@ -590,7 +633,7 @@ fn find_action_atom<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
     }
 
     // SS/NS set element inside array
-    if matches!(current_type, Some(TypeDesc::SS) | Some(TypeDesc::NS)) {
+    if matches!(current_type, Some(TypeDesc::SS | TypeDesc::NS)) {
         if let Some(first) = context.next() {
             if first == b"#array" {
                 // Valid set element inside array
@@ -621,8 +664,13 @@ fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
     {
         let mut ctx = context.clone();
         let key = ctx.next();
-        std::eprintln!("DEBUG BEGIN: structural={:?}, key={:?}, phase={:?}, current_type={:?}",
-            structural, key.map(|k| std::str::from_utf8(k).unwrap_or("???")), phase, current_type);
+        std::eprintln!(
+            "DEBUG BEGIN: structural={:?}, key={:?}, phase={:?}, current_type={:?}",
+            structural,
+            key.map(|k| std::str::from_utf8(k).unwrap_or("???")),
+            phase,
+            current_type
+        );
     }
 
     // Match on structural type and delegate to appropriate handler
@@ -634,7 +682,10 @@ fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
     }
 }
 
-fn on_unexpected_atom<R: embedded_io::Read, W: IoWrite>(_rjiter: &mut RJiter<R>, baton: DdbBaton<'_, '_, W>) -> StreamOp {
+fn on_unexpected_atom<R: embedded_io::Read, W: IoWrite>(
+    _rjiter: &mut RJiter<R>,
+    baton: DdbBaton<'_, '_, W>,
+) -> StreamOp {
     let mut conv = baton.borrow_mut();
     conv.store_parse_error(
         0,
@@ -736,8 +787,10 @@ fn find_end_action_object<'a, 'workbuf, W: IoWrite>(
     None
 }
 
-/// Transition to TypeKeyConsumed phase
-fn on_transition_to_type_key_consumed<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
+/// Transition to `TypeKeyConsumed` phase
+fn on_transition_to_type_key_consumed<W: IoWrite>(
+    baton: DdbBaton<'_, '_, W>,
+) -> Result<(), &'static str> {
     let mut conv = baton.borrow_mut();
     conv.phase = Phase::TypeKeyConsumed;
     Ok(())
@@ -805,7 +858,7 @@ fn find_end_action_key<'a, 'workbuf, W: IoWrite>(
             // - Literal types (S, N, BOOL, NULL, B) transition to TypeKeyConsumed
             let is_container_type = matches!(key, b"M" | b"L" | b"SS" | b"NS" | b"BS");
             if is_container_type {
-                None  // Container end is handled elsewhere
+                None // Container end is handled elsewhere
             } else {
                 // Literal type - transition to TypeKeyConsumed
                 Some(on_transition_to_type_key_consumed)
@@ -828,8 +881,13 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
     {
         let mut ctx = context.clone();
         let key = ctx.next();
-        std::eprintln!("DEBUG END: structural={:?}, key={:?}, phase={:?}, current_type={:?}",
-            structural, key.map(|k| std::str::from_utf8(k).unwrap_or("???")), phase, current_type);
+        std::eprintln!(
+            "DEBUG END: structural={:?}, key={:?}, phase={:?}, current_type={:?}",
+            structural,
+            key.map(|k| std::str::from_utf8(k).unwrap_or("???")),
+            phase,
+            current_type
+        );
     }
 
     match structural {
@@ -851,16 +909,23 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
     }
 }
 
-/// Convert DynamoDB JSON to normal JSON in a streaming, allocation-free manner.
+/// Convert `DynamoDB` JSON to normal JSON in a streaming, allocation-free manner.
 /// Supports JSONL format (newline-delimited JSON) - processes multiple JSON objects.
 ///
 /// # Arguments
 /// * `reader` - Input stream implementing `embedded_io::Read`
 /// * `writer` - Output stream implementing `embedded_io::Write`
 /// * `rjiter_buffer` - Buffer for rjiter to use (recommended: 4096 bytes)
-/// * `context_buffer` - Buffer for scan_json context tracking (recommended: 2048 bytes)
+/// * `context_buffer` - Buffer for `scan_json` context tracking (recommended: 2048 bytes)
 /// * `pretty` - Whether to pretty-print the output
-/// * `item_wrapper_mode` - How to handle "Item" key at top level (AsWrapper or AsField)
+/// * `item_wrapper_mode` - How to handle "Item" key at top level (`AsWrapper` or `AsField`)
+///
+/// # Errors
+/// Returns `ConversionError` if:
+/// - Input JSON is malformed or invalid
+/// - Input contains invalid `DynamoDB` type descriptors
+/// - I/O errors occur during reading or writing
+/// - Buffer sizes are insufficient for the input data
 ///
 /// # Returns
 /// `Ok(())` on success, or `Err(ConversionError)` with detailed error information on failure
@@ -877,13 +942,12 @@ pub fn convert_ddb_to_normal<R: IoRead, W: IoWrite>(
     let converter = DdbConverter::new(writer, pretty, item_wrapper_mode);
     let baton = RefCell::new(converter);
 
-    let mut context = U8Pool::new(context_buffer, 32)
-        .map_err(|_| ConversionError::ScanError(
-            scan_json::Error::InternalError {
-                position: 0,
-                message: "Failed to create context pool"
-            }
-        ))?;
+    let mut context = U8Pool::new(context_buffer, 32).map_err(|_| {
+        ConversionError::ScanError(scan_json::Error::InternalError {
+            position: 0,
+            message: "Failed to create context pool",
+        })
+    })?;
 
     if let Err(e) = scan(
         find_action,

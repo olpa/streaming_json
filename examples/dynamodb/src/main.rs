@@ -1,7 +1,7 @@
 use clap::{Parser, ValueEnum};
 use ddb_convert::convert_ddb_to_normal;
-use std::io;
 use embedded_io_adapters::std::FromStd;
+use std::io;
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum ConversionMode {
@@ -51,14 +51,14 @@ fn main() {
             // Handle input - streaming from file or stdin
             let result = if let Some(input_path) = &args.input {
                 // Stream from file
-                let input_file = std::fs::File::open(input_path)
-                    .expect("Failed to open input file");
+                let input_file =
+                    std::fs::File::open(input_path).expect("Failed to open input file");
                 let mut input_reader = FromStd::new(input_file);
 
                 // Handle output
                 if let Some(output_path) = &args.output {
-                    let output_file = std::fs::File::create(output_path)
-                        .expect("Failed to create output file");
+                    let output_file =
+                        std::fs::File::create(output_path).expect("Failed to create output file");
                     let mut output_writer = FromStd::new(output_file);
                     convert_ddb_to_normal(
                         &mut input_reader,
@@ -86,8 +86,8 @@ fn main() {
                 let mut input_reader = FromStd::new(stdin);
 
                 if let Some(output_path) = &args.output {
-                    let output_file = std::fs::File::create(output_path)
-                        .expect("Failed to create output file");
+                    let output_file =
+                        std::fs::File::create(output_path).expect("Failed to create output file");
                     let mut output_writer = FromStd::new(output_file);
                     convert_ddb_to_normal(
                         &mut input_reader,
@@ -127,14 +127,14 @@ fn main() {
             // Handle input - streaming from file or stdin
             let result = if let Some(input_path) = &args.input {
                 // Stream from file
-                let input_file = std::fs::File::open(input_path)
-                    .expect("Failed to open input file");
+                let input_file =
+                    std::fs::File::open(input_path).expect("Failed to open input file");
                 let mut input_reader = FromStd::new(input_file);
 
                 // Handle output
                 if let Some(output_path) = &args.output {
-                    let output_file = std::fs::File::create(output_path)
-                        .expect("Failed to create output file");
+                    let output_file =
+                        std::fs::File::create(output_path).expect("Failed to create output file");
                     let mut output_writer = FromStd::new(output_file);
                     ddb_convert::convert_normal_to_ddb(
                         &mut input_reader,
@@ -162,8 +162,8 @@ fn main() {
                 let mut input_reader = FromStd::new(stdin);
 
                 if let Some(output_path) = &args.output {
-                    let output_file = std::fs::File::create(output_path)
-                        .expect("Failed to create output file");
+                    let output_file =
+                        std::fs::File::create(output_path).expect("Failed to create output file");
                     let mut output_writer = FromStd::new(output_file);
                     ddb_convert::convert_normal_to_ddb(
                         &mut input_reader,
