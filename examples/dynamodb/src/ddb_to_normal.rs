@@ -677,6 +677,14 @@ fn on_map_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str
     Ok(())
 }
 
+fn on_map_end_in_array<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
+    on_map_end(baton)?;
+    // Override phase to ExpectingTypeKey for array context
+    let mut conv = baton.borrow_mut();
+    conv.phase = Phase::ExpectingTypeKey;
+    Ok(())
+}
+
 fn on_type_key_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     // Called for the phase "TypeKeyConsumed"
 
@@ -771,7 +779,16 @@ fn find_end_action_key<'a, 'workbuf, W: IoWrite>(
 
             // ExpectingField phase only occurs inside M containers or at root level
             // When a field ends in ExpectingField, it means the M container is ending
-            Some(on_map_end)
+            // Check parent context to determine the appropriate transition
+            let parent = context.next();
+
+            if parent == Some(b"#array") {
+                // M container ending inside an L array - write "}" and transition to ExpectingTypeKey
+                Some(on_map_end_in_array)
+            } else {
+                // M container ending normally - write "}" and transition to ExpectingValue
+                Some(on_map_end)
+            }
         }
         Phase::ExpectingTypeKey => {
             // For type keys ending in ExpectingTypeKey:
