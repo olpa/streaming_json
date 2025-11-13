@@ -269,30 +269,40 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(rjiter: &mut RJiter<R>, baton: 
         b"S" | b"B" => {
             let result = write_string_value(rjiter, &mut conv, true, true, "S/B (string) type", "S/B (string) type");
             conv.current_type = None;
+            conv.phase = Phase::ExpectingValue;
             result
         }
         b"N" => {
             let result = write_string_value(rjiter, &mut conv, false, true, "N (number) type", "N (number) type");
             conv.current_type = None;
+            conv.phase = Phase::ExpectingValue;
             result
         }
-        b"BOOL" => handle_bool_based_type(
-            rjiter, &mut conv,
-            |peek| match peek {
-                Peek::True => Ok(b"true"),
-                Peek::False => Ok(b"false"),
-                _ => Err("Expected boolean value for BOOL type"),
-            },
-            "BOOL type"
-        ),
-        b"NULL" => handle_bool_based_type(
-            rjiter, &mut conv,
-            |peek| match peek {
-                Peek::True => Ok(b"null"),
-                _ => Err("Expected true for NULL type"),
-            },
-            "NULL type"
-        ),
+        b"BOOL" => {
+            let result = handle_bool_based_type(
+                rjiter, &mut conv,
+                |peek| match peek {
+                    Peek::True => Ok(b"true"),
+                    Peek::False => Ok(b"false"),
+                    _ => Err("Expected boolean value for BOOL type"),
+                },
+                "BOOL type"
+            );
+            conv.phase = Phase::ExpectingValue;
+            result
+        }
+        b"NULL" => {
+            let result = handle_bool_based_type(
+                rjiter, &mut conv,
+                |peek| match peek {
+                    Peek::True => Ok(b"null"),
+                    _ => Err("Expected true for NULL type"),
+                },
+                "NULL type"
+            );
+            conv.phase = Phase::ExpectingValue;
+            result
+        }
         b"SS" | b"BS" => {
             // SS/BS type - write opening bracket here (parent handles it, not find_action_array)
             conv.write(b"[");
@@ -714,13 +724,13 @@ fn find_end_action_object<'a, 'workbuf, W: IoWrite>(
     // Check if we're ending a type descriptor object (TypeKeyConsumed phase)
     if phase == Phase::TypeKeyConsumed {
         let mut ctx = context.clone();
-        let parent = ctx.next();
+        let key = ctx.next();
 
-        if parent == Some(b"#array") {
+        if key == Some(b"#array") {
             // In array context - transition to ExpectingTypeKey
             return Some(on_type_key_end_in_array);
-        } else if parent == Some(b"M") {
-            // In M context - write "}" and transition to ExpectingField
+        } else if key == Some(b"M") {
+            // Ending an M container - write "}" and transition
             return Some(on_map_end);
         } else {
             // Otherwise - transition to ExpectingField
