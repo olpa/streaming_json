@@ -10,31 +10,40 @@ use crate::ConversionError;
 
 /// What phase of parsing we're in
 ///
-/// Begin-transitions:
-/// - `ExpectingField` -> `ExpectingTypeKey`
-/// - `ExpectingTypeKey`->
-///    - if in "M", then `ExpectingField`
-///    - otherwise, `ExpectingValue`
-/// - `ExpectingValue` ->
-///    - if in a set (SS, NS), `ExpectingValue`
-///    - otherwise, error
-/// - `TypeKeyConsumed` ->
-///    - if in "M", then `ExpectingField`
-///    - otherwise, error
+/// Begin-transitions (when encountering the start of a key or value):
+/// - From `ExpectingField`:
+///    - Field key encountered -> `ExpectingTypeKey`
+/// - From `ExpectingTypeKey`:
+///    - Type key "M" -> `ExpectingField`
+///    - Type key "L" -> `ExpectingTypeKey`
+///    - Type key "SS", "NS", "BS" -> `ExpectingValue`
+///    - Type key "S", "N", "B", "BOOL", "NULL" -> `ExpectingValue`
+/// - From `ExpectingValue`:
+///    - Atom in set -> stays `ExpectingValue`
+///    - Otherwise -> error
+/// - From `TypeKeyConsumed`:
+///    - Field key encountered -> `ExpectingTypeKey`
 ///
-/// End-transitions:
-/// - `ExpectingValue` -> `TypeKeyConsumed`
-/// - `TypeKeyConsumed` ->
-///    - if in "#array", then `ExpectingTypeKey`
-///    - if in "M", then `ExpectingField` (with writing "}" as a side effect)
-///    - otherwise, `ExpectingField`
-/// - `ExpectingField` -> `TypeKeyConsumed`
-/// - `ExpectingTypeKey` ->
-///    - for literal types (S, N, BOOL, NULL, B): `TypeKeyConsumed`
-///    - for container types (M, L, SS, NS, BS): no transition (handled by container end)
-/// - End of array (L type):
-///   - `ExpectingTypeKey` -> `ExpectingValue`
-///   - otherwise, error
+/// End-transitions (when a key or structural element ends):
+/// - From `ExpectingValue`:
+///    - If parent is "#array" -> `ExpectingTypeKey`
+///    - Otherwise -> `TypeKeyConsumed`
+/// - From `TypeKeyConsumed`:
+///    - If parent is "#array" -> `ExpectingTypeKey`
+///    - Otherwise -> `ExpectingField`
+/// - From `ExpectingField`:
+///    - If parent is "#array" -> `ExpectingTypeKey` (M container in array ended)
+///    - If key is "Item" at top with AsWrapper -> no transition (skipped)
+///    - Otherwise -> `ExpectingValue` (M container ended)
+/// - From `ExpectingTypeKey`:
+///    - Literal type keys (S, N, B, BOOL, NULL) -> `TypeKeyConsumed`
+///    - Container type keys (M, L, SS, NS, BS) -> no transition (handled by container end)
+///
+/// Special container end transitions:
+/// - L array ending: `ExpectingTypeKey` -> `ExpectingValue`
+/// - SS/NS/BS set ending: `ExpectingValue` -> `ExpectingValue`
+/// - M map ending (not in array): -> `ExpectingValue`
+/// - M map ending (in array): -> `ExpectingTypeKey`
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Phase {
     ExpectingField,
