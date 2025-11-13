@@ -738,7 +738,14 @@ fn find_end_action_key<'a, 'workbuf, W: IoWrite>(
     match phase {
         Phase::ExpectingValue => {
             // Transition: ExpectingValue -> TypeKeyConsumed
-            Some(on_transition_to_type_key_consumed)
+            // But if we're in an array context, transition to ExpectingTypeKey instead
+            let parent = context.next();
+
+            if parent == Some(b"#array") {
+                Some(on_type_key_end_in_array)
+            } else {
+                Some(on_transition_to_type_key_consumed)
+            }
         }
         Phase::TypeKeyConsumed => {
             // Transition: TypeKeyConsumed -> if in "#array", then ExpectingTypeKey; otherwise, ExpectingField
