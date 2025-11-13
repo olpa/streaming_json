@@ -707,38 +707,15 @@ fn on_root_object_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'st
 /// Handle Object structural pseudoname for end actions
 fn find_end_action_object<'a, 'workbuf, W: IoWrite>(
     context: ContextIter,
-    baton: DdbBaton<'a, 'workbuf, W>,
-    phase: Phase,
+    _baton: DdbBaton<'a, 'workbuf, W>,
+    _phase: Phase,
 ) -> Option<EndAction<DdbBaton<'a, 'workbuf, W>>> {
     // Check if this is the root object ending (context length == 1)
     if context.len() == 1 {
         return Some(on_root_object_end);
     }
 
-    // Check if we're ending an M container (phase = ExpectingField)
-    // M containers end in ExpectingField phase (waiting for next field)
-    if phase == Phase::ExpectingField {
-        return Some(on_map_end);
-    }
-
-    // Check if we're ending a type descriptor object (TypeKeyConsumed phase)
-    if phase == Phase::TypeKeyConsumed {
-        let mut ctx = context.clone();
-        let key = ctx.next();
-
-        if key == Some(b"#array") {
-            // In array context - transition to ExpectingTypeKey
-            return Some(on_type_key_end_in_array);
-        } else if key == Some(b"M") {
-            // Ending an M container - write "}" and transition
-            return Some(on_map_end);
-        } else {
-            // Otherwise - transition to ExpectingField
-            return Some(on_type_key_end);
-        }
-    }
-
-    // All other object end actions return None
+    // All other object end actions are handled by key end actions
     None
 }
 
@@ -764,33 +741,30 @@ fn find_end_action_key<'a, 'workbuf, W: IoWrite>(
             Some(on_transition_to_type_key_consumed)
         }
         Phase::TypeKeyConsumed => {
-            // Check for Item at top with AsWrapper - early return without side effects
-            if key == b"Item" {
-                let mode = baton.borrow().item_wrapper_mode;
-                if mode == ItemWrapperMode::AsWrapper {
-                    if let Some(b"#top") = context.next() {
-                        return None;
-                    }
-                }
-            }
-            // Transition: TypeKeyConsumed -> if in "#array", then ExpectingTypeKey; if in "M", then ExpectingField; otherwise, ExpectingField
+            // Transition: TypeKeyConsumed -> if in "#array", then ExpectingTypeKey; otherwise, ExpectingField
             // Check context
-            let mut ctx = context.clone();
-            ctx.next(); // Skip the current key
-            let parent = ctx.next();
+            let parent = context.next();
 
             if parent == Some(b"#array") {
                 Some(on_type_key_end_in_array)
-            } else if parent == Some(b"M") {
-                Some(on_type_key_end)
             } else {
                 Some(on_type_key_end)
             }
         }
         Phase::ExpectingField => {
-            // Transition: ExpectingField -> TypeKeyConsumed
-            // All field keys (including "M" and "Item" when used as field names) transition to TypeKeyConsumed
-            Some(on_transition_to_type_key_consumed)
+            // Check for Item at top with AsWrapper - early return without side effects
+            if key == b"Item" {
+                let mode = baton.borrow().item_wrapper_mode;
+                if let Some(b"#top") = context.next() {
+                    if mode == ItemWrapperMode::AsWrapper {
+                        return None;
+                    }
+                }
+            }
+
+            // ExpectingField phase only occurs inside M containers or at root level
+            // When a field ends in ExpectingField, it means the M container is ending
+            Some(on_map_end)
         }
         Phase::ExpectingTypeKey => {
             // For type keys ending in ExpectingTypeKey:
