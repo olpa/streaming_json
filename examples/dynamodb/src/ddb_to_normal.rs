@@ -440,17 +440,15 @@ fn on_error<R: embedded_io::Read, W: IoWrite>(
 }
 /// Handle Object structural pseudoname
 fn find_action_object<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
-    context: ContextIter,
+    mut context: ContextIter,
     baton: DdbBaton<'a, 'workbuf, W>,
     phase: Phase,
     current_type: Option<TypeDesc>,
 ) -> Option<Action<DdbBaton<'a, 'workbuf, W>, R>> {
-    // Check if this is the root object (depth == 0)
     if baton.borrow().output_depth == 0 {
         return Some(on_root_object_begin);
     }
 
-    // Validate context: only allow objects in valid contexts
     match phase {
         Phase::ExpectingValue => {
             // In ExpectingValue, only M type expects objects; all others (SS, NS, L) expect arrays
@@ -484,10 +482,9 @@ fn find_action_object<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
         Phase::TypeKeyConsumed => {
             // In array context, TypeKeyConsumed allows new type descriptor objects
             // Check if we're in an array
-            let mut ctx = context.clone();
-            let first = ctx.next();
+            let parent = context.next();
 
-            if first == Some(b"#array") {
+            if parent == Some(b"#array") {
                 // In array - allow type descriptor objects
                 None
             } else {
@@ -777,12 +774,9 @@ fn find_end_action_object<'a, 'workbuf, W: IoWrite>(
     _baton: DdbBaton<'a, 'workbuf, W>,
     _phase: Phase,
 ) -> Option<EndAction<DdbBaton<'a, 'workbuf, W>>> {
-    // Check if this is the root object ending (context length == 1)
     if context.len() == 1 {
         return Some(on_root_object_end);
     }
-
-    // All other object end actions are handled by key end actions
     None
 }
 
