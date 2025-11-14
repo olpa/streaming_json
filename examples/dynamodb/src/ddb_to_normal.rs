@@ -8,6 +8,25 @@ use scan_json::stack::ContextIter;
 use scan_json::{scan, Action, EndAction, Options, StreamOp};
 use u8pool::U8Pool;
 
+/// Parse error without position information (used internally before position is known)
+#[derive(Debug, Clone)]
+struct ParseErrorNoPos {
+    context: &'static str,
+    /// Unknown type descriptor bytes (buffer, actual length used)
+    unknown_type: Option<([u8; 32], usize)>,
+}
+
+impl ParseErrorNoPos {
+    /// Convert to ParseError by adding position information
+    fn with_position(self, position: usize) -> ConversionError {
+        ConversionError::ParseError {
+            position,
+            context: self.context,
+            unknown_type: self.unknown_type,
+        }
+    }
+}
+
 /// What phase of parsing we're in
 ///
 /// Begin-transitions (when encountering the start of a key or value):
@@ -75,7 +94,8 @@ pub struct DdbConverter<'a, 'workbuf, W: IoWrite> {
     output_depth: usize, // JSON output nesting depth (for pretty-printing indentation and root level detection)
     current_field: Option<&'workbuf [u8]>,
     item_wrapper_mode: ItemWrapperMode, // How to handle "Item" key at top level
-    last_error: Option<ConversionError>, // Stores detailed error information
+    last_error: Option<ConversionError>, // Stores detailed error information (with position)
+    last_parse_error_no_pos: Option<ParseErrorNoPos>, // Stores parse error without position (position added later by error handler)
 
     phase: Phase,
     current_type: Option<TypeDesc>,
@@ -91,6 +111,7 @@ impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
             current_field: None,
             item_wrapper_mode,
             last_error: None,
+            last_parse_error_no_pos: None,
             phase: Phase::ExpectingField,
             current_type: None,
         }
@@ -120,7 +141,6 @@ impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
 
     fn store_parse_error(
         &mut self,
-        position: usize,
         context: &'static str,
         unknown_type_bytes: Option<&[u8]>,
     ) {
@@ -135,11 +155,17 @@ impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
             None
         };
 
-        self.last_error = Some(ConversionError::ParseError {
-            position,
+        self.last_parse_error_no_pos = Some(ParseErrorNoPos {
             context,
             unknown_type,
         });
+    }
+
+    /// Convert stored ParseErrorNoPos to ParseError with position
+    fn finalize_parse_error(&mut self, position: usize) {
+        if let Some(parse_error_no_pos) = self.last_parse_error_no_pos.take() {
+            self.last_error = Some(parse_error_no_pos.with_position(position));
+        }
     }
 
     fn write(&mut self, bytes: &[u8]) {
@@ -390,10 +416,10 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(
         }
         _ => {
             conv.store_parse_error(
-                0,
                 "Invalid DynamoDB JSON format: unknown type descriptor",
                 Some(type_key),
             );
+            conv.finalize_parse_error(rjiter.current_index());
             StreamOp::Error("Unknown type descriptor")
         }
     }
@@ -431,11 +457,13 @@ fn on_set_number_element<R: embedded_io::Read, W: IoWrite>(
     )
 }
 
-// Generic error handler that returns the stored error
+// Generic error handler that converts ParseErrorNoPos to ParseError with position
 fn on_error<R: embedded_io::Read, W: IoWrite>(
-    _rjiter: &mut RJiter<R>,
-    _baton: DdbBaton<'_, '_, W>,
+    rjiter: &mut RJiter<R>,
+    baton: DdbBaton<'_, '_, W>,
 ) -> StreamOp {
+    let mut conv = baton.borrow_mut();
+    conv.finalize_parse_error(rjiter.current_index());
     StreamOp::Error("Validation error (see stored error)")
 }
 /// Handle Object structural pseudoname
@@ -455,7 +483,6 @@ fn find_action_object<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
             // If we're here with an object, it's invalid
             let mut conv = baton.borrow_mut();
             conv.store_parse_error(
-                0,
                 "Invalid DynamoDB JSON format: unexpected object value",
                 None,
             );
@@ -466,7 +493,6 @@ fn find_action_object<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
             if current_type == Some(TypeDesc::L) {
                 let mut conv = baton.borrow_mut();
                 conv.store_parse_error(
-                    0,
                     "Invalid DynamoDB JSON format: L type expects an array value, not an object",
                     None,
                 );
@@ -491,7 +517,6 @@ fn find_action_object<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
                 // Not in array - error
                 let mut conv = baton.borrow_mut();
                 conv.store_parse_error(
-                    0,
                     "Invalid DynamoDB JSON format: unexpected nested object in type descriptor",
                     None,
                 );
@@ -552,11 +577,10 @@ fn find_action_key<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
             if !in_set {
                 // Error: not in a set
                 let mut conv = baton.borrow_mut();
-                conv.last_error = Some(ConversionError::ParseError {
-                    position: 0,
-                    context: "Unexpected key in ExpectingValue phase (not in set)",
-                    unknown_type: None,
-                });
+                conv.store_parse_error(
+                    "Unexpected key in ExpectingValue phase (not in set)",
+                    None,
+                );
                 return Some(on_error);
             }
 
@@ -608,7 +632,6 @@ fn find_action_array<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
             // All other cases: arrays are not valid
             let mut conv = baton.borrow_mut();
             conv.store_parse_error(
-                0,
                 "Invalid DynamoDB JSON format: unexpected array value",
                 None,
             );
@@ -628,7 +651,6 @@ fn find_action_atom<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
     if phase != Phase::ExpectingValue {
         let mut conv = baton.borrow_mut();
         conv.store_parse_error(
-            0,
             "Invalid DynamoDB JSON format: Expected array for set type, atom values only allowed as set elements",
             None,
         );
@@ -652,7 +674,6 @@ fn find_action_atom<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
     // All other cases: atoms are unexpected
     let mut conv = baton.borrow_mut();
     conv.store_parse_error(
-        0,
         "Invalid DynamoDB JSON format: Expected array for set type, atom values only allowed as set elements",
         None,
     );
