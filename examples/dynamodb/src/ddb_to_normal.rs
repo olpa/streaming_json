@@ -690,19 +690,6 @@ fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
         (conv.phase, conv.current_type)
     };
 
-    #[cfg(feature = "std")]
-    {
-        let mut ctx = context.clone();
-        let key = ctx.next();
-        std::eprintln!(
-            "DEBUG BEGIN: structural={:?}, key={:?}, phase={:?}, current_type={:?}",
-            structural,
-            key.map(|k| std::str::from_utf8(k).unwrap_or("???")),
-            phase,
-            current_type
-        );
-    }
-
     // Match on structural type and delegate to appropriate handler
     match structural {
         StructuralPseudoname::Object => find_action_object(context, baton, phase, current_type),
@@ -890,19 +877,6 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
         let conv = baton.borrow();
         (conv.phase, conv.current_type)
     };
-
-    #[cfg(feature = "std")]
-    {
-        let mut ctx = context.clone();
-        let key = ctx.next();
-        std::eprintln!(
-            "DEBUG END: structural={:?}, key={:?}, phase={:?}, current_type={:?}",
-            structural,
-            key.map(|k| std::str::from_utf8(k).unwrap_or("???")),
-            phase,
-            current_type
-        );
-    }
 
     match structural {
         StructuralPseudoname::Array => {
