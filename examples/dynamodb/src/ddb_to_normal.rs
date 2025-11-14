@@ -623,13 +623,19 @@ fn find_action_array<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
 /// Handle Atom structural pseudoname
 fn find_action_atom<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
     mut context: ContextIter,
-    _baton: DdbBaton<'a, 'workbuf, W>,
+    baton: DdbBaton<'a, 'workbuf, W>,
     phase: Phase,
     current_type: Option<TypeDesc>,
 ) -> Option<Action<DdbBaton<'a, 'workbuf, W>, R>> {
     // Atoms are only valid as set elements inside arrays
     if phase != Phase::ExpectingValue {
-        return Some(on_unexpected_atom);
+        let mut conv = baton.borrow_mut();
+        conv.store_parse_error(
+            0,
+            "Invalid DynamoDB JSON format: Expected array for set type, atom values only allowed as set elements",
+            None,
+        );
+        return Some(on_error);
     }
 
     // SS/NS set element inside array
@@ -647,7 +653,13 @@ fn find_action_atom<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
     }
 
     // All other cases: atoms are unexpected
-    Some(on_unexpected_atom)
+    let mut conv = baton.borrow_mut();
+    conv.store_parse_error(
+        0,
+        "Invalid DynamoDB JSON format: Expected array for set type, atom values only allowed as set elements",
+        None,
+    );
+    Some(on_error)
 }
 
 fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
@@ -680,19 +692,6 @@ fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
         StructuralPseudoname::Array => find_action_array(context, baton, phase, current_type),
         StructuralPseudoname::Atom => find_action_atom(context, baton, phase, current_type),
     }
-}
-
-fn on_unexpected_atom<R: embedded_io::Read, W: IoWrite>(
-    _rjiter: &mut RJiter<R>,
-    baton: DdbBaton<'_, '_, W>,
-) -> StreamOp {
-    let mut conv = baton.borrow_mut();
-    conv.store_parse_error(
-        0,
-        "Invalid DynamoDB JSON format: Expected array for set type, atom values only allowed as set elements",
-        None,
-    );
-    StreamOp::Error("Expected array for set type, atom values only allowed as set elements")
 }
 
 fn on_list_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
