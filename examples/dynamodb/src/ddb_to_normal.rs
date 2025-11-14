@@ -175,18 +175,18 @@ impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
     fn write_comma_if_pending(&mut self) {
         if self.pending_comma {
             self.write(b",");
-            self.newline();
+            self.newline_if_pretty();
             self.pending_comma = false;
         }
     }
 
-    fn newline(&mut self) {
+    fn newline_if_pretty(&mut self) {
         if self.pretty {
             self.write(b"\n");
         }
     }
 
-    fn indent(&mut self) {
+    fn indent_if_pretty(&mut self) {
         if self.pretty {
             for _ in 0..self.output_depth {
                 self.write(b"  ");
@@ -204,7 +204,7 @@ fn on_root_object_begin<R: embedded_io::Read, W: IoWrite>(
 ) -> StreamOp {
     let mut conv = baton.borrow_mut();
     conv.write(b"{");
-    conv.newline();
+    conv.newline_if_pretty();
     conv.output_depth = 1;
     StreamOp::None
 }
@@ -224,7 +224,7 @@ fn on_field_key<R: embedded_io::Read, W: IoWrite>(
     let mut conv = baton.borrow_mut();
 
     conv.write_comma_if_pending();
-    conv.indent();
+    conv.indent_if_pretty();
     conv.write(b"\"");
     conv.write(&field_name);
     conv.write(b"\":");
@@ -407,7 +407,7 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(
             // M type - write opening brace here (parent handles it, not find_action_object)
             conv.write_comma_if_pending();
             conv.write(b"{");
-            conv.newline();
+            conv.newline_if_pretty();
             conv.output_depth += 1;
             conv.pending_comma = false;
             conv.current_type = Some(TypeDesc::M);
@@ -742,9 +742,9 @@ fn on_set_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str
 
 fn on_map_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     let mut conv = baton.borrow_mut();
-    conv.newline();
+    conv.newline_if_pretty();
     conv.output_depth -= 1;
-    conv.indent();
+    conv.indent_if_pretty();
     conv.write(b"}");
     conv.pending_comma = true;
 
@@ -783,7 +783,7 @@ fn on_type_key_end_in_array<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<()
 
 fn on_root_object_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     let mut conv = baton.borrow_mut();
-    conv.newline();
+    conv.newline_if_pretty();
     conv.write(b"}");
     conv.write(b"\n");
     Ok(())
