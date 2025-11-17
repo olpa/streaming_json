@@ -83,30 +83,7 @@ fn on_root_object_begin<R: embedded_io::Read, W: IoWrite>(
     StreamOp::None
 }
 
-fn on_root_field_key<R: embedded_io::Read, W: IoWrite>(
-    _rjiter: &mut RJiter<R>,
-    baton: NormalToDdbBaton<'_, '_, W>,
-) -> StreamOp {
-    let field_name = {
-        let conv = baton.borrow();
-        conv.current_field
-            .expect("current_field should be set")
-            .to_vec()
-    };
-
-    let mut conv = baton.borrow_mut();
-    conv.write_comma();
-    conv.indent();
-    conv.write(b"\"");
-    conv.write(&field_name);
-    conv.write(b"\":{");
-    conv.newline();
-    conv.depth += 1;
-    conv.pending_comma = false;
-    StreamOp::None
-}
-
-fn on_nested_field_key<R: embedded_io::Read, W: IoWrite>(
+fn on_field_key<R: embedded_io::Read, W: IoWrite>(
     _rjiter: &mut RJiter<R>,
     baton: NormalToDdbBaton<'_, '_, W>,
 ) -> StreamOp {
@@ -435,14 +412,8 @@ fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
                 unsafe { core::mem::transmute::<&[u8], &'workbuf [u8]>(field) };
             conv.current_field = Some(field_slice);
 
-            if let Some(parent) = ctx.next() {
-                if parent == b"#top" {
-                    // Root-level field
-                    return Some(on_root_field_key);
-                }
-                // Nested field (inside any object)
-                return Some(on_nested_field_key);
-            }
+            // Field key (root-level or nested)
+            return Some(on_field_key);
         }
     }
 
@@ -510,10 +481,8 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
                 return Some(on_object_in_array_end);
             }
             // Nested objects (not in arrays)
-            if first != b"#array" && first != b"#top" {
-                // Any object that's not at the root and not in an array is a nested object
-                return Some(on_nested_object_end);
-            }
+            // Any object that's not at the root and not in an array is a nested object
+            return Some(on_nested_object_end);
         }
     }
 
