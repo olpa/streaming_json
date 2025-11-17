@@ -681,17 +681,17 @@ fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
     context: ContextIter,
     baton: DdbBaton<'a, 'workbuf, W>,
 ) -> Option<Action<DdbBaton<'a, 'workbuf, W>, R>> {
-    let (phase, current_type) = {
+    let (phase, _current_type) = {
         let conv = baton.borrow();
         (conv.phase, conv.current_type)
     };
 
     // Match on structural type and delegate to appropriate handler
     match structural {
-        StructuralPseudoname::Object => find_action_object(context, baton, phase, current_type),
+        StructuralPseudoname::Object => find_action_object(context, baton, phase, _current_type),
         StructuralPseudoname::None => find_action_key(context, baton, phase),
-        StructuralPseudoname::Array => find_action_array(context, baton, phase, current_type),
-        StructuralPseudoname::Atom => find_action_atom(context, baton, phase, current_type),
+        StructuralPseudoname::Array => find_action_array(context, baton, phase, _current_type),
+        StructuralPseudoname::Atom => find_action_atom(context, baton, phase, _current_type),
     }
 }
 
@@ -926,7 +926,13 @@ pub fn convert_ddb_to_normal<R: IoRead, W: IoWrite>(
     let converter = DdbConverter::new(writer, pretty, item_wrapper_mode);
     let baton = RefCell::new(converter);
 
-    let mut context = U8Pool::new(context_buffer, 32).map_err(|_| {
+    // DynamoDB supports up to 32 levels of nesting in the original data.
+    // In DynamoDB JSON format, each nested object/array adds extra levels:
+    // - Each Map: {"M": {...}} adds 1 level
+    // - Each List: {"L": [...]} adds 1 level
+    // - Optional "Item" wrapper adds 1 level
+    // For 32 levels: 1 (Item/#top) + 32 (level_N) + 32 (M) + 1 (value) + 1 (S) + 1 (leaf value) = 68 slots
+    let mut context = U8Pool::new(context_buffer, 68).map_err(|_| {
         ConversionError::ScanError(scan_json::Error::InternalError {
             position: 0,
             message: "Failed to create context pool",

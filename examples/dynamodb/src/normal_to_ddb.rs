@@ -532,7 +532,10 @@ pub fn convert_normal_to_ddb<R: IoRead, W: IoWrite>(
     let converter = NormalToDdbConverter::new(writer, with_item_wrapper, pretty);
     let baton = RefCell::new(converter);
 
-    let mut context = U8Pool::new(context_buffer, 32).map_err(|_| {
+    // DynamoDB supports up to 32 levels of nesting.
+    // Context stores: "#top" + field names at each level + final field
+    // For 32 levels: 1 (#top) + 32 (level_N) + 1 (final field) = 34 slots
+    let mut context = U8Pool::new(context_buffer, 34).map_err(|_| {
         ConversionError::ScanError(scan_json::Error::InternalError {
             position: 0,
             message: "Failed to create context pool",
