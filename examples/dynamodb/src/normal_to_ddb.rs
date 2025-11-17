@@ -384,24 +384,23 @@ fn on_array_in_array_end<W: IoWrite>(
 
 fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
     structural: StructuralPseudoname,
-    context: ContextIter,
+    mut context: ContextIter,
     baton: NormalToDdbBaton<'a, 'workbuf, W>,
 ) -> Option<Action<NormalToDdbBaton<'a, 'workbuf, W>, R>> {
+    // Get the parent context element once, used by all branches below
+    let parent = context.next();
+
     // Match root object
     if structural == StructuralPseudoname::Object {
-        let mut ctx = context.clone();
-        if let Some(first) = ctx.next() {
-            if first == b"#top" {
-                // This is the root object
-                return Some(on_root_object_begin);
-            }
+        if parent == Some(b"#top") {
+            // This is the root object
+            return Some(on_root_object_begin);
         }
     }
 
     // Match field keys
     if structural == StructuralPseudoname::None {
-        let mut ctx = context.clone();
-        if let Some(field) = ctx.next() {
+        if let Some(field) = parent {
             // Store the field name
             let mut conv = baton.borrow_mut();
             #[allow(unsafe_code)]
@@ -414,13 +413,8 @@ fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
         }
     }
 
-    // Check if we're in an array context first
-    let mut ctx_check = context.clone();
-    let in_array = if let Some(first) = ctx_check.next() {
-        first == b"#array"
-    } else {
-        false
-    };
+    // Check if we're in an array context
+    let in_array = parent == Some(b"#array");
 
     // Match values at root or nested level - Atom represents all primitives
     if structural == StructuralPseudoname::Atom {
@@ -444,15 +438,13 @@ fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
 
     // Match nested objects (convert to M type)
     if structural == StructuralPseudoname::Object {
-        let mut ctx = context.clone();
-        if let Some(first) = ctx.next() {
-            if first == b"#top" {
-                // Root object
-                return None;
-            } else if first == b"#array" {
-                // Object in array - write element wrapper
-                return Some(on_array_element_object);
-            }
+        if parent == Some(b"#top") {
+            // Root object (already handled above)
+            return None;
+        } else if parent == Some(b"#array") {
+            // Object in array - write element wrapper
+            return Some(on_array_element_object);
+        } else if parent.is_some() {
             // Object as a field value - write M type wrapper
             return Some(on_nested_object_begin_toddb);
         }
@@ -463,21 +455,23 @@ fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
 
 fn find_end_action<'a, 'workbuf, W: IoWrite>(
     structural: StructuralPseudoname,
-    context: ContextIter,
+    mut context: ContextIter,
     _baton: NormalToDdbBaton<'a, 'workbuf, W>,
 ) -> Option<EndAction<NormalToDdbBaton<'a, 'workbuf, W>>> {
+    // Get the parent context element once
+    let parent = context.next();
+
     // Match end of root object
     if structural == StructuralPseudoname::Object {
-        let mut ctx = context.clone();
-        if let Some(first) = ctx.next() {
-            if first == b"#top" {
-                return Some(on_root_object_end);
-            }
-            // Objects in arrays - need to close both object and element wrapper
-            if first == b"#array" {
-                return Some(on_object_in_array_end);
-            }
-            // Nested objects (not in arrays)
+        if parent == Some(b"#top") {
+            return Some(on_root_object_end);
+        }
+        // Objects in arrays - need to close both object and element wrapper
+        if parent == Some(b"#array") {
+            return Some(on_object_in_array_end);
+        }
+        // Nested objects (not in arrays)
+        if parent.is_some() {
             // Any object that's not at the root and not in an array is a nested object
             return Some(on_nested_object_end);
         }
@@ -485,12 +479,11 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
 
     // Match end of arrays
     if structural == StructuralPseudoname::Array {
-        let mut ctx = context.clone();
-        if let Some(first) = ctx.next() {
-            if first == b"#array" {
-                // Array inside another array - close with ]} and element wrapper }
-                return Some(on_array_in_array_end);
-            }
+        if parent == Some(b"#array") {
+            // Array inside another array - close with ]} and element wrapper }
+            return Some(on_array_in_array_end);
+        }
+        if parent.is_some() {
             // Root-level or field value array - close with ]}
             return Some(on_array_end_toddb);
         }
@@ -498,13 +491,10 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
 
     // Match end of array elements (primitives)
     if structural == StructuralPseudoname::Atom {
-        let mut ctx = context.clone();
-        if let Some(first) = ctx.next() {
-            if first == b"#array" {
-                if let Some(parent) = ctx.next() {
-                    if parent == b"L" {
-                        return Some(on_array_element_end_toddb);
-                    }
+        if parent == Some(b"#array") {
+            if let Some(grandparent) = context.next() {
+                if grandparent == b"L" {
+                    return Some(on_array_element_end_toddb);
                 }
             }
         }
