@@ -85,7 +85,9 @@ fn on_field_key<R: embedded_io::Read, W: IoWrite>(
     baton: NormalToDdbBaton<'_, '_, W>,
 ) -> StreamOp {
     let mut conv = baton.borrow_mut();
-    let field_name = conv.current_field.expect("current_field should be set");
+    let Some(field_name) = conv.current_field else {
+        return StreamOp::Error("Internal error: current_field not set (impossible)");
+    };
     conv.write_comma();
     conv.indent();
     conv.write(b"\"");
