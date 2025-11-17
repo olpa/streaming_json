@@ -12,7 +12,6 @@ pub struct NormalToDdbConverter<'a, 'workbuf, W: IoWrite> {
     writer: &'a mut W,
     pending_comma: bool,
     with_item_wrapper: bool,
-    is_first_object: bool,
     current_field: Option<&'workbuf [u8]>,
     pretty: bool,
     depth: usize,
@@ -24,7 +23,6 @@ impl<'a, 'workbuf, W: IoWrite> NormalToDdbConverter<'a, 'workbuf, W> {
             writer,
             pending_comma: false,
             with_item_wrapper,
-            is_first_object: true,
             current_field: None,
             pretty,
             depth: 0,
@@ -79,7 +77,6 @@ fn on_root_object_begin<R: embedded_io::Read, W: IoWrite>(
         conv.depth += 1;
     }
     conv.pending_comma = false;
-    conv.is_first_object = false;
     StreamOp::None
 }
 
