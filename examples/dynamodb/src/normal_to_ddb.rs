@@ -84,18 +84,12 @@ fn on_field_key<R: embedded_io::Read, W: IoWrite>(
     _rjiter: &mut RJiter<R>,
     baton: NormalToDdbBaton<'_, '_, W>,
 ) -> StreamOp {
-    let field_name = {
-        let conv = baton.borrow();
-        conv.current_field
-            .expect("current_field should be set")
-            .to_vec()
-    };
-
     let mut conv = baton.borrow_mut();
+    let field_name = conv.current_field.expect("current_field should be set");
     conv.write_comma();
     conv.indent();
     conv.write(b"\"");
-    conv.write(&field_name);
+    conv.write(field_name);
     conv.write(b"\":{");
     conv.newline();
     conv.depth += 1;
