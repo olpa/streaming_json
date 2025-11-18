@@ -492,3 +492,20 @@ fn test_item_as_field() {
 "#;
     assert_eq!(result, expected);
 }
+
+// Test for JSONL with multiple records (4 simple objects)
+#[test]
+fn test_jsonl_four_records() {
+    let ddb_json = r#"{"Item":{"id":{"N":"1"},"name":{"S":"Alice"}}}
+{"Item":{"id":{"N":"2"},"name":{"S":"Bob"}}}
+{"Item":{"id":{"N":"3"},"name":{"S":"Charlie"}}}
+{"Item":{"id":{"N":"4"},"name":{"S":"Diana"}}}
+"#;
+    let result = convert_test(ddb_json);
+    let expected = r#"{"id":1,"name":"Alice"}
+{"id":2,"name":"Bob"}
+{"id":3,"name":"Charlie"}
+{"id":4,"name":"Diana"}
+"#;
+    assert_eq!(result, expected);
+}

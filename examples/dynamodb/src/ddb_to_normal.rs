@@ -768,6 +768,12 @@ fn on_root_object_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'st
     conv.newline_if_pretty();
     conv.write(b"}");
     conv.write(b"\n");
+
+    // Reset state for next JSONL record
+    conv.pending_comma = false;
+    conv.output_depth = 0;
+    conv.phase = Phase::ExpectingField;
+
     Ok(())
 }
 
