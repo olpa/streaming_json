@@ -115,111 +115,33 @@ cat mydata.json | ddb_convert to-ddb | \
 
 ### Type Conversions
 
-The converter handles all DynamoDB data types:
+#### From DynamoDB to Standard JSON (`from-ddb`)
 
-| DynamoDB Type | Standard JSON |
-|---------------|---------------|
-| `"S"` (String) | `string` |
-| `"N"` (Number) | `number` |
-| `"BOOL"` (Boolean) | `boolean` |
-| `"NULL"` | `null` |
-| `"M"` (Map) | `object` |
-| `"L"` (List) | `array` |
-| `"SS"` (String Set) | `array` |
-| `"NS"` (Number Set) | `array` |
-| `"BS"` (Binary Set) | `array` |
-| `"B"` (Binary) | `string` (base64) |
+| DynamoDB Type | Standard JSON | Notes |
+|---------------|---------------|-------|
+| `"S"` (String) | `string` | |
+| `"N"` (Number) | `number` | |
+| `"BOOL"` (Boolean) | `boolean` | |
+| `"NULL"` | `null` | |
+| `"M"` (Map) | `object` | |
+| `"L"` (List) | `array` | |
+| `"SS"` (String Set) | `array` | ⚠️ Set becomes array (order/uniqueness lost) |
+| `"NS"` (Number Set) | `array` | ⚠️ Set becomes array (order/uniqueness lost) |
+| `"BS"` (Binary Set) | `array` | ⚠️ Set becomes array (order/uniqueness lost) |
+| `"B"` (Binary) | `string` (base64) | base64 is ńot decoded |
 
-### Example: Complex Nested Structure
+**Note:** Standard JSON has no native "set" type, so DynamoDB sets are converted to arrays. The set semantics (unordered, unique values) are lost in the conversion.
 
-**DynamoDB JSON:**
-```json
-{
-  "Item": {
-    "Publisher": {
-      "M": {
-        "Name": { "S": "Tech Publishing House" },
-        "City": { "S": "New York" },
-        "Founded": { "N": "1995" }
-      }
-    },
-    "Tags": {
-      "SS": ["programming", "technology", "reference"]
-    },
-    "Ratings": {
-      "NS": ["4.5", "4.8", "5.0"]
-    }
-  }
-}
-```
+#### From Standard JSON to DynamoDB (`to-ddb`)
 
-**Standard JSON (after conversion):**
-```json
-{
-  "Publisher": {
-    "Name": "Tech Publishing House",
-    "City": "New York",
-    "Founded": 1995
-  },
-  "Tags": ["programming", "technology", "reference"],
-  "Ratings": [4.5, 4.8, 5.0]
-}
-```
+| Standard JSON | DynamoDB Type | Notes |
+|---------------|---------------|-------|
+| `string` | `"S"` (String) | |
+| `number` | `"N"` (Number) | |
+| `boolean` | `"BOOL"` (Boolean) | |
+| `null` | `"NULL"` | |
+| `object` | `"M"` (Map) | |
+| `array` | `"L"` (List) | Always creates Lists, not Sets |
 
-## Why Use This Tool?
+**Note:** Arrays are always converted to DynamoDB Lists (`L`), not Sets. If you need Sets (SS, NS, BS), you must construct the DynamoDB JSON manually.
 
-- **Fast & Memory Efficient**: Streams data instead of loading everything into memory
-- **Type-Safe**: Correctly converts DynamoDB's typed format to appropriate JSON types
-- **Flexible**: Works with files or stdin/stdout for easy integration into pipelines
-- **No Dependencies**: Small binary with minimal external dependencies
-
-## Common Use Cases
-
-### From DynamoDB to Standard JSON (from-ddb)
-
-1. **Export DynamoDB data** to standard format for use with other tools
-2. **Debug DynamoDB responses** by converting to readable JSON
-3. **Batch process DynamoDB exports** using shell pipelines
-4. **Transform data** before importing into other databases
-
-### From Standard JSON to DynamoDB (to-ddb)
-
-1. **Prepare data for DynamoDB import** from existing JSON files
-2. **Generate test data** in DynamoDB format for testing
-3. **Convert application JSON** to DynamoDB format for API calls
-4. **Batch insert data** by converting JSON files to DynamoDB format
-
-## Error Handling
-
-The tool provides detailed error messages with context:
-
-```
-Conversion error: RJiter parsing error at position 42
-  Error type: RJiter parsing error
-  Position in input: 42 bytes
-  Context: parsing nested map structure
-  Details: Expected comma or closing brace
-```
-
-## Testing
-
-Run the test suite with sample fixtures:
-
-```bash
-cargo test
-```
-
-Sample data files are available in the `fixture/` directory for testing:
-- `book-dynamodb.json` / `book-normal.json`
-- `all-types-dynamodb.json` / `all-types-normal.json`
-
-## Limitations
-
-### from-ddb mode
-- Fully functional for all DynamoDB types
-
-### to-ddb mode
-- ✅ Fully functional (100% of tests passing)
-- All basic types supported: strings, numbers, booleans, null
-- All nested structures supported: arrays, objects, deeply nested combinations
-- Sets (SS, NS, BS): Not currently supported, use Lists (L) instead

@@ -15,6 +15,7 @@ enum ConversionMode {
 
 #[derive(Parser, Debug)]
 #[command(name = "ddb_convert")]
+#[command(version)]
 #[command(about = "Convert between DynamoDB JSON and normal JSON formats", long_about = None)]
 struct Args {
     /// Conversion mode

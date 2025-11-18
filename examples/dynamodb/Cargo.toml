@@ -2,6 +2,13 @@
 name = "ddb_convert"
 version = "0.1.0"
 edition = "2021"
+authors = ["Oleg Parashchenko"]
+description = "Fast, streaming JSON converter between DynamoDB and standard JSON formats"
+license = "MIT"
+repository = "https://github.com/olpa/streaming_json"
+keywords = ["dynamodb", "json", "converter", "aws", "streaming"]
+categories = ["command-line-utilities", "parsing", "encoding"]
+readme = "README.md"
 
 [lib]
 name = "ddb_convert"
