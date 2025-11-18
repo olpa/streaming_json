@@ -51,9 +51,8 @@ impl ParseErrorNoPos {
 ///    - If parent is "#array" -> `ExpectingTypeKey`
 ///    - Otherwise -> `ExpectingField`
 /// - From `ExpectingField`:
-///    - If parent is "#array" -> `ExpectingTypeKey` (M container in array ended)
 ///    - If key is "Item" at top with `AsWrapper` -> no transition (skipped)
-///    - Otherwise -> `ExpectingValue` (M container ended)
+///    - Otherwise -> `TypeKeyConsumed` (M container ended)
 /// - From `ExpectingTypeKey`:
 ///    - Literal type keys (S, N, B, BOOL, NULL) -> `TypeKeyConsumed`
 ///    - Container type keys (M, L, SS, NS, BS) -> no transition (handled by container end)
@@ -731,9 +730,9 @@ fn on_map_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str
     conv.write(b"}");
     conv.pending_comma = true;
 
-    // Transition to ExpectingValue (M container value is consumed)
+    // M container value is consumed
     conv.current_type = None;
-    conv.phase = Phase::ExpectingValue;
+    conv.phase = Phase::TypeKeyConsumed;
     Ok(())
 }
 
