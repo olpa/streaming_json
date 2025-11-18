@@ -1,4 +1,4 @@
-//! DynamoDB JSON converter CLI tool
+//! `DynamoDB` JSON converter CLI tool
 
 use clap::{Parser, ValueEnum};
 use ddb_convert::convert_ddb_to_normal;

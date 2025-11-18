@@ -100,7 +100,7 @@ pub struct DdbConverter<'a, 'workbuf, W: IoWrite> {
     current_type: Option<TypeDesc>,
 }
 
-impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
+impl<'a, W: IoWrite> DdbConverter<'a, '_, W> {
     fn new(writer: &'a mut W, pretty: bool, item_wrapper_mode: ItemWrapperMode) -> Self {
         Self {
             writer,
@@ -711,6 +711,7 @@ fn on_list_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static st
     Ok(())
 }
 
+#[allow(clippy::unnecessary_wraps)]
 fn on_set_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     let mut conv = baton.borrow_mut();
     conv.write(b"]");
@@ -722,6 +723,7 @@ fn on_set_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str
     Ok(())
 }
 
+#[allow(clippy::unnecessary_wraps)]
 fn on_map_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     let mut conv = baton.borrow_mut();
     conv.newline_if_pretty();
@@ -736,6 +738,7 @@ fn on_map_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str
     Ok(())
 }
 
+#[allow(clippy::unnecessary_wraps)]
 fn on_map_end_in_array<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     on_map_end(baton)?;
     // Override phase to ExpectingTypeKey for array context
@@ -744,6 +747,7 @@ fn on_map_end_in_array<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'s
     Ok(())
 }
 
+#[allow(clippy::unnecessary_wraps)]
 fn on_type_key_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     // Called for the phase "TypeKeyConsumed"
 
@@ -754,6 +758,7 @@ fn on_type_key_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'stati
     Ok(())
 }
 
+#[allow(clippy::unnecessary_wraps)]
 fn on_type_key_end_in_array<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     // Called for the phase "TypeKeyConsumed" when in an array context
 
@@ -763,6 +768,7 @@ fn on_type_key_end_in_array<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<()
     Ok(())
 }
 
+#[allow(clippy::unnecessary_wraps)]
 fn on_root_object_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     let mut conv = baton.borrow_mut();
     conv.newline_if_pretty();
@@ -779,7 +785,7 @@ fn on_root_object_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'st
 
 /// Handle Object structural pseudoname for end actions
 fn find_end_action_object<'a, 'workbuf, W: IoWrite>(
-    context: ContextIter,
+    context: &ContextIter,
     _baton: DdbBaton<'a, 'workbuf, W>,
     _phase: Phase,
 ) -> Option<EndAction<DdbBaton<'a, 'workbuf, W>>> {
@@ -790,6 +796,7 @@ fn find_end_action_object<'a, 'workbuf, W: IoWrite>(
 }
 
 /// Transition to `TypeKeyConsumed` phase
+#[allow(clippy::unnecessary_wraps)]
 fn on_transition_to_type_key_consumed<W: IoWrite>(
     baton: DdbBaton<'_, '_, W>,
 ) -> Result<(), &'static str> {
@@ -892,7 +899,7 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
                 None
             }
         }
-        StructuralPseudoname::Object => find_end_action_object(context, baton, phase),
+        StructuralPseudoname::Object => find_end_action_object(&context, baton, phase),
         StructuralPseudoname::None => find_end_action_key(context, baton, phase),
         StructuralPseudoname::Atom => None,
     }

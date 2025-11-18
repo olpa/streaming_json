@@ -17,7 +17,7 @@ pub struct NormalToDdbConverter<'a, 'workbuf, W: IoWrite> {
     depth: usize,
 }
 
-impl<'a, 'workbuf, W: IoWrite> NormalToDdbConverter<'a, 'workbuf, W> {
+impl<'a, W: IoWrite> NormalToDdbConverter<'a, '_, W> {
     fn new(writer: &'a mut W, with_item_wrapper: bool, pretty: bool) -> Self {
         Self {
             writer,
@@ -289,6 +289,7 @@ fn on_nested_object_begin_toddb<R: embedded_io::Read, W: IoWrite>(
     StreamOp::None
 }
 
+#[allow(clippy::unnecessary_wraps)]
 fn on_root_object_end<W: IoWrite>(baton: NormalToDdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     let mut conv = baton.borrow_mut();
     conv.newline();
@@ -307,6 +308,7 @@ fn on_root_object_end<W: IoWrite>(baton: NormalToDdbBaton<'_, '_, W>) -> Result<
     Ok(())
 }
 
+#[allow(clippy::unnecessary_wraps)]
 fn on_nested_object_end<W: IoWrite>(
     baton: NormalToDdbBaton<'_, '_, W>,
 ) -> Result<(), &'static str> {
@@ -323,6 +325,7 @@ fn on_nested_object_end<W: IoWrite>(
     Ok(())
 }
 
+#[allow(clippy::unnecessary_wraps)]
 fn on_array_end_toddb<W: IoWrite>(baton: NormalToDdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     let mut conv = baton.borrow_mut();
     conv.newline();
@@ -336,6 +339,7 @@ fn on_array_end_toddb<W: IoWrite>(baton: NormalToDdbBaton<'_, '_, W>) -> Result<
     Ok(())
 }
 
+#[allow(clippy::unnecessary_wraps)]
 fn on_array_element_end_toddb<W: IoWrite>(
     _baton: NormalToDdbBaton<'_, '_, W>,
 ) -> Result<(), &'static str> {
@@ -345,6 +349,7 @@ fn on_array_element_end_toddb<W: IoWrite>(
     Ok(())
 }
 
+#[allow(clippy::unnecessary_wraps)]
 fn on_object_in_array_end<W: IoWrite>(
     baton: NormalToDdbBaton<'_, '_, W>,
 ) -> Result<(), &'static str> {
@@ -362,6 +367,7 @@ fn on_object_in_array_end<W: IoWrite>(
     Ok(())
 }
 
+#[allow(clippy::unnecessary_wraps)]
 fn on_array_in_array_end<W: IoWrite>(
     baton: NormalToDdbBaton<'_, '_, W>,
 ) -> Result<(), &'static str> {

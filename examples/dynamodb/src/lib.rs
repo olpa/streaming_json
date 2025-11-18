@@ -72,7 +72,7 @@ impl core::fmt::Display for ConversionError {
                 unknown_type,
             } => {
                 if let Some((bytes, len)) = unknown_type {
-                    let type_str = std::string::String::from_utf8_lossy(&bytes[..*len]);
+                    let type_str = std::string::String::from_utf8_lossy(bytes.get(..*len).unwrap_or(&[]));
                     write!(
                         f,
                         "Parse error at position {position}: {context} (unknown type descriptor '{type_str}')"
