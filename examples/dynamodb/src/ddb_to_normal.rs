@@ -73,8 +73,10 @@ enum Phase {
 /// How to handle "Item" key at top level
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ItemWrapperMode {
-    AsWrapper, // Interpret "Item" at top level as a special wrapper
-    AsField,   // Interpret "Item" at top level as a normal field
+    /// Interpret "Item" at top level as a special wrapper
+    AsWrapper,
+    /// Interpret "Item" at top level as a normal field
+    AsField,
 }
 
 /// Type descriptor being processed (only for container types)
@@ -271,6 +273,44 @@ fn write_string_value<R: embedded_io::Read, W: IoWrite>(
     StreamOp::ValueIsConsumed
 }
 
+/// Helper for boolean-based types (BOOL/NULL): peek bool, consume with `known_bool`, write output
+fn handle_bool_based_type<R: embedded_io::Read, W: IoWrite>(
+    rjiter: &mut RJiter<R>,
+    conv: &mut DdbConverter<'_, '_, W>,
+    validate_peek: impl Fn(Peek) -> Result<&'static [u8], &'static str>,
+    type_name: &'static str,
+) -> StreamOp {
+    let peek = match rjiter.peek() {
+        Ok(p) => p,
+        Err(e) => {
+            let position = rjiter.current_index();
+            conv.store_rjiter_error(e, position, type_name);
+            return StreamOp::Error("Failed to peek value");
+        }
+    };
+
+    // Validate and get output bytes
+    let output = match validate_peek(peek) {
+        Ok(bytes) => bytes,
+        Err(msg) => return StreamOp::Error(msg),
+    };
+
+    // Write comma (pending_comma tracks whether we need it)
+    conv.write_comma_if_pending();
+
+    // Consume the value
+    if let Err(e) = rjiter.known_bool(peek) {
+        let position = rjiter.current_index();
+        conv.store_rjiter_error(e, position, type_name);
+        return StreamOp::Error("Failed to consume boolean value");
+    }
+    conv.write(output);
+
+    conv.pending_comma = true;
+    conv.current_type = None;
+    StreamOp::ValueIsConsumed
+}
+
 /// Handle a type key - for literal types, consume and write the value directly
 fn on_type_key<R: embedded_io::Read, W: IoWrite>(
     rjiter: &mut RJiter<R>,
@@ -280,44 +320,6 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(
     let Some(type_key) = conv.current_field else {
         return StreamOp::Error("current_field should be set for type key");
     };
-
-    // Helper for boolean-based types (BOOL/NULL): peek bool, consume with known_bool, write output
-    fn handle_bool_based_type<R: embedded_io::Read, W: IoWrite>(
-        rjiter: &mut RJiter<R>,
-        conv: &mut DdbConverter<'_, '_, W>,
-        validate_peek: impl Fn(Peek) -> Result<&'static [u8], &'static str>,
-        type_name: &'static str,
-    ) -> StreamOp {
-        let peek = match rjiter.peek() {
-            Ok(p) => p,
-            Err(e) => {
-                let position = rjiter.current_index();
-                conv.store_rjiter_error(e, position, type_name);
-                return StreamOp::Error("Failed to peek value");
-            }
-        };
-
-        // Validate and get output bytes
-        let output = match validate_peek(peek) {
-            Ok(bytes) => bytes,
-            Err(msg) => return StreamOp::Error(msg),
-        };
-
-        // Write comma (pending_comma tracks whether we need it)
-        conv.write_comma_if_pending();
-
-        // Consume the value
-        if let Err(e) = rjiter.known_bool(peek) {
-            let position = rjiter.current_index();
-            conv.store_rjiter_error(e, position, type_name);
-            return StreamOp::Error("Failed to consume boolean value");
-        }
-        conv.write(output);
-
-        conv.pending_comma = true;
-        conv.current_type = None;
-        StreamOp::ValueIsConsumed
-    }
 
     match type_key {
         b"S" | b"B" => {
@@ -636,6 +638,7 @@ fn find_action_array<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
 }
 
 /// Handle Atom structural pseudoname
+#[allow(clippy::unnecessary_wraps)]
 fn find_action_atom<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
     mut context: ContextIter,
     baton: DdbBaton<'a, 'workbuf, W>,

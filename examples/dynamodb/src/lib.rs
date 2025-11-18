@@ -21,19 +21,27 @@ pub use normal_to_ddb::convert_normal_to_ddb;
 pub enum ConversionError {
     /// `RJiter` error with context
     RJiterError {
+        /// The type of `RJiter` error that occurred
         kind: rjiter::error::ErrorType,
+        /// Byte position in the input where the error occurred
         position: usize,
+        /// Description of what operation was being performed when the error occurred
         context: &'static str,
     },
     /// IO error with context
     IOError {
+        /// The kind of IO error that occurred
         kind: embedded_io::ErrorKind,
+        /// Byte position in the input where the error occurred
         position: usize,
+        /// Description of what operation was being performed when the error occurred
         context: &'static str,
     },
     /// Parse error (invalid `DynamoDB` JSON format)
     ParseError {
+        /// Byte position in the input where the error occurred
         position: usize,
+        /// Description of what parsing operation failed
         context: &'static str,
         /// Unknown type descriptor bytes (buffer, actual length used)
         unknown_type: Option<([u8; 32], usize)>,

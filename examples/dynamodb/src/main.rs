@@ -1,7 +1,7 @@
 //! `DynamoDB` JSON converter CLI tool
 
 use clap::{Parser, ValueEnum};
-use ddb_convert::convert_ddb_to_normal;
+use ddb_convert::{convert_ddb_to_normal, convert_normal_to_ddb, ConversionError};
 use embedded_io_adapters::std::FromStd;
 use std::io;
 
@@ -41,188 +41,113 @@ struct Args {
     without_item: bool,
 }
 
+/// Helper to create buffers and run conversion from `DynamoDB` JSON to normal JSON
+fn convert_from_ddb<R: embedded_io::Read, W: embedded_io::Write>(
+    input_reader: &mut R,
+    output_writer: &mut W,
+    pretty: bool,
+) -> Result<(), ConversionError> {
+    let mut rjiter_buffer = vec![0u8; 4096];
+    let mut context_buffer = vec![0u8; 2048];
+    convert_ddb_to_normal(
+        input_reader,
+        output_writer,
+        &mut rjiter_buffer,
+        &mut context_buffer,
+        pretty,
+        ddb_convert::ItemWrapperMode::AsWrapper,
+    )
+}
+
+/// Helper to create buffers and run conversion from normal JSON to `DynamoDB` JSON
+fn convert_to_ddb<R: embedded_io::Read, W: embedded_io::Write>(
+    input_reader: &mut R,
+    output_writer: &mut W,
+    pretty: bool,
+    with_item_wrapper: bool,
+) -> Result<(), ConversionError> {
+    let mut rjiter_buffer = vec![0u8; 4096];
+    let mut context_buffer = vec![0u8; 2048];
+    convert_normal_to_ddb(
+        input_reader,
+        output_writer,
+        &mut rjiter_buffer,
+        &mut context_buffer,
+        pretty,
+        with_item_wrapper,
+    )
+}
+
 fn main() {
     let args = Args::parse();
 
-    match args.mode {
-        ConversionMode::FromDdb => {
-            // Create buffers for streaming conversion
-            let mut rjiter_buffer = vec![0u8; 4096];
-            let mut context_buffer = vec![0u8; 2048];
-
-            // Handle input - streaming from file or stdin
-            let result = if let Some(input_path) = &args.input {
-                // Stream from file
-                let input_file = match std::fs::File::open(input_path) {
-                    Ok(f) => f,
-                    Err(e) => {
-                        eprintln!("Error opening input file '{input_path}': {e}");
-                        std::process::exit(1);
-                    }
-                };
-                let mut input_reader = FromStd::new(input_file);
-
-                // Handle output
-                if let Some(output_path) = &args.output {
-                    let output_file = match std::fs::File::create(output_path) {
-                        Ok(f) => f,
-                        Err(e) => {
-                            eprintln!("Error creating output file '{output_path}': {e}");
-                            std::process::exit(1);
-                        }
-                    };
-                    let mut output_writer = FromStd::new(output_file);
-                    convert_ddb_to_normal(
-                        &mut input_reader,
-                        &mut output_writer,
-                        &mut rjiter_buffer,
-                        &mut context_buffer,
-                        args.pretty,
-                        ddb_convert::ItemWrapperMode::AsWrapper,
-                    )
-                } else {
-                    let stdout = io::stdout();
-                    let mut output_writer = FromStd::new(stdout);
-                    convert_ddb_to_normal(
-                        &mut input_reader,
-                        &mut output_writer,
-                        &mut rjiter_buffer,
-                        &mut context_buffer,
-                        args.pretty,
-                        ddb_convert::ItemWrapperMode::AsWrapper,
-                    )
-                }
-            } else {
-                // Stream from stdin
-                let stdin = io::stdin();
-                let mut input_reader = FromStd::new(stdin);
-
-                if let Some(output_path) = &args.output {
-                    let output_file = match std::fs::File::create(output_path) {
-                        Ok(f) => f,
-                        Err(e) => {
-                            eprintln!("Error creating output file '{output_path}': {e}");
-                            std::process::exit(1);
-                        }
-                    };
-                    let mut output_writer = FromStd::new(output_file);
-                    convert_ddb_to_normal(
-                        &mut input_reader,
-                        &mut output_writer,
-                        &mut rjiter_buffer,
-                        &mut context_buffer,
-                        args.pretty,
-                        ddb_convert::ItemWrapperMode::AsWrapper,
-                    )
-                } else {
-                    let stdout = io::stdout();
-                    let mut output_writer = FromStd::new(stdout);
-                    convert_ddb_to_normal(
-                        &mut input_reader,
-                        &mut output_writer,
-                        &mut rjiter_buffer,
-                        &mut context_buffer,
-                        args.pretty,
-                        ddb_convert::ItemWrapperMode::AsWrapper,
-                    )
-                }
-            };
-
-            if let Err(e) = result {
-                eprintln!("Error: {e}");
-                std::process::exit(1);
-            }
+    let result = match (args.mode, args.input, args.output) {
+        (ConversionMode::FromDdb, Some(input_path), Some(output_path)) => {
+            let input_file = open_input_file(&input_path);
+            let output_file = create_output_file(&output_path);
+            let mut input_reader = FromStd::new(input_file);
+            let mut output_writer = FromStd::new(output_file);
+            convert_from_ddb(&mut input_reader, &mut output_writer, args.pretty)
         }
-        ConversionMode::ToDdb => {
-            // Create buffers for streaming conversion
-            let mut rjiter_buffer = vec![0u8; 4096];
-            let mut context_buffer = vec![0u8; 2048];
-
-            // Determine whether to use Item wrapper (default is true, unless --without-item is specified)
-            let with_item_wrapper = !args.without_item;
-
-            // Handle input - streaming from file or stdin
-            let result = if let Some(input_path) = &args.input {
-                // Stream from file
-                let input_file = match std::fs::File::open(input_path) {
-                    Ok(f) => f,
-                    Err(e) => {
-                        eprintln!("Error opening input file '{input_path}': {e}");
-                        std::process::exit(1);
-                    }
-                };
-                let mut input_reader = FromStd::new(input_file);
-
-                // Handle output
-                if let Some(output_path) = &args.output {
-                    let output_file = match std::fs::File::create(output_path) {
-                        Ok(f) => f,
-                        Err(e) => {
-                            eprintln!("Error creating output file '{output_path}': {e}");
-                            std::process::exit(1);
-                        }
-                    };
-                    let mut output_writer = FromStd::new(output_file);
-                    ddb_convert::convert_normal_to_ddb(
-                        &mut input_reader,
-                        &mut output_writer,
-                        &mut rjiter_buffer,
-                        &mut context_buffer,
-                        args.pretty,
-                        with_item_wrapper,
-                    )
-                } else {
-                    let stdout = io::stdout();
-                    let mut output_writer = FromStd::new(stdout);
-                    ddb_convert::convert_normal_to_ddb(
-                        &mut input_reader,
-                        &mut output_writer,
-                        &mut rjiter_buffer,
-                        &mut context_buffer,
-                        args.pretty,
-                        with_item_wrapper,
-                    )
-                }
-            } else {
-                // Stream from stdin
-                let stdin = io::stdin();
-                let mut input_reader = FromStd::new(stdin);
-
-                if let Some(output_path) = &args.output {
-                    let output_file = match std::fs::File::create(output_path) {
-                        Ok(f) => f,
-                        Err(e) => {
-                            eprintln!("Error creating output file '{output_path}': {e}");
-                            std::process::exit(1);
-                        }
-                    };
-                    let mut output_writer = FromStd::new(output_file);
-                    ddb_convert::convert_normal_to_ddb(
-                        &mut input_reader,
-                        &mut output_writer,
-                        &mut rjiter_buffer,
-                        &mut context_buffer,
-                        args.pretty,
-                        with_item_wrapper,
-                    )
-                } else {
-                    let stdout = io::stdout();
-                    let mut output_writer = FromStd::new(stdout);
-                    ddb_convert::convert_normal_to_ddb(
-                        &mut input_reader,
-                        &mut output_writer,
-                        &mut rjiter_buffer,
-                        &mut context_buffer,
-                        args.pretty,
-                        with_item_wrapper,
-                    )
-                }
-            };
-
-            if let Err(e) = result {
-                eprintln!("Error: {e}");
-                std::process::exit(1);
-            }
+        (ConversionMode::FromDdb, Some(input_path), None) => {
+            let input_file = open_input_file(&input_path);
+            let mut input_reader = FromStd::new(input_file);
+            let mut output_writer = FromStd::new(io::stdout());
+            convert_from_ddb(&mut input_reader, &mut output_writer, args.pretty)
         }
+        (ConversionMode::FromDdb, None, Some(output_path)) => {
+            let output_file = create_output_file(&output_path);
+            let mut input_reader = FromStd::new(io::stdin());
+            let mut output_writer = FromStd::new(output_file);
+            convert_from_ddb(&mut input_reader, &mut output_writer, args.pretty)
+        }
+        (ConversionMode::FromDdb, None, None) => {
+            let mut input_reader = FromStd::new(io::stdin());
+            let mut output_writer = FromStd::new(io::stdout());
+            convert_from_ddb(&mut input_reader, &mut output_writer, args.pretty)
+        }
+        (ConversionMode::ToDdb, Some(input_path), Some(output_path)) => {
+            let input_file = open_input_file(&input_path);
+            let output_file = create_output_file(&output_path);
+            let mut input_reader = FromStd::new(input_file);
+            let mut output_writer = FromStd::new(output_file);
+            convert_to_ddb(&mut input_reader, &mut output_writer, args.pretty, !args.without_item)
+        }
+        (ConversionMode::ToDdb, Some(input_path), None) => {
+            let input_file = open_input_file(&input_path);
+            let mut input_reader = FromStd::new(input_file);
+            let mut output_writer = FromStd::new(io::stdout());
+            convert_to_ddb(&mut input_reader, &mut output_writer, args.pretty, !args.without_item)
+        }
+        (ConversionMode::ToDdb, None, Some(output_path)) => {
+            let output_file = create_output_file(&output_path);
+            let mut input_reader = FromStd::new(io::stdin());
+            let mut output_writer = FromStd::new(output_file);
+            convert_to_ddb(&mut input_reader, &mut output_writer, args.pretty, !args.without_item)
+        }
+        (ConversionMode::ToDdb, None, None) => {
+            let mut input_reader = FromStd::new(io::stdin());
+            let mut output_writer = FromStd::new(io::stdout());
+            convert_to_ddb(&mut input_reader, &mut output_writer, args.pretty, !args.without_item)
+        }
+    };
+
+    if let Err(e) = result {
+        eprintln!("Error: {e}");
+        std::process::exit(1);
     }
+}
+
+fn open_input_file(path: &str) -> std::fs::File {
+    std::fs::File::open(path).unwrap_or_else(|e| {
+        eprintln!("Error opening input file '{path}': {e}");
+        std::process::exit(1);
+    })
+}
+
+fn create_output_file(path: &str) -> std::fs::File {
+    std::fs::File::create(path).unwrap_or_else(|e| {
+        eprintln!("Error creating output file '{path}': {e}");
+        std::process::exit(1);
+    })
 }
