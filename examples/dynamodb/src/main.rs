@@ -53,14 +53,24 @@ fn main() {
             // Handle input - streaming from file or stdin
             let result = if let Some(input_path) = &args.input {
                 // Stream from file
-                let input_file =
-                    std::fs::File::open(input_path).expect("Failed to open input file");
+                let input_file = match std::fs::File::open(input_path) {
+                    Ok(f) => f,
+                    Err(e) => {
+                        eprintln!("Error opening input file '{input_path}': {e}");
+                        std::process::exit(1);
+                    }
+                };
                 let mut input_reader = FromStd::new(input_file);
 
                 // Handle output
                 if let Some(output_path) = &args.output {
-                    let output_file =
-                        std::fs::File::create(output_path).expect("Failed to create output file");
+                    let output_file = match std::fs::File::create(output_path) {
+                        Ok(f) => f,
+                        Err(e) => {
+                            eprintln!("Error creating output file '{output_path}': {e}");
+                            std::process::exit(1);
+                        }
+                    };
                     let mut output_writer = FromStd::new(output_file);
                     convert_ddb_to_normal(
                         &mut input_reader,
@@ -88,8 +98,13 @@ fn main() {
                 let mut input_reader = FromStd::new(stdin);
 
                 if let Some(output_path) = &args.output {
-                    let output_file =
-                        std::fs::File::create(output_path).expect("Failed to create output file");
+                    let output_file = match std::fs::File::create(output_path) {
+                        Ok(f) => f,
+                        Err(e) => {
+                            eprintln!("Error creating output file '{output_path}': {e}");
+                            std::process::exit(1);
+                        }
+                    };
                     let mut output_writer = FromStd::new(output_file);
                     convert_ddb_to_normal(
                         &mut input_reader,
@@ -129,14 +144,24 @@ fn main() {
             // Handle input - streaming from file or stdin
             let result = if let Some(input_path) = &args.input {
                 // Stream from file
-                let input_file =
-                    std::fs::File::open(input_path).expect("Failed to open input file");
+                let input_file = match std::fs::File::open(input_path) {
+                    Ok(f) => f,
+                    Err(e) => {
+                        eprintln!("Error opening input file '{input_path}': {e}");
+                        std::process::exit(1);
+                    }
+                };
                 let mut input_reader = FromStd::new(input_file);
 
                 // Handle output
                 if let Some(output_path) = &args.output {
-                    let output_file =
-                        std::fs::File::create(output_path).expect("Failed to create output file");
+                    let output_file = match std::fs::File::create(output_path) {
+                        Ok(f) => f,
+                        Err(e) => {
+                            eprintln!("Error creating output file '{output_path}': {e}");
+                            std::process::exit(1);
+                        }
+                    };
                     let mut output_writer = FromStd::new(output_file);
                     ddb_convert::convert_normal_to_ddb(
                         &mut input_reader,
@@ -164,8 +189,13 @@ fn main() {
                 let mut input_reader = FromStd::new(stdin);
 
                 if let Some(output_path) = &args.output {
-                    let output_file =
-                        std::fs::File::create(output_path).expect("Failed to create output file");
+                    let output_file = match std::fs::File::create(output_path) {
+                        Ok(f) => f,
+                        Err(e) => {
+                            eprintln!("Error creating output file '{output_path}': {e}");
+                            std::process::exit(1);
+                        }
+                    };
                     let mut output_writer = FromStd::new(output_file);
                     ddb_convert::convert_normal_to_ddb(
                         &mut input_reader,
