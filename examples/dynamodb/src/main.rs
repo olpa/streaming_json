@@ -1,3 +1,5 @@
+//! DynamoDB JSON converter CLI tool
+
 use clap::{Parser, ValueEnum};
 use ddb_convert::convert_ddb_to_normal;
 use embedded_io_adapters::std::FromStd;
@@ -5,9 +7,9 @@ use std::io;
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum ConversionMode {
-    /// Convert DynamoDB JSON to normal JSON
+    /// Convert `DynamoDB` JSON to normal JSON
     FromDdb,
-    /// Convert normal JSON to DynamoDB JSON
+    /// Convert normal JSON to `DynamoDB` JSON
     ToDdb,
 }
 
@@ -33,7 +35,7 @@ struct Args {
 
     /// Omit top-level "Item" wrapper (only applies to to-ddb mode)
     ///
-    /// When converting normal JSON to DynamoDB format, the output is wrapped
+    /// When converting normal JSON to `DynamoDB` format, the output is wrapped
     /// in {"Item": {...}} by default. Use this flag to omit the wrapper.
     #[arg(long = "without-item", default_value_t = false)]
     without_item: bool,
@@ -112,7 +114,7 @@ fn main() {
             };
 
             if let Err(e) = result {
-                eprintln!("Error: {}", e);
+                eprintln!("Error: {e}");
                 std::process::exit(1);
             }
         }
@@ -188,7 +190,7 @@ fn main() {
             };
 
             if let Err(e) = result {
-                eprintln!("Error: {}", e);
+                eprintln!("Error: {e}");
                 std::process::exit(1);
             }
         }

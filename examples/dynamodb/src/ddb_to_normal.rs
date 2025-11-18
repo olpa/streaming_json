@@ -17,7 +17,7 @@ struct ParseErrorNoPos {
 }
 
 impl ParseErrorNoPos {
-    /// Convert to ParseError by adding position information
+    /// Convert to `ParseError` by adding position information
     fn with_position(self, position: usize) -> ConversionError {
         ConversionError::ParseError {
             position,
@@ -160,7 +160,7 @@ impl<'a, 'workbuf, W: IoWrite> DdbConverter<'a, 'workbuf, W> {
         });
     }
 
-    /// Convert stored ParseErrorNoPos to ParseError with position
+    /// Convert stored `ParseErrorNoPos` to `ParseError` with position
     fn finalize_parse_error(&mut self, position: usize) {
         if let Some(parse_error_no_pos) = self.last_parse_error_no_pos.take() {
             self.last_error = Some(parse_error_no_pos.with_position(position));
@@ -680,17 +680,17 @@ fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
     context: ContextIter,
     baton: DdbBaton<'a, 'workbuf, W>,
 ) -> Option<Action<DdbBaton<'a, 'workbuf, W>, R>> {
-    let (phase, _current_type) = {
+    let (phase, current_type) = {
         let conv = baton.borrow();
         (conv.phase, conv.current_type)
     };
 
     // Match on structural type and delegate to appropriate handler
     match structural {
-        StructuralPseudoname::Object => find_action_object(context, baton, phase, _current_type),
+        StructuralPseudoname::Object => find_action_object(context, baton, phase, current_type),
         StructuralPseudoname::None => find_action_key(context, baton, phase),
-        StructuralPseudoname::Array => find_action_array(context, baton, phase, _current_type),
-        StructuralPseudoname::Atom => find_action_atom(context, baton, phase, _current_type),
+        StructuralPseudoname::Array => find_action_array(context, baton, phase, current_type),
+        StructuralPseudoname::Atom => find_action_atom(context, baton, phase, current_type),
     }
 }
 
@@ -868,7 +868,7 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
     context: ContextIter,
     baton: DdbBaton<'a, 'workbuf, W>,
 ) -> Option<EndAction<DdbBaton<'a, 'workbuf, W>>> {
-    let (phase, current_type) = {
+    let (phase, _current_type) = {
         let conv = baton.borrow();
         (conv.phase, conv.current_type)
     };

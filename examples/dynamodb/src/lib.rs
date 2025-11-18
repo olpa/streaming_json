@@ -1,3 +1,8 @@
+//! Streaming converter between `DynamoDB` JSON and normal JSON formats
+//!
+//! This library provides allocation-free, streaming conversion between standard
+//! JSON and `DynamoDB`'s JSON format using the `scan_json` framework.
+
 #![no_std]
 
 #[cfg(feature = "std")]
@@ -14,7 +19,7 @@ pub use normal_to_ddb::convert_normal_to_ddb;
 /// Detailed error information for conversion errors
 #[derive(Debug, Clone)]
 pub enum ConversionError {
-    /// RJiter error with context
+    /// `RJiter` error with context
     RJiterError {
         kind: rjiter::error::ErrorType,
         position: usize,
@@ -26,14 +31,14 @@ pub enum ConversionError {
         position: usize,
         context: &'static str,
     },
-    /// Parse error (invalid DynamoDB JSON format)
+    /// Parse error (invalid `DynamoDB` JSON format)
     ParseError {
         position: usize,
         context: &'static str,
         /// Unknown type descriptor bytes (buffer, actual length used)
         unknown_type: Option<([u8; 32], usize)>,
     },
-    /// Scan error (from scan_json library)
+    /// Scan error (from `scan_json` library)
     ScanError(scan_json::Error),
 }
 
@@ -48,8 +53,7 @@ impl core::fmt::Display for ConversionError {
             } => {
                 write!(
                     f,
-                    "RJiter error at position {}: {:?} (while {})",
-                    position, kind, context
+                    "RJiter error at position {position}: {kind:?} (while {context})"
                 )
             }
             ConversionError::IOError {
@@ -59,8 +63,7 @@ impl core::fmt::Display for ConversionError {
             } => {
                 write!(
                     f,
-                    "IO error at position {}: {:?} (while {})",
-                    position, kind, context
+                    "IO error at position {position}: {kind:?} (while {context})"
                 )
             }
             ConversionError::ParseError {
@@ -72,15 +75,14 @@ impl core::fmt::Display for ConversionError {
                     let type_str = std::string::String::from_utf8_lossy(&bytes[..*len]);
                     write!(
                         f,
-                        "Parse error at position {}: {} (unknown type descriptor '{}')",
-                        position, context, type_str
+                        "Parse error at position {position}: {context} (unknown type descriptor '{type_str}')"
                     )
                 } else {
-                    write!(f, "Parse error at position {}: {}", position, context)
+                    write!(f, "Parse error at position {position}: {context}")
                 }
             }
             ConversionError::ScanError(err) => {
-                write!(f, "{}", err)
+                write!(f, "{err}")
             }
         }
     }
