@@ -23,10 +23,10 @@ default = ["std"]
 std = []
 
 [dependencies]
-scan_json = { path = "../../scan_json", features = ["display"] }
 rjiter = { version = "1.2", default-features = false, features = ["display"] }
 u8pool = { version = "1.1", default-features = false }
 embedded-io = { version = "0.6", default-features = false }
+scan_json = { version = "2.0.0", features = ["display"] }
 
 [dev-dependencies]
 # Test dependencies can use std
