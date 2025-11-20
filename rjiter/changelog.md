@@ -1,4 +1,4 @@
-## [1.3.0] - 2025-11-20
+## [1.3.1] - 2025-11-20
 
 - Upgrade `embedded-io` dependency from 0.6 to 0.7
 - Improve error message formatting
