@@ -43,27 +43,26 @@ pub enum Error {
 impl core::fmt::Display for Error {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Error::RJiterError(err) => write!(f, "RJiter error: {:?}", err),
+            Error::RJiterError(err) => write!(f, "{err}"),
             Error::UnhandledPeek { peek, position } => {
-                write!(f, "UnhandledPeek: {:?} at position {}", peek, position)
+                write!(f, "UnhandledPeek: {peek:?} at position {position}")
             }
             Error::UnbalancedJson(position) => {
-                write!(f, "Unbalanced JSON at position {}", position)
+                write!(f, "Unbalanced JSON at position {position}")
             }
             Error::InternalError { position, message } => {
-                write!(f, "Internal error at position {}: {}", position, message)
+                write!(f, "Internal error at position {position}: {message}")
             }
             Error::MaxNestingExceeded { position, level } => {
                 write!(
                     f,
-                    "Max nesting exceeded at position {} with level {}",
-                    position, level
+                    "Max nesting exceeded at position {position} with level {level}"
                 )
             }
             Error::ActionError { message, position } => {
-                write!(f, "Action error: {} at position {}", message, position)
+                write!(f, "Action error: {message} at position {position}")
             }
-            Error::IOError(kind) => write!(f, "IO error: {:?}", kind),
+            Error::IOError(kind) => write!(f, "IO error: {kind}"),
         }
     }
 }
