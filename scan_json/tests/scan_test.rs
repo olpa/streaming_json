@@ -1503,12 +1503,10 @@ fn lookahead_repair() {
         }
 
         // Helper to write number to output
-        let write_num = |writer: &mut Vec<u8>, num: NumberAny| {
-            match num {
-                NumberAny::Int(NumberInt::Int(i)) => write!(writer, "[{}]", i).unwrap(),
-                NumberAny::Int(NumberInt::BigInt(b)) => write!(writer, "[{}]", b).unwrap(),
-                NumberAny::Float(f) => write!(writer, "[{}]", f).unwrap(),
-            }
+        let write_num = |writer: &mut Vec<u8>, num: NumberAny| match num {
+            NumberAny::Int(NumberInt::Int(i)) => write!(writer, "[{}]", i).unwrap(),
+            NumberAny::Int(NumberInt::BigInt(b)) => write!(writer, "[{}]", b).unwrap(),
+            NumberAny::Float(f) => write!(writer, "[{}]", f).unwrap(),
         };
 
         let mut writer = writer.borrow_mut();
@@ -1526,9 +1524,9 @@ fn lookahead_repair() {
 
         // Determine how many zeros to skip
         let to_skip = if after_zeros.is_ascii_digit() || after_zeros == b'.' {
-            n_zeros  // "016" -> "16", "0.42" -> ".42"
+            n_zeros // "016" -> "16", "0.42" -> ".42"
         } else {
-            n_zeros.saturating_sub(1)  // "000000" -> "0"
+            n_zeros.saturating_sub(1) // "000000" -> "0"
         };
 
         if to_skip > 0 {
