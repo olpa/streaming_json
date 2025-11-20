@@ -39,7 +39,7 @@ impl core::fmt::Display for ErrorType {
             ErrorType::WrongType { expected, actual } => {
                 write!(f, "expected {expected} but found {actual}")
             }
-            ErrorType::IoError { kind } => write!(f, "I/O operation failed: {kind:?}"),
+            ErrorType::IoError { kind } => write!(f, "I/O operation failed: {kind}"),
             ErrorType::BufferFull => write!(f, "buffer is full"),
         }
     }
