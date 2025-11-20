@@ -1,4 +1,4 @@
-## [2.1.0] - 2025-11-20
+## [2.1.1] - 2025-11-20
 
 - Update `embedded-io` to 0.7 and `rjiter` to 1.3
 - Add `rjiter/display` feature dependency for `display` feature
