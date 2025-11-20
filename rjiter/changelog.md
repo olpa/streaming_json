@@ -1,3 +1,9 @@
+## [1.3.1] - 2025-11-20
+
+- Upgrade `embedded-io` dependency from 0.6 to 0.7
+- Improve error message formatting
+
+
 ## [1.2.1] - 2025-11-10
 
 - New functions `lookahead_while`,`lookahead_n`, `skip_n_bytes`

@@ -35,11 +35,11 @@ pub enum ErrorType {
 impl core::fmt::Display for ErrorType {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            ErrorType::JsonError(err) => write!(f, "JSON parsing error: {}", err),
+            ErrorType::JsonError(err) => write!(f, "JSON parsing error: {err}"),
             ErrorType::WrongType { expected, actual } => {
-                write!(f, "expected {} but found {}", expected, actual)
+                write!(f, "expected {expected} but found {actual}")
             }
-            ErrorType::IoError { kind } => write!(f, "I/O operation failed: {:?}", kind),
+            ErrorType::IoError { kind } => write!(f, "I/O operation failed: {kind}"),
             ErrorType::BufferFull => write!(f, "buffer is full"),
         }
     }
@@ -89,6 +89,9 @@ impl Error {
 
     /// Write a description of the error with position information to the provided formatter.
     /// This is more embedded-friendly than returning a String as it doesn't allocate.
+    ///
+    /// # Errors
+    /// Returns an error if writing to the formatter fails.
     #[cfg(any(feature = "std", feature = "display"))]
     pub fn write_description<R: embedded_io::Read>(
         &self,
@@ -102,6 +105,7 @@ impl Error {
     /// Get the description of the error with position information as a String.
     /// This is only available with std feature as it allocates.
     #[cfg(feature = "std")]
+    #[must_use]
     pub fn description<R: embedded_io::Read>(&self, rjiter: &crate::RJiter<R>) -> String {
         let position = self.get_position(rjiter);
         format!("{} at {}", self.error_type, position)

@@ -43,26 +43,23 @@ impl core::fmt::Display for U8PoolError {
                 available,
             } => write!(
                 f,
-                "Buffer overflow: requested {} bytes, but only {} bytes available",
-                requested, available
+                "Buffer overflow: requested {requested} bytes, but only {available} bytes available"
             ),
             U8PoolError::IndexOutOfBounds { index, length } => write!(
                 f,
-                "Index out of bounds: index {} is beyond vector length {}",
-                index, length
+                "Index out of bounds: index {index} is beyond vector length {length}"
             ),
             U8PoolError::InvalidInitialization { reason } => {
-                write!(f, "Invalid U8Pool initialization: {}", reason)
+                write!(f, "Invalid U8Pool initialization: {reason}")
             }
             U8PoolError::SliceLimitExceeded { max_slices } => {
                 write!(
                     f,
-                    "Slice limit exceeded: maximum {} slices allowed",
-                    max_slices
+                    "Slice limit exceeded: maximum {max_slices} slices allowed"
                 )
             }
             U8PoolError::ValueTooLarge { value, max } => {
-                write!(f, "Value too large: {} exceeds maximum of {}", value, max)
+                write!(f, "Value too large: {value} exceeds maximum of {max}")
             }
         }
     }
