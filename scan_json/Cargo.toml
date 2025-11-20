@@ -25,4 +25,4 @@ embedded-io = { version = "0.7.1", features = ["std"] }
 [features]
 default = []
 std = ["embedded-io/std", "rjiter/std", "u8pool/std", "display"]
-display = []
+display = ["rjiter/display"]
