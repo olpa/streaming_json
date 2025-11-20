@@ -1,3 +1,10 @@
+## [2.1.0] - 2025-11-20
+
+- Update `embedded-io` to 0.7 and `rjiter` to 1.3
+- Add `rjiter/display` feature dependency for `display` feature
+- Improve error message formatting
+
+
 ## [2.0.0] - 2025-10-22
 
 - Rewrite for `no_std` support. Incompatible change of the API.
