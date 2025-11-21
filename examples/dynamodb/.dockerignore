@@ -1,0 +1,28 @@
+# Build artifacts
+target/
+*.o
+*.so
+*.rlib
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+README.md
+LICENSE
+doc/
+
+# Test fixtures (not needed in container)
+fixture/
+
+# Claude AI files
+.claude/
