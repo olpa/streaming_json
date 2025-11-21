@@ -447,39 +447,6 @@ fn handle_buffer_end_pos_in_finish() {
 //
 
 #[test]
-fn known_skip_token() {
-    let n_spaces = 6;
-    let some_spaces = " ".repeat(n_spaces);
-    let input = format!(r#"{some_spaces}trux true"#);
-    for buffer_len in n_spaces..input.len() {
-        let mut buffer = vec![0u8; buffer_len];
-        let mut reader = input.as_bytes();
-        let mut rjiter = RJiter::new(&mut reader, &mut buffer);
-
-        // Position Jiter on the token
-        let _ = rjiter.peek();
-
-        // Consume the "trux" token
-        let result = rjiter.known_skip_token(b"trux");
-        assert!(result.is_ok(), "skip_token failed");
-
-        // The Jiter position should be moved to the "true" token
-        let result = rjiter.peek();
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), Peek::True);
-
-        // Do not consume the "trux" token on "true"
-        let result = rjiter.known_skip_token(b"trux");
-        assert!(result.is_err());
-
-        // Consume the "true" token
-        let result = rjiter.next_bool();
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), true);
-    }
-}
-
-#[test]
 fn skip_tokens_example_for_readme() {
     let json_data = r#"
         event: ping

@@ -1482,3 +1482,91 @@ fn stop_early() {
         rjiter::jiter::NumberInt::Int(777)
     );
 }
+
+#[test]
+fn lookahead_repair() {
+    let json = r#"{"f": 000000, "f": 0.0, "f": 001, "f": 0016, "f": 0017, "f": 0.42}"#;
+    let mut reader = json.as_bytes();
+    let mut buffer = vec![0u8; 16];
+    let mut rjiter = RJiter::new(&mut reader, &mut buffer);
+    let mut scan_buffer = [0u8; 512];
+    let mut scan_stack = U8Pool::new(&mut scan_buffer, 20).unwrap();
+    let writer_cell = RefCell::new(Vec::new());
+
+    // Action function that peeks, checks type, gets number, and writes to output
+    fn handle_f_number(rjiter: &mut RJiter<&[u8]>, writer: &RefCell<Vec<u8>>) -> StreamOp {
+        use rjiter::jiter::{NumberAny, NumberInt};
+
+        let peek = rjiter.peek().unwrap();
+        if !peek.is_num() {
+            return StreamOp::None;
+        }
+
+        // Helper to write number to output
+        let write_num = |writer: &mut Vec<u8>, num: NumberAny| match num {
+            NumberAny::Int(NumberInt::Int(i)) => write!(writer, "[{}]", i).unwrap(),
+            NumberAny::Int(NumberInt::BigInt(b)) => write!(writer, "[{}]", b).unwrap(),
+            NumberAny::Float(f) => write!(writer, "[{}]", f).unwrap(),
+        };
+
+        let mut writer = writer.borrow_mut();
+
+        // Try to parse the number
+        if let Ok(num) = rjiter.next_number() {
+            write_num(&mut writer, num);
+            return StreamOp::ValueIsConsumed;
+        }
+
+        // Bad number error - repair by skipping leading zeros
+        let n_zeros = rjiter.lookahead_while(|b| b == b'0').unwrap().len();
+        let next_byte = rjiter.lookahead_n(n_zeros + 1).unwrap();
+        let after_zeros = next_byte.get(n_zeros).copied().unwrap_or(b'\0');
+
+        // Determine how many zeros to skip
+        let to_skip = if after_zeros.is_ascii_digit() || after_zeros == b'.' {
+            n_zeros // "016" -> "16", "0.42" -> ".42"
+        } else {
+            n_zeros.saturating_sub(1) // "000000" -> "0"
+        };
+
+        if to_skip > 0 {
+            rjiter.skip_n_bytes(to_skip).unwrap();
+        }
+
+        // Parse the repaired number
+        let num = rjiter.next_number().unwrap();
+        write_num(&mut writer, num);
+        StreamOp::ValueIsConsumed
+    }
+
+    // find_action that matches field "f"
+    let find_action = |_structural_pseudoname: StructuralPseudoname,
+                       context: ContextIter,
+                       _baton: &RefCell<Vec<u8>>|
+     -> Option<Action<&RefCell<Vec<u8>>, &[u8]>> {
+        // Check if the key is "f" (ignoring context)
+        if let Some(key) = context.into_iter().next() {
+            (key == b"f").then(|| handle_f_number as Action<&RefCell<Vec<u8>>, &[u8]>)
+        } else {
+            None
+        }
+    };
+
+    let find_end_action = |_structural_pseudoname: StructuralPseudoname,
+                           _context: ContextIter,
+                           _baton: &RefCell<Vec<u8>>|
+     -> Option<EndAction<&RefCell<Vec<u8>>>> { None };
+
+    scan(
+        find_action,
+        find_end_action,
+        &mut rjiter,
+        &writer_cell,
+        &mut scan_stack,
+        &Options::new(),
+    )
+    .unwrap();
+
+    let output = String::from_utf8(writer_cell.borrow().to_vec()).unwrap();
+    assert_eq!(output, "[0][0][1][16][17][0.42]");
+}

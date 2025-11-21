@@ -712,6 +712,129 @@ impl<'rj, R: Read> RJiter<'rj, R> {
     }
 
     //  ------------------------------------------------------------
+    // Lookahead
+    //
+
+    /// Lookahead bytes while a predicate is true, without consuming them.
+    /// Returns a slice of the bytes that matched the predicate.
+    ///
+    /// This is a wrapper around `Buffer::collect_while` that returns a slice
+    /// instead of an offset. The bytes are not consumed from the buffer.
+    ///
+    /// # Arguments
+    ///
+    /// * `predicate` - A function that returns true if the byte should be accepted
+    ///
+    /// # Errors
+    ///
+    /// Returns `ErrorType::BufferFull` if the buffer fills up with all accepted bytes.
+    /// Also returns errors from the underlying reader.
+    pub fn lookahead_while<F>(&mut self, predicate: F) -> RJiterResult<&[u8]>
+    where
+        F: Fn(u8) -> bool,
+    {
+        let change_flag = ChangeFlag::new(&self.buffer);
+
+        // jiter.current_index() returns position within its slice view of the buffer
+        let start_pos = self.jiter.current_index();
+        let n_shifted_before = self.buffer.n_shifted_out;
+
+        // Allow collect_while to shift if needed
+        let (mut actual_start, mut end_pos) =
+            self.buffer.collect_while(predicate, start_pos, true)?;
+
+        // If buffer changed, it either shifted in collect_while or just read more data
+        if change_flag.is_changed(&self.buffer) {
+            // If collect_while didn't shift but we need to (start_pos > 0), shift now
+            if n_shifted_before == self.buffer.n_shifted_out && start_pos > 0 {
+                self.buffer.shift_buffer(0, start_pos);
+                // After manual shift, adjust positions
+                end_pos -= start_pos;
+                actual_start = 0;
+            }
+            // Note: if collect_while shifted, actual_start is already 0
+            self.create_new_jiter();
+        }
+
+        #[allow(clippy::indexing_slicing)]
+        let slice = &self.buffer.buf[actual_start..end_pos];
+
+        Ok(slice)
+    }
+
+    /// Lookahead exactly `count` bytes without consuming them.
+    /// Returns a slice of the requested bytes, or fewer if EOF is reached.
+    ///
+    /// This is a wrapper around `Buffer::collect_count` that returns a slice
+    /// instead of an offset. The bytes are not consumed from the buffer.
+    ///
+    /// # Arguments
+    ///
+    /// * `count` - The number of bytes to lookahead
+    ///
+    /// # Errors
+    ///
+    /// Returns `ErrorType::BufferFull` if the buffer is too small to hold the requested bytes.
+    /// Also returns errors from the underlying reader.
+    pub fn lookahead_n(&mut self, count: usize) -> RJiterResult<&[u8]> {
+        let change_flag = ChangeFlag::new(&self.buffer);
+
+        // jiter.current_index() returns position within its slice view of the buffer
+        let start_pos = self.jiter.current_index();
+        let n_shifted_before = self.buffer.n_shifted_out;
+
+        // Allow collect_count to shift if needed
+        let (mut actual_start, mut end_pos) = self.buffer.collect_count(count, start_pos, true)?;
+
+        // If buffer changed, it either shifted in collect_count or just read more data
+        if change_flag.is_changed(&self.buffer) {
+            // If collect_count didn't shift but we need to (start_pos > 0), shift now
+            if n_shifted_before == self.buffer.n_shifted_out && start_pos > 0 {
+                self.buffer.shift_buffer(0, start_pos);
+                // After manual shift, adjust positions
+                end_pos -= start_pos;
+                actual_start = 0;
+            }
+            // Note: if collect_count shifted, actual_start is already 0
+            self.create_new_jiter();
+        }
+
+        #[allow(clippy::indexing_slicing)]
+        let slice = &self.buffer.buf[actual_start..end_pos];
+
+        Ok(slice)
+    }
+
+    /// Skip exactly `count` bytes, consuming them from the buffer.
+    /// Returns the number of bytes actually skipped (may be less than `count` if EOF is reached).
+    ///
+    /// This function skips bytes incrementally, so it works even with small buffers.
+    /// It uses `Buffer::skip_n` to find the position, then shifts to consume the bytes.
+    ///
+    /// # Arguments
+    ///
+    /// * `count` - The number of bytes to skip
+    ///
+    /// # Errors
+    ///
+    /// Returns errors from the underlying reader.
+    pub fn skip_n_bytes(&mut self, count: usize) -> RJiterResult<usize> {
+        // jiter.current_index() returns position within its slice view of the buffer
+        let start_pos = self.jiter.current_index();
+
+        // Use Buffer::skip_n to get the new position and bytes skipped
+        let (new_pos, bytes_skipped) = self.buffer.skip_n(count, start_pos)?;
+
+        // Shift the buffer to consume the skipped bytes
+        self.buffer.shift_buffer(0, new_pos);
+
+        // Create new jiter positioned at position 0 (after shift)
+        self.create_new_jiter();
+
+        Ok(bytes_skipped)
+    }
+
+    //  ------------------------------------------------------------
     // Skip token
     //
 
@@ -721,51 +844,22 @@ impl<'rj, R: Read> RJiter<'rj, R> {
     /// # Errors
     /// `IoError` or `RJiterError(ExpectedSomeIdent)`
     pub fn known_skip_token(&mut self, token: &[u8]) -> RJiterResult<()> {
-        let change_flag = ChangeFlag::new(&self.buffer);
-        let mut pos = self.jiter.current_index();
-        let mut err_flag = false;
+        // Lookahead the expected number of bytes
+        let lookahead = self.lookahead_n(token.len())?;
 
-        // Read enough bytes to have the token
-        if pos + token.len() >= self.buffer.n_bytes {
-            self.buffer.shift_buffer(0, pos);
-            pos = 0;
-        }
-        while self.buffer.n_bytes < pos + token.len() {
-            let n_new_bytes = self.buffer.read_more()?;
-            if n_new_bytes == 0 {
-                // Not an error for the caller, just a normal end of the json
-                // The code should create a new Jiter. Doing so below
-                err_flag = true;
-                break;
-            }
-        }
+        // Check if the lookahead matches the token
+        let found = lookahead == token;
 
-        // Find the token
-        let found = if err_flag {
-            false
+        // If found, skip the bytes to consume them
+        if found {
+            self.skip_n_bytes(token.len())?;
+            Ok(())
         } else {
-            // `pos` is `jiter.current_index()` or `0`
-            #[allow(clippy::indexing_slicing)]
-            let buf_view = &mut self.buffer.buf[pos..self.buffer.n_bytes];
-            buf_view.starts_with(token)
-        };
-
-        // Sync the Jiter
-        if found {
-            self.buffer.shift_buffer(0, pos + token.len());
+            Err(RJiterError::from_json_error(
+                self.current_index(),
+                JsonErrorType::ExpectedSomeIdent,
+            ))
         }
-        if change_flag.is_changed(&self.buffer) {
-            self.create_new_jiter();
-        }
-
-        // Result
-        if found {
-            return Ok(());
-        }
-        Err(RJiterError::from_json_error(
-            self.current_index(),
-            JsonErrorType::ExpectedSomeIdent,
-        ))
     }
 }
 
