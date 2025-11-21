@@ -23,10 +23,10 @@ default = ["std"]
 std = []
 
 [dependencies]
-rjiter = { version = "1.2", default-features = false, features = ["display"] }
+rjiter = { version = "1.3.1", default-features = false, features = ["display"] }
 u8pool = { version = "1.1", default-features = false }
-embedded-io = { version = "0.6", default-features = false }
-scan_json = { version = "2.0.0", features = ["display"] }
+embedded-io = { version = "0.7", default-features = false }
+scan_json = { version = "2.1.1", features = ["display"] }
 
 [dev-dependencies]
 # Test dependencies can use std
@@ -37,4 +37,4 @@ serde_json = "1.0"
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 clap = { version = "4.5", features = ["derive"] }
 serde_json = "1.0"
-embedded-io-adapters = { version = "0.6", features = ["std"] }
+embedded-io-adapters = { version = "0.7", features = ["std"] }
