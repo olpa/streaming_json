@@ -393,11 +393,10 @@ fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
     let parent = context.next();
 
     // Match root object
-    if structural == StructuralPseudoname::Object
-        && parent == Some(b"#top") {
-            // This is the root object
-            return Some(on_root_object_begin);
-        }
+    if structural == StructuralPseudoname::Object && parent == Some(b"#top") {
+        // This is the root object
+        return Some(on_root_object_begin);
+    }
 
     // Match field keys
     if structural == StructuralPseudoname::None {
@@ -491,14 +490,13 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
     }
 
     // Match end of array elements (primitives)
-    if structural == StructuralPseudoname::Atom
-        && parent == Some(b"#array") {
-            if let Some(grandparent) = context.next() {
-                if grandparent == b"L" {
-                    return Some(on_array_element_end_toddb);
-                }
+    if structural == StructuralPseudoname::Atom && parent == Some(b"#array") {
+        if let Some(grandparent) = context.next() {
+            if grandparent == b"L" {
+                return Some(on_array_element_end_toddb);
             }
         }
+    }
 
     None
 }

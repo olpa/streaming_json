@@ -140,15 +140,12 @@ impl<'a, W: IoWrite> DdbConverter<'a, '_, W> {
         });
     }
 
-    fn store_parse_error(
-        &mut self,
-        context: &'static str,
-        unknown_type_bytes: Option<&[u8]>,
-    ) {
+    fn store_parse_error(&mut self, context: &'static str, unknown_type_bytes: Option<&[u8]>) {
         let unknown_type = if let Some(bytes) = unknown_type_bytes {
             let len = bytes.len().min(32);
             let mut buffer = [0u8; 32];
-            if let (Some(buf_slice), Some(bytes_slice)) = (buffer.get_mut(..len), bytes.get(..len)) {
+            if let (Some(buf_slice), Some(bytes_slice)) = (buffer.get_mut(..len), bytes.get(..len))
+            {
                 buf_slice.copy_from_slice(bytes_slice);
             }
             Some((buffer, len))
@@ -574,10 +571,7 @@ fn find_action_key<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
             if !in_set {
                 // Error: not in a set
                 let mut conv = baton.borrow_mut();
-                conv.store_parse_error(
-                    "Unexpected key in ExpectingValue phase (not in set)",
-                    None,
-                );
+                conv.store_parse_error("Unexpected key in ExpectingValue phase (not in set)", None);
                 return Some(on_error);
             }
 
@@ -628,10 +622,7 @@ fn find_action_array<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
         _ => {
             // All other cases: arrays are not valid
             let mut conv = baton.borrow_mut();
-            conv.store_parse_error(
-                "Invalid DynamoDB JSON format: unexpected array value",
-                None,
-            );
+            conv.store_parse_error("Invalid DynamoDB JSON format: unexpected array value", None);
             Some(on_error)
         }
     }

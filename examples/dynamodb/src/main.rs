@@ -112,24 +112,44 @@ fn main() {
             let output_file = create_output_file(&output_path);
             let mut input_reader = FromStd::new(input_file);
             let mut output_writer = FromStd::new(output_file);
-            convert_to_ddb(&mut input_reader, &mut output_writer, args.pretty, !args.without_item)
+            convert_to_ddb(
+                &mut input_reader,
+                &mut output_writer,
+                args.pretty,
+                !args.without_item,
+            )
         }
         (ConversionMode::ToDdb, Some(input_path), None) => {
             let input_file = open_input_file(&input_path);
             let mut input_reader = FromStd::new(input_file);
             let mut output_writer = FromStd::new(io::stdout());
-            convert_to_ddb(&mut input_reader, &mut output_writer, args.pretty, !args.without_item)
+            convert_to_ddb(
+                &mut input_reader,
+                &mut output_writer,
+                args.pretty,
+                !args.without_item,
+            )
         }
         (ConversionMode::ToDdb, None, Some(output_path)) => {
             let output_file = create_output_file(&output_path);
             let mut input_reader = FromStd::new(io::stdin());
             let mut output_writer = FromStd::new(output_file);
-            convert_to_ddb(&mut input_reader, &mut output_writer, args.pretty, !args.without_item)
+            convert_to_ddb(
+                &mut input_reader,
+                &mut output_writer,
+                args.pretty,
+                !args.without_item,
+            )
         }
         (ConversionMode::ToDdb, None, None) => {
             let mut input_reader = FromStd::new(io::stdin());
             let mut output_writer = FromStd::new(io::stdout());
-            convert_to_ddb(&mut input_reader, &mut output_writer, args.pretty, !args.without_item)
+            convert_to_ddb(
+                &mut input_reader,
+                &mut output_writer,
+                args.pretty,
+                !args.without_item,
+            )
         }
     };
 

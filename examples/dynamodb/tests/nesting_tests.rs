@@ -47,13 +47,19 @@ fn test_helper_generate_nested_object_ddb_depth_0() {
 #[test]
 fn test_helper_generate_nested_object_ddb_depth_1() {
     let result = generate_nested_object_ddb_json(1, true);
-    assert_eq!(result, "{\"Item\":{\"level_0\":{\"M\":{\"value\":{\"S\":\"leaf\"}}}}}\n");
+    assert_eq!(
+        result,
+        "{\"Item\":{\"level_0\":{\"M\":{\"value\":{\"S\":\"leaf\"}}}}}\n"
+    );
 }
 
 #[test]
 fn test_helper_generate_nested_object_ddb_depth_2() {
     let result = generate_nested_object_ddb_json(2, true);
-    assert_eq!(result, "{\"Item\":{\"level_0\":{\"M\":{\"level_1\":{\"M\":{\"value\":{\"S\":\"leaf\"}}}}}}}\n");
+    assert_eq!(
+        result,
+        "{\"Item\":{\"level_0\":{\"M\":{\"level_1\":{\"M\":{\"value\":{\"S\":\"leaf\"}}}}}}}\n"
+    );
 }
 
 // Helper function to generate expected DynamoDB JSON for nested objects

@@ -214,7 +214,7 @@ fn test_number_type_with_boolean_value() {
 // Rationale: For conversion efficiency, we copy the attribute value as-is without
 // modification or validation.
 
-// 
+//
 #[test]
 fn test_number_type_with_null_value() {
     let ddb_json = r#"{"Item":{"Field": {"N": null}}}"#;
@@ -456,7 +456,9 @@ fn test_map_type_with_nested_missing_type_descriptor() {
 
     let error_message = format!("{:?}", error);
     assert!(
-        error_message.contains("atom") || error_message.contains("array") || error_message.contains("Invalid"),
+        error_message.contains("atom")
+            || error_message.contains("array")
+            || error_message.contains("Invalid"),
         "Error message should indicate structural validation error, got: {}",
         error_message
     );
@@ -548,7 +550,9 @@ fn test_list_type_with_elements_missing_type_descriptor() {
 
     let error_message = format!("{:?}", error);
     assert!(
-        error_message.contains("atom") || error_message.contains("array") || error_message.contains("Invalid"),
+        error_message.contains("atom")
+            || error_message.contains("array")
+            || error_message.contains("Invalid"),
         "Error message should indicate structural validation error, got: {}",
         error_message
     );
@@ -722,7 +726,9 @@ fn test_attribute_with_multiple_type_descriptors() {
 
     let error_message = format!("{:?}", error);
     assert!(
-        error_message.contains("atom") || error_message.contains("array") || error_message.contains("Invalid"),
+        error_message.contains("atom")
+            || error_message.contains("array")
+            || error_message.contains("Invalid"),
         "Error message should indicate structural validation error, got: {}",
         error_message
     );
@@ -735,7 +741,9 @@ fn test_attribute_without_type_descriptor() {
 
     let error_message = format!("{:?}", error);
     assert!(
-        error_message.contains("atom") || error_message.contains("array") || error_message.contains("Invalid"),
+        error_message.contains("atom")
+            || error_message.contains("array")
+            || error_message.contains("Invalid"),
         "Error message should indicate structural validation error, got: {}",
         error_message
     );
