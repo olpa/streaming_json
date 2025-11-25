@@ -2,7 +2,7 @@
 
 Reimplementation of [ddb_convert](../../examples/dynamodb/) in Python.
 
-Vibe ooded and not reviewed, but good enough to convert Yelp dataset to and from DynamoDB JSON.
+Vibe coded and not reviewed, but good enough to convert Yelp dataset to and from DynamoDB JSON.
 
 ## Installation and usage
 
