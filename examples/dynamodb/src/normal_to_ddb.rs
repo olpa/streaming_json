@@ -80,6 +80,48 @@ fn on_root_object_begin<R: embedded_io::Read, W: IoWrite>(
     StreamOp::None
 }
 
+fn on_root_literal<R: embedded_io::Read, W: IoWrite>(
+    rjiter: &mut RJiter<R>,
+    baton: NormalToDdbBaton<'_, '_, W>,
+) -> StreamOp {
+    // Root-level primitive (string, number, boolean, null)
+    // Write opening { and increment depth, then delegate to atom handler
+    {
+        let mut conv = baton.borrow_mut();
+        conv.write(b"{");
+        conv.depth += 1;
+    }
+    let result = on_atom_value_toddb(rjiter, baton);
+    // Atom handlers close the } and set pending_comma, but for root we need final newline
+    {
+        let mut conv = baton.borrow_mut();
+        conv.write(b"\n");
+        conv.pending_comma = false;
+    }
+    result
+}
+
+fn on_root_array<R: embedded_io::Read, W: IoWrite>(
+    rjiter: &mut RJiter<R>,
+    baton: NormalToDdbBaton<'_, '_, W>,
+) -> StreamOp {
+    // Root-level array: write opening { and increment depth, then delegate
+    let mut conv = baton.borrow_mut();
+    conv.write(b"{");
+    conv.newline();
+    conv.depth += 1;
+    drop(conv);
+    on_array_begin_toddb(rjiter, baton)
+}
+
+fn on_root_array_end<W: IoWrite>(baton: NormalToDdbBaton<'_, '_, W>) -> Result<(), &'static str> {
+    // Close root-level array: write ]} and newline
+    on_array_end_toddb(baton)?;
+    let mut conv = baton.borrow_mut();
+    conv.write(b"\n");
+    Ok(())
+}
+
 fn on_field_key<R: embedded_io::Read, W: IoWrite>(
     _rjiter: &mut RJiter<R>,
     baton: NormalToDdbBaton<'_, '_, W>,
@@ -392,10 +434,14 @@ fn find_action<'a, 'workbuf, R: embedded_io::Read, W: IoWrite>(
     // Get the parent context element once, used by all branches below
     let parent = context.next();
 
-    // Match root object
-    if structural == StructuralPseudoname::Object && parent == Some(b"#top") {
-        // This is the root object
-        return Some(on_root_object_begin);
+    // Match root-level values
+    if parent == Some(b"#top") {
+        return match structural {
+            StructuralPseudoname::Object => Some(on_root_object_begin),
+            StructuralPseudoname::Atom => Some(on_root_literal),
+            StructuralPseudoname::Array => Some(on_root_array),
+            StructuralPseudoname::None => None,
+        };
     }
 
     // Match field keys
@@ -461,11 +507,18 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
     // Get the parent context element once
     let parent = context.next();
 
-    // Match end of root object
+    // Match end of root-level values
+    if parent == Some(b"#top") {
+        return match structural {
+            StructuralPseudoname::Object => Some(on_root_object_end),
+            StructuralPseudoname::Array => Some(on_root_array_end),
+            // Atoms don't have end actions (handled entirely in action)
+            _ => None,
+        };
+    }
+
+    // Match end of objects
     if structural == StructuralPseudoname::Object {
-        if parent == Some(b"#top") {
-            return Some(on_root_object_end);
-        }
         // Objects in arrays - need to close both object and element wrapper
         if parent == Some(b"#array") {
             return Some(on_object_in_array_end);

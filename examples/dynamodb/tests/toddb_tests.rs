@@ -371,6 +371,126 @@ fn test_roundtrip_various_int_like_floats() {
     }
 }
 
+// Non-object root value tests
+#[test]
+fn test_to_ddb_root_string() {
+    let normal_json = r#""hello world""#;
+    let result = convert_to_ddb_test(normal_json, false);
+    let expected = r#"{"S":"hello world"}
+"#;
+    assert_eq!(result, expected);
+}
+
+#[test]
+fn test_to_ddb_root_number_integer() {
+    let normal_json = "42\n";
+    let result = convert_to_ddb_test(normal_json, false);
+    let expected = r#"{"N":"42"}
+"#;
+    assert_eq!(result, expected);
+}
+
+#[test]
+fn test_to_ddb_root_number_float() {
+    let normal_json = "3.14159\n";
+    let result = convert_to_ddb_test(normal_json, false);
+    let expected = r#"{"N":"3.14159"}
+"#;
+    assert_eq!(result, expected);
+}
+
+#[test]
+fn test_to_ddb_root_boolean_true() {
+    let normal_json = r#"true"#;
+    let result = convert_to_ddb_test(normal_json, false);
+    let expected = r#"{"BOOL":true}
+"#;
+    assert_eq!(result, expected);
+}
+
+#[test]
+fn test_to_ddb_root_boolean_false() {
+    let normal_json = r#"false"#;
+    let result = convert_to_ddb_test(normal_json, false);
+    let expected = r#"{"BOOL":false}
+"#;
+    assert_eq!(result, expected);
+}
+
+#[test]
+fn test_to_ddb_root_null() {
+    let normal_json = r#"null"#;
+    let result = convert_to_ddb_test(normal_json, false);
+    let expected = r#"{"NULL":true}
+"#;
+    assert_eq!(result, expected);
+}
+
+#[test]
+fn test_to_ddb_root_array_simple() {
+    let normal_json = r#"["a", "b", "c"]"#;
+    let result = convert_to_ddb_test(normal_json, false);
+    let expected = r#"{"L":[{"S":"a"},{"S":"b"},{"S":"c"}]}
+"#;
+    assert_eq!(result, expected);
+}
+
+#[test]
+fn test_to_ddb_root_array_mixed() {
+    let normal_json = r#"["string", 123, true, null]"#;
+    let result = convert_to_ddb_test(normal_json, false);
+    let expected = r#"{"L":[{"S":"string"},{"N":"123"},{"BOOL":true},{"NULL":true}]}
+"#;
+    assert_eq!(result, expected);
+}
+
+#[test]
+fn test_to_ddb_root_array_nested() {
+    let normal_json = r#"[["a", "b"], [1, 2]]"#;
+    let result = convert_to_ddb_test(normal_json, false);
+    let expected = r#"{"L":[{"L":[{"S":"a"},{"S":"b"}]},{"L":[{"N":"1"},{"N":"2"}]}]}
+"#;
+    assert_eq!(result, expected);
+}
+
+#[test]
+fn test_to_ddb_root_array_with_objects() {
+    let normal_json = r#"[{"name": "Alice"}, {"name": "Bob"}]"#;
+    let result = convert_to_ddb_test(normal_json, false);
+    let expected = r#"{"L":[{"M":{"name":{"S":"Alice"}}},{"M":{"name":{"S":"Bob"}}}]}
+"#;
+    assert_eq!(result, expected);
+}
+
+#[test]
+fn test_to_ddb_root_empty_array() {
+    let normal_json = r#"[]"#;
+    let result = convert_to_ddb_test(normal_json, false);
+    let expected = r#"{"L":[]}
+"#;
+    assert_eq!(result, expected);
+}
+
+#[test]
+fn test_to_ddb_root_string_with_item_wrapper() {
+    // with_item_wrapper should be ignored for non-objects
+    let normal_json = r#""hello""#;
+    let result = convert_to_ddb_test(normal_json, true);
+    let expected = r#"{"S":"hello"}
+"#;
+    assert_eq!(result, expected);
+}
+
+#[test]
+fn test_to_ddb_root_array_with_item_wrapper() {
+    // with_item_wrapper should be ignored for non-objects
+    let normal_json = r#"[1, 2, 3]"#;
+    let result = convert_to_ddb_test(normal_json, true);
+    let expected = r#"{"L":[{"N":"1"},{"N":"2"},{"N":"3"}]}
+"#;
+    assert_eq!(result, expected);
+}
+
 // Error handling tests
 #[test]
 fn test_error_incomplete_json_to_ddb() {
