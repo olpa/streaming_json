@@ -36,7 +36,7 @@ normal-to-ddb/%.json: ddb-to-normal/%.json
 
 check-eq/%.json: original-ddb/%.json normal-to-ddb/%.json
 	@echo "Checking $<"
-	diff -q $< normal-to-ddb/$(notdir $<)
+	../json-eq.sh $< normal-to-ddb/$(notdir $<)
 
 .PHONY: clean
 clean:
