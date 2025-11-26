@@ -1,4 +1,6 @@
-CONVTOOL := /home/olpa/p/streaming_json/examples/dynamodb/target/debug/ddb_convert
+CONVTOOL := ../../../examples/dynamodb/target/release/ddb_convert
+# CONVTOOL := ../ddb_convert_rust/target/release/ddb_convert_rust
+# CONVTOOL := python ../ddb_convert_python/ddb_convert.py
 
 # Source files
 SOURCE_FILES := $(wildcard original-ddb/*.json)
