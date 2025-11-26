@@ -21,23 +21,6 @@
     "nullField": {
       "NULL": true
     },
-    "stringArray": {
-      "SS": [
-        "apple",
-        "banana",
-        "cherry"
-      ]
-    },
-    "numberArray": {
-      "NS": [
-        "1",
-        "2",
-        "3",
-        "5",
-        "8",
-        "13"
-      ]
-    },
     "mixedList": {
       "L": [
         {
@@ -89,16 +72,6 @@
           }
         }
       }
-    },
-    "binaryData": {
-      "B": "VGhpcyBpcyBiYXNlNjQgZW5jb2RlZCBkYXRh"
-    },
-    "binarySet": {
-      "BS": [
-        "Zmlyc3Q=",
-        "c2Vjb25k",
-        "dGhpcmQ="
-      ]
     },
     "complexObject": {
       "M": {

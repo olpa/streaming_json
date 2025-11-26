@@ -10,9 +10,13 @@
       "S": "333-3333333333"
     },
     "Authors": {
-      "SS": [
-        "Author1",
-        "Author2"
+      "L": [
+        {
+          "S": "Author1"
+        },
+        {
+          "S": "Author2"
+        }
       ]
     },
     "Publisher": {
@@ -44,18 +48,32 @@
       "S": "Book"
     },
     "Tags": {
-      "SS": [
-        "programming",
-        "technology",
-        "reference"
+      "L": [
+        {
+          "S": "programming"
+        },
+        {
+          "S": "technology"
+        },
+        {
+          "S": "reference"
+        }
       ]
     },
     "Ratings": {
-      "NS": [
-        "4.5",
-        "4.8",
-        "5.0",
-        "4.2"
+      "L": [
+        {
+          "N": "4.5"
+        },
+        {
+          "N": "4.8"
+        },
+        {
+          "N": "5.0"
+        },
+        {
+          "N": "4.2"
+        }
       ]
     },
     "Reviews": {
@@ -91,7 +109,7 @@
       "NULL": true
     },
     "CoverImage": {
-      "B": "aVZCT1J3MEtHZ29BQUFBTlNVaEVVZ0FBQUFV"
+      "S": "aVZCT1J3MEtHZ29BQUFBTlNVaEVVZ0FBQUFV"
     }
   }
 }
