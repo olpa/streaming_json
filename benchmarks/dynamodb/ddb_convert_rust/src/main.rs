@@ -298,40 +298,14 @@ fn marshall_value(value: Value) -> Result<Value> {
             Ok(Value::Object(map))
         }
         Value::Array(arr) => {
-            // Check if it's a homogeneous array of strings or numbers
-            if arr.is_empty() {
-                let mut map = Map::new();
-                map.insert("L".to_string(), Value::Array(vec![]));
-                return Ok(Value::Object(map));
+            // Always use generic List type (L)
+            let mut items = Vec::new();
+            for item in arr {
+                items.push(marshall_value(item)?);
             }
-
-            let all_strings = arr.iter().all(|v| v.is_string());
-            let all_numbers = arr.iter().all(|v| v.is_number());
-
-            if all_strings && arr.len() > 0 {
-                // String Set
-                let mut map = Map::new();
-                map.insert("SS".to_string(), Value::Array(arr));
-                Ok(Value::Object(map))
-            } else if all_numbers && arr.len() > 0 {
-                // Number Set - convert to strings
-                let num_strings: Vec<Value> = arr
-                    .iter()
-                    .map(|v| Value::String(v.as_number().unwrap().to_string()))
-                    .collect();
-                let mut map = Map::new();
-                map.insert("NS".to_string(), Value::Array(num_strings));
-                Ok(Value::Object(map))
-            } else {
-                // List
-                let mut items = Vec::new();
-                for item in arr {
-                    items.push(marshall_value(item)?);
-                }
-                let mut map = Map::new();
-                map.insert("L".to_string(), Value::Array(items));
-                Ok(Value::Object(map))
-            }
+            let mut map = Map::new();
+            map.insert("L".to_string(), Value::Array(items));
+            Ok(Value::Object(map))
         }
         Value::Object(obj) => {
             let mut map = Map::new();
