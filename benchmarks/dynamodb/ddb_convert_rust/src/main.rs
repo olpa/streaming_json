@@ -41,20 +41,26 @@ enum Mode {
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    // Detect if input is JSONL
-    let is_jsonl = if let Some(path) = &cli.input {
-        detect_jsonl(path)?
-    } else {
-        false // stdin defaults to JSONL
-    };
-
     // Open input
-    let input: Box<dyn BufRead> = if let Some(path) = &cli.input {
+    let mut input: Box<dyn BufRead> = if let Some(path) = &cli.input {
         Box::new(BufReader::new(
             File::open(path).context("Failed to open input file")?,
         ))
     } else {
         Box::new(BufReader::new(io::stdin()))
+    };
+
+    // Detect if input is JSONL
+    let (is_jsonl, first_line) = if let Some(path) = &cli.input {
+        // Check file extension first
+        if path.extension().and_then(|s| s.to_str()) == Some("jsonl") {
+            (true, String::new())
+        } else {
+            detect_jsonl_from_content(&mut input)?
+        }
+    } else {
+        // For stdin, also detect from content
+        detect_jsonl_from_content(&mut input)?
     };
 
     // Open output
@@ -67,42 +73,27 @@ fn main() -> Result<()> {
     };
 
     if is_jsonl {
-        process_jsonl(input, &mut output, cli.mode, cli.pretty, cli.without_item)?;
+        process_jsonl(input, &mut output, cli.mode, cli.pretty, cli.without_item, first_line)?;
     } else {
-        process_json(input, &mut output, cli.mode, cli.pretty, cli.without_item)?;
+        process_json(input, &mut output, cli.mode, cli.pretty, cli.without_item, first_line)?;
     }
 
     output.flush()?;
     Ok(())
 }
 
-fn detect_jsonl(path: &PathBuf) -> Result<bool> {
-    // Check file extension first
-    if path.extension().and_then(|s| s.to_str()) == Some("jsonl") {
-        return Ok(true);
-    }
-
-    // For .json files, check if they contain multiple JSON objects
-    let file = File::open(path)?;
-    let mut reader = BufReader::new(file);
-
+fn detect_jsonl_from_content(reader: &mut Box<dyn BufRead>) -> Result<(bool, String)> {
     let mut first_line = String::new();
     reader.read_line(&mut first_line)?;
 
     if first_line.trim().is_empty() {
-        return Ok(false);
+        return Ok((false, first_line));
     }
 
-    // Check if first line is valid JSON
-    if serde_json::from_str::<Value>(&first_line).is_ok() {
-        // Check if there's a second line
-        let mut second_line = String::new();
-        reader.read_line(&mut second_line)?;
-
-        return Ok(!second_line.trim().is_empty());
-    }
-
-    Ok(false)
+    // Try to parse the first line as JSON
+    // If it parses successfully, it's JSONL; otherwise, it's a multi-line JSON
+    let is_jsonl = serde_json::from_str::<Value>(first_line.trim()).is_ok();
+    Ok((is_jsonl, first_line))
 }
 
 fn process_jsonl(
@@ -111,7 +102,27 @@ fn process_jsonl(
     mode: Mode,
     pretty: bool,
     without_item: bool,
+    first_line: String,
 ) -> Result<()> {
+    // Process the first line that was already read during detection
+    let line = first_line.trim();
+    if !line.is_empty() {
+        let input_data: Value =
+            serde_json::from_str(line).context("Invalid JSON on line 1")?;
+
+        let output_data = match mode {
+            Mode::FromDdb => from_dynamodb(input_data)?,
+            Mode::ToDdb => to_dynamodb(input_data, !without_item)?,
+        };
+
+        if pretty {
+            writeln!(output, "{}", serde_json::to_string_pretty(&output_data)?)?;
+        } else {
+            writeln!(output, "{}", serde_json::to_string(&output_data)?)?;
+        }
+    }
+
+    // Process remaining lines
     for (line_num, line) in input.lines().enumerate() {
         let line = line?;
         let line = line.trim();
@@ -121,7 +132,7 @@ fn process_jsonl(
         }
 
         let input_data: Value =
-            serde_json::from_str(line).context(format!("Invalid JSON on line {}", line_num + 1))?;
+            serde_json::from_str(line).context(format!("Invalid JSON on line {}", line_num + 2))?;
 
         let output_data = match mode {
             Mode::FromDdb => from_dynamodb(input_data)?,
@@ -144,8 +155,9 @@ fn process_json(
     mode: Mode,
     pretty: bool,
     without_item: bool,
+    first_line: String,
 ) -> Result<()> {
-    let mut content = String::new();
+    let mut content = first_line;
     input.read_to_string(&mut content)?;
 
     let input_data: Value = serde_json::from_str(&content).context("Invalid JSON")?;
