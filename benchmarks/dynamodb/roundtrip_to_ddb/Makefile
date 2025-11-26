@@ -1,6 +1,7 @@
 CONVTOOL := ../../../examples/dynamodb/target/release/ddb_convert
 # CONVTOOL := ../ddb_convert_rust/target/release/ddb_convert_rust
 # CONVTOOL := python ../ddb_convert_python/ddb_convert.py
+# CONVTOOL := python ../ddb_convert_python_noboto/ddb_convert.py
 
 # Source files
 SOURCE_FILES := $(wildcard original-normal/*.json)
