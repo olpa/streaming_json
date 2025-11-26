@@ -1,0 +1,40 @@
+[package]
+name = "ddb_convert"
+version = "0.1.0"
+edition = "2021"
+authors = ["Oleg Parashchenko"]
+description = "Fast, streaming JSON converter between DynamoDB and standard JSON formats"
+license = "MIT"
+repository = "https://github.com/olpa/streaming_json"
+keywords = ["dynamodb", "json", "converter", "aws", "streaming"]
+categories = ["command-line-utilities", "parsing", "encoding"]
+readme = "README.md"
+
+[lib]
+name = "ddb_convert"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ddb_convert"
+path = "src/main.rs"
+
+[features]
+default = ["std"]
+std = []
+
+[dependencies]
+rjiter = { version = "1.3.1", default-features = false, features = ["display"] }
+u8pool = { version = "1.1", default-features = false }
+embedded-io = { version = "0.7", default-features = false }
+scan_json = { version = "2.1.1", features = ["display"] }
+
+[dev-dependencies]
+# Test dependencies can use std
+clap = { version = "4.5", features = ["derive"] }
+serde_json = "1.0"
+
+# Binary-only dependencies
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+clap = { version = "4.5", features = ["derive"] }
+serde_json = "1.0"
+embedded-io-adapters = { version = "0.7", features = ["std"] }
