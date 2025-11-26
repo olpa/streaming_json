@@ -2,11 +2,24 @@
 
 A fast, streaming JSON converter that transforms between DynamoDB's JSON format and standard JSON.
 
+**Example**
+
+```bash
+$ echo '{"name":"Alice","age":30}' \
+    | docker run --rm -i olpa/ddb_convert to-ddb
+
+$ cat data.json
+{"Item":{"name":{"S":"Alice"},"age":{"N":"30"}}}
+$ docker run --rm -v $(pwd):/data olpa/ddb_convert from-ddb -i data.json
+{"name":"Alice","age":30}
+```
+
 ## What is DynamoDB JSON?
 
 DynamoDB uses a special JSON format where each value is wrapped with a type descriptor. For example:
 
 **DynamoDB JSON:**
+
 ```json
 {
   "Item": {
@@ -19,6 +32,7 @@ DynamoDB uses a special JSON format where each value is wrapped with a type desc
 ```
 
 **Standard JSON:**
+
 ```json
 {
   "Id": 103,
@@ -63,21 +77,25 @@ ddb_convert <MODE> [OPTIONS]
 ### Convert from DynamoDB JSON to Standard JSON
 
 **From file to file:**
+
 ```bash
 ddb_convert from-ddb -i book-dynamodb.json -o book-normal.json
 ```
 
 **Using stdin/stdout (useful for pipelines):**
+
 ```bash
 cat book-dynamodb.json | ddb_convert from-ddb > book-normal.json
 ```
 
 **Pretty-print the output:**
+
 ```bash
 ddb_convert from-ddb -i book-dynamodb.json -p
 ```
 
 **Stream directly from AWS CLI:**
+
 ```bash
 aws dynamodb get-item --table-name Books --key '{"Id":{"N":"103"}}' \
   | ddb_convert from-ddb -p
@@ -86,16 +104,19 @@ aws dynamodb get-item --table-name Books --key '{"Id":{"N":"103"}}' \
 ### Convert from Standard JSON to DynamoDB JSON
 
 **From file to file:**
+
 ```bash
 ddb_convert to-ddb -i user.json -o user-dynamodb.json
 ```
 
 **Using stdin/stdout:**
+
 ```bash
 cat user.json | ddb_convert to-ddb > user-dynamodb.json
 ```
 
 **Without the Item wrapper:**
+
 ```bash
 # With Item wrapper (default)
 ddb_convert to-ddb -i user.json
@@ -107,6 +128,7 @@ ddb_convert to-ddb -i user.json --without-item
 ```
 
 **Prepare data for DynamoDB PutItem:**
+
 ```bash
 # Convert your JSON and pipe to AWS CLI
 cat mydata.json | ddb_convert to-ddb | \
@@ -125,9 +147,9 @@ cat mydata.json | ddb_convert to-ddb | \
 | `"NULL"` | `null` | |
 | `"M"` (Map) | `object` | |
 | `"L"` (List) | `array` | |
-| `"SS"` (String Set) | `array` | ⚠️ Set becomes array (order/uniqueness lost) |
-| `"NS"` (Number Set) | `array` | ⚠️ Set becomes array (order/uniqueness lost) |
-| `"BS"` (Binary Set) | `array` | ⚠️ Set becomes array (order/uniqueness lost) |
+| `"SS"` (String Set) | `array` | Set becomes array (order/uniqueness lost) |
+| `"NS"` (Number Set) | `array` | Set becomes array (order/uniqueness lost) |
+| `"BS"` (Binary Set) | `array` | Set becomes array (order/uniqueness lost) |
 | `"B"` (Binary) | `string` (base64) | base64 is ńot decoded |
 
 **Note:** Standard JSON has no native "set" type, so DynamoDB sets are converted to arrays. The set semantics (unordered, unique values) are lost in the conversion.

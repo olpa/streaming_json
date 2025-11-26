@@ -24,6 +24,9 @@ FROM scratch
 # Copy the static binary from builder
 COPY --from=builder /build/target/x86_64-unknown-linux-musl/release/ddb_convert /ddb_convert
 
+# Set working directory for volume mounts
+WORKDIR /data
+
 # Set the entrypoint
 ENTRYPOINT ["/ddb_convert"]
 
