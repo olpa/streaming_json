@@ -165,17 +165,17 @@ fn process_json(
 }
 
 fn from_dynamodb(value: Value) -> Result<Value> {
-    let obj = value
-        .as_object()
-        .context("Expected JSON object")?
-        .clone();
+    let mut obj = match value {
+        Value::Object(o) => o,
+        _ => anyhow::bail!("Expected JSON object"),
+    };
 
-    // Check if it has "Item" wrapper
+    // Check if it has "Item" wrapper - consume instead of clone
     let obj = if obj.len() == 1 && obj.contains_key("Item") {
-        obj.get("Item")
-            .and_then(|v| v.as_object())
-            .context("Expected Item to be an object")?
-            .clone()
+        match obj.remove("Item") {
+            Some(Value::Object(o)) => o,
+            _ => anyhow::bail!("Expected Item to be an object"),
+        }
     } else {
         obj
     };
@@ -190,12 +190,15 @@ fn from_dynamodb(value: Value) -> Result<Value> {
 }
 
 fn to_dynamodb(value: Value, wrap_item: bool) -> Result<Value> {
-    let obj = value.as_object().context("Expected JSON object")?;
+    let obj = match value {
+        Value::Object(o) => o,
+        _ => anyhow::bail!("Expected JSON object"),
+    };
 
     // Marshall to DynamoDB format
     let mut result = Map::new();
     for (key, value) in obj {
-        result.insert(key.clone(), marshall_value(value.clone())?);
+        result.insert(key, marshall_value(value)?);
     }
 
     if wrap_item {
@@ -208,69 +211,62 @@ fn to_dynamodb(value: Value, wrap_item: bool) -> Result<Value> {
 }
 
 fn unmarshall_value(value: Value) -> Result<Value> {
-    let obj = value.as_object().context("Expected DynamoDB type object")?;
+    let obj = match value {
+        Value::Object(o) => o,
+        _ => anyhow::bail!("Expected DynamoDB type object"),
+    };
 
     if obj.len() != 1 {
         anyhow::bail!("DynamoDB type object must have exactly one key");
     }
 
-    let (type_key, type_value) = obj.iter().next().unwrap();
+    let (type_key, type_value) = obj.into_iter().next().unwrap();
 
     match type_key.as_str() {
-        "S" => Ok(type_value.clone()),
+        "S" => Ok(type_value),
         "N" => {
             let s = type_value.as_str().context("N type must be string")?;
-            // Try to parse as int first, then float
-            if let Ok(i) = s.parse::<i64>() {
-                Ok(Value::Number(i.into()))
-            } else if let Ok(f) = s.parse::<f64>() {
-                Ok(serde_json::Number::from_f64(f)
-                    .map(Value::Number)
-                    .unwrap_or(Value::String(s.to_string())))
-            } else {
-                Ok(Value::String(s.to_string()))
-            }
+            // Parse the number string into a JSON number
+            let num: serde_json::Number = s.parse().context("Invalid number format")?;
+            Ok(Value::Number(num))
         }
-        "BOOL" => Ok(type_value.clone()),
+        "BOOL" => Ok(type_value),
         "NULL" => Ok(Value::Null),
         "M" => {
-            let map = type_value.as_object().context("M type must be object")?;
+            let map = match type_value {
+                Value::Object(o) => o,
+                _ => anyhow::bail!("M type must be object"),
+            };
             let mut result = Map::new();
             for (k, v) in map {
-                result.insert(k.clone(), unmarshall_value(v.clone())?);
+                result.insert(k, unmarshall_value(v)?);
             }
             Ok(Value::Object(result))
         }
         "L" => {
-            let list = type_value.as_array().context("L type must be array")?;
+            let list = match type_value {
+                Value::Array(a) => a,
+                _ => anyhow::bail!("L type must be array"),
+            };
             let mut result = Vec::new();
             for item in list {
-                result.push(unmarshall_value(item.clone())?);
+                result.push(unmarshall_value(item)?);
             }
             Ok(Value::Array(result))
         }
-        "SS" => Ok(type_value.clone()),
+        "SS" => Ok(type_value),
         "NS" => {
             let arr = type_value.as_array().context("NS type must be array")?;
             let mut result = Vec::new();
             for item in arr {
                 let s = item.as_str().context("NS items must be strings")?;
-                if let Ok(i) = s.parse::<i64>() {
-                    result.push(Value::Number(i.into()));
-                } else if let Ok(f) = s.parse::<f64>() {
-                    result.push(
-                        serde_json::Number::from_f64(f)
-                            .map(Value::Number)
-                            .unwrap_or(Value::String(s.to_string())),
-                    );
-                } else {
-                    result.push(Value::String(s.to_string()));
-                }
+                let num: serde_json::Number = s.parse().context("Invalid number format")?;
+                result.push(Value::Number(num));
             }
             Ok(Value::Array(result))
         }
-        "BS" => Ok(type_value.clone()),
-        "B" => Ok(type_value.clone()),
+        "BS" => Ok(type_value),
+        "B" => Ok(type_value),
         _ => anyhow::bail!("Unknown DynamoDB type: {}", type_key),
     }
 }
