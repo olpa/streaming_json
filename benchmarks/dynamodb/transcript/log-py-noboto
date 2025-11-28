@@ -1,0 +1,40 @@
+Converting original-normal/yelp_academic_dataset_business.json
+time python ../ddb_convert_python_noboto/ddb_convert.py to-ddb -i original-normal/yelp_academic_dataset_business.json -o normal-to-ddb/yelp_academic_dataset_business.json
+4.18user 0.11system 0:04.29elapsed 99%CPU (0avgtext+0avgdata 14076maxresident)k
+130488inputs+309728outputs (0major+1964minor)pagefaults 0swaps
+Converting normal-to-ddb/yelp_academic_dataset_business.json
+time python ../ddb_convert_python_noboto/ddb_convert.py from-ddb -i normal-to-ddb/yelp_academic_dataset_business.json -o ddb-to-normal/yelp_academic_dataset_business.json
+3.74user 0.08system 0:03.82elapsed 99%CPU (0avgtext+0avgdata 13920maxresident)k
+0inputs+247416outputs (0major+1959minor)pagefaults 0swaps
+Converting original-normal/yelp_academic_dataset_checkin.json
+time python ../ddb_convert_python_noboto/ddb_convert.py to-ddb -i original-normal/yelp_academic_dataset_checkin.json -o normal-to-ddb/yelp_academic_dataset_checkin.json
+1.61user 0.19system 0:01.81elapsed 99%CPU (0avgtext+0avgdata 20316maxresident)k
+0inputs+567424outputs (0major+13114minor)pagefaults 0swaps
+Converting normal-to-ddb/yelp_academic_dataset_checkin.json
+time python ../ddb_convert_python_noboto/ddb_convert.py from-ddb -i normal-to-ddb/yelp_academic_dataset_checkin.json -o ddb-to-normal/yelp_academic_dataset_checkin.json
+1.58user 0.16system 0:01.80elapsed 97%CPU (0avgtext+0avgdata 19464maxresident)k
+0inputs+561240outputs (0major+12844minor)pagefaults 0swaps
+Converting original-normal/yelp_academic_dataset_review.json
+time python ../ddb_convert_python_noboto/ddb_convert.py to-ddb -i original-normal/yelp_academic_dataset_review.json -o normal-to-ddb/yelp_academic_dataset_review.json
+93.08user 4.25system 1:49.04elapsed 89%CPU (0avgtext+0avgdata 13956maxresident)k
+9138864inputs+11771712outputs (0major+1992minor)pagefaults 0swaps
+Converting normal-to-ddb/yelp_academic_dataset_review.json
+time python ../ddb_convert_python_noboto/ddb_convert.py from-ddb -i normal-to-ddb/yelp_academic_dataset_review.json -o ddb-to-normal/yelp_academic_dataset_review.json
+88.99user 4.27system 1:45.35elapsed 88%CPU (0avgtext+0avgdata 14092maxresident)k
+10169096inputs+10665928outputs (0major+1979minor)pagefaults 0swaps
+Converting original-normal/yelp_academic_dataset_tip.json
+time python ../ddb_convert_python_noboto/ddb_convert.py to-ddb -i original-normal/yelp_academic_dataset_tip.json -o normal-to-ddb/yelp_academic_dataset_tip.json
+6.73user 0.16system 0:07.16elapsed 96%CPU (0avgtext+0avgdata 14212maxresident)k
+352744inputs+452200outputs (0major+2037minor)pagefaults 0swaps
+Converting normal-to-ddb/yelp_academic_dataset_tip.json
+time python ../ddb_convert_python_noboto/ddb_convert.py from-ddb -i normal-to-ddb/yelp_academic_dataset_tip.json -o ddb-to-normal/yelp_academic_dataset_tip.json
+6.48user 0.12system 0:06.61elapsed 99%CPU (0avgtext+0avgdata 13900maxresident)k
+0inputs+368768outputs (0major+1926minor)pagefaults 0swaps
+Converting original-normal/yelp_academic_dataset_user.json
+time python ../ddb_convert_python_noboto/ddb_convert.py to-ddb -i original-normal/yelp_academic_dataset_user.json -o normal-to-ddb/yelp_academic_dataset_user.json
+49.34user 2.79system 1:02.33elapsed 83%CPU (0avgtext+0avgdata 16180maxresident)k
+6528456inputs+7504808outputs (0major+46521minor)pagefaults 0swaps
+Converting normal-to-ddb/yelp_academic_dataset_user.json
+time python ../ddb_convert_python_noboto/ddb_convert.py from-ddb -i normal-to-ddb/yelp_academic_dataset_user.json -o ddb-to-normal/yelp_academic_dataset_user.json
+50.30user 2.86system 1:02.49elapsed 85%CPU (0avgtext+0avgdata 16152maxresident)k
+7518592inputs+6735992outputs (0major+48680minor)pagefaults 0swaps
