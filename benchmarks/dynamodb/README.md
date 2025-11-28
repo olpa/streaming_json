@@ -29,3 +29,9 @@ Summarize logs:
 ./parse_logs.py log-rust rust >>stats.json
 ./parse_logs.py log-scan-json scan-json >>stats.json
 ```
+
+Add file stats:
+
+```
+./file_stats.py ......./yelp_academic_dataset_*.json >file_stats.json
+```
