@@ -64,32 +64,44 @@ def load_file_sizes(file_sizes_file):
 
 
 def calculate_metrics(stats, file_sizes):
-    """Calculate performance metrics per tool."""
+    """Calculate performance metrics per tool and mode.
+
+    Only includes files >= 1 GB to reduce variance from small files.
+    """
     tool_data = {}
+    MIN_FILE_SIZE = 1024 ** 3  # 1 GB
 
     for record in stats:
         tool = record['id']['tool']
+        mode = record['id']['mode']
         file_name = record['id']['file']
-        elapsed = record['elapsed']
+        cpu_time = record['user'] + record['system']
 
         if file_name not in file_sizes:
             continue
 
         file_size = file_sizes[file_name]
 
+        # Skip files smaller than 1 GB
+        if file_size < MIN_FILE_SIZE:
+            continue
+
         # Calculate metrics
         gb_size = file_size / (1024 ** 3)
-        time_per_gb = elapsed / gb_size
-        bytes_per_sec = file_size / elapsed
+        time_per_gb = cpu_time / gb_size
+        bytes_per_sec = file_size / cpu_time
 
-        if tool not in tool_data:
-            tool_data[tool] = {
+        # Separate by tool and mode
+        key = f"{tool} ({mode})"
+
+        if key not in tool_data:
+            tool_data[key] = {
                 'time_per_gb': [],
                 'bytes_per_sec': []
             }
 
-        tool_data[tool]['time_per_gb'].append(time_per_gb)
-        tool_data[tool]['bytes_per_sec'].append(bytes_per_sec)
+        tool_data[key]['time_per_gb'].append(time_per_gb)
+        tool_data[key]['bytes_per_sec'].append(bytes_per_sec)
 
     return tool_data
 
@@ -123,43 +135,65 @@ def print_statistics(tool_data):
 
 def create_visualizations(tool_data):
     """Create performance visualization charts."""
-    tools = sorted(tool_data.keys())
+    # Map technical names to human-friendly names
+    name_map = {
+        'scan-json': 'scan_json',
+        'rust': 'rust serde',
+        'py-noboto': 'python no boto',
+        'py-boto': 'python boto'
+    }
+
+    # Rename tools to human-friendly names
+    renamed_data = {}
+    for key, value in tool_data.items():
+        # Parse "tool (mode)" format
+        parts = key.split(' (')
+        if len(parts) == 2:
+            tool = parts[0]
+            mode = parts[1].rstrip(')')
+            friendly_name = name_map.get(tool, tool)
+            new_key = f"{friendly_name} ({mode})"
+        else:
+            new_key = key
+        renamed_data[new_key] = value
+
+    tools = sorted(renamed_data.keys())
 
     # Calculate means for each metric
-    time_means = [np.mean(tool_data[tool]['time_per_gb']) for tool in tools]
-    throughput_means = [np.mean(tool_data[tool]['bytes_per_sec']) / (1024 ** 2) for tool in tools]
+    time_means = [np.mean(renamed_data[tool]['time_per_gb']) for tool in tools]
+    throughput_means = [np.mean(renamed_data[tool]['bytes_per_sec']) / (1024 ** 2) for tool in tools]
 
     # Create figure with two subplots
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+    # Size in inches: 640x480 pixels at 100 DPI = 6.4x4.8 inches
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(6.4, 4.8))
 
     # Chart 1: Time to process 1 GB (lower is better)
-    bars1 = ax1.barh(tools, time_means, color=['#d62728', '#ff7f0e', '#2ca02c', '#1f77b4'])
-    ax1.set_xlabel('Time (seconds)', fontsize=12)
+    bars1 = ax1.barh(tools, time_means, color='#e74c3c')  # Red for time/cost
+    ax1.set_xlabel('Speed (s/GB)', fontsize=12)
     ax1.set_title('Time to Process 1 GB of JSON\n(Lower is Better)', fontsize=14, fontweight='bold')
     ax1.invert_xaxis()  # Invert so lower values are on the right (better)
+    ax1.set_yticklabels([])  # Remove y-axis labels from left chart
 
     # Add value labels
     for i, (tool, val) in enumerate(zip(tools, time_means)):
-        ax1.text(val, i, f' {val:.1f}s', va='center', ha='right', fontsize=10)
+        ax1.text(val, i, f' {val:.1f}s', va='center', ha='right', fontsize=9)
 
     # Chart 2: Throughput (higher is better)
-    bars2 = ax2.barh(tools, throughput_means, color=['#d62728', '#ff7f0e', '#2ca02c', '#1f77b4'])
+    bars2 = ax2.barh(tools, throughput_means, color='#2ecc71')  # Green for throughput/performance
     ax2.set_xlabel('Throughput (MB/s)', fontsize=12)
     ax2.set_title('JSON Processing Throughput\n(Higher is Better)', fontsize=14, fontweight='bold')
 
     # Add value labels
     for i, (tool, val) in enumerate(zip(tools, throughput_means)):
-        ax2.text(val, i, f' {val:.1f}', va='center', ha='left', fontsize=10)
+        ax2.text(val, i, f' {val:.1f}', va='center', ha='left', fontsize=9)
 
     plt.tight_layout()
 
     # Save figure
     output_file = 'performance_comparison.png'
-    plt.savefig(output_file, dpi=150, bbox_inches='tight')
+    plt.savefig(output_file, dpi=72, bbox_inches='tight')
     print(f"Visualization saved to: {output_file}")
     print()
-
-    plt.show()
 
 
 def main():
