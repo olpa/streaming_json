@@ -3,7 +3,7 @@
 Using:
 
 - AWS instance type: `c6i.large`.
-- Run suite `roundtrip_to_ddb`.
+- Work in the suite `roundtrip_to_ddb`.
 - Yelp academic dataset: download from https://business.yelp.com/data/resources/open-dataset/
 
 Delete existing files in `original-normal`, unpack Yelp jsons there.
@@ -34,4 +34,10 @@ Add file stats:
 
 ```
 ./file_stats.py ......./yelp_academic_dataset_*.json >file_stats.json
+```
+
+Visualize, and check the stdout that stats make sense:
+
+```
+./visualize_performance.py
 ```
