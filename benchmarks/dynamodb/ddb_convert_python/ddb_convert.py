@@ -28,6 +28,7 @@ import base64
 import json
 import sys
 import argparse
+import io
 from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, TextIO
 
@@ -154,9 +155,37 @@ def safe_json_dumps(obj: Any, pretty: bool = False, ensure_ascii: bool = False) 
 
 
 def process_jsonl(input_stream: TextIO, output_stream: TextIO, converter: DynamoDBJSONConverter,
-                  mode: str, pretty: bool, without_item: bool) -> None:
+                  mode: str, pretty: bool, without_item: bool, first_line: str = "") -> None:
     """Process JSONL input line by line"""
-    for line_num, line in enumerate(input_stream, 1):
+    line_num = 0
+
+    # Process the first line that was already read during detection
+    if first_line.strip():
+        line_num = 1
+        try:
+            # Parse the JSON line
+            input_data = json.loads(first_line)
+
+            # Convert based on mode
+            if mode == 'to-ddb':
+                output_data = converter.to_dynamodb(input_data, wrap_item=not without_item)
+            else:  # from-ddb
+                output_data = converter.from_dynamodb(input_data)
+
+            # Output the result - safe_json_dumps handles non-serializable types
+            json_str = safe_json_dumps(output_data, pretty=pretty, ensure_ascii=False)
+            output_stream.write(json_str + '\n')
+
+        except json.JSONDecodeError as e:
+            print(f"Error: Invalid JSON on line {line_num}: {e}", file=sys.stderr)
+            sys.exit(1)
+        except Exception as e:
+            print(f"Error processing line {line_num}: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    # Process remaining lines
+    for line in input_stream:
+        line_num += 1
         line = line.strip()
         if not line:
             # Skip empty lines
@@ -185,11 +214,12 @@ def process_jsonl(input_stream: TextIO, output_stream: TextIO, converter: Dynamo
 
 
 def process_json(input_stream: TextIO, output_stream: TextIO, converter: DynamoDBJSONConverter,
-                 mode: str, pretty: bool, without_item: bool) -> None:
+                 mode: str, pretty: bool, without_item: bool, first_line: str = "") -> None:
     """Process single JSON object (non-JSONL)"""
     try:
         # Read entire input as single JSON
-        input_data = json.load(input_stream)
+        content = first_line + input_stream.read()
+        input_data = json.loads(content)
 
         # Convert based on mode
         if mode == 'to-ddb':
@@ -209,11 +239,23 @@ def process_json(input_stream: TextIO, output_stream: TextIO, converter: DynamoD
         sys.exit(1)
 
 
-def is_jsonl_file(filepath: str) -> bool:
-    """Determine if a file is JSONL format based on file extension or content"""
-    if filepath.endswith('.jsonl'):
-        return True
-    return False
+def detect_jsonl_from_content(input_stream: TextIO) -> tuple[bool, str]:
+    """
+    Detect if input is JSONL format by reading the first line.
+    Returns (is_jsonl, first_line) tuple.
+    """
+    first_line = input_stream.readline()
+
+    if not first_line.strip():
+        return (False, first_line)
+
+    # Try to parse the first line as JSON
+    # If it parses successfully, it's JSONL; otherwise, it's a multi-line JSON
+    try:
+        json.loads(first_line.strip())
+        return (True, first_line)
+    except json.JSONDecodeError:
+        return (False, first_line)
 
 
 def main():
@@ -243,20 +285,24 @@ def main():
     # Initialize converter
     converter = DynamoDBJSONConverter()
 
-    # Open input stream
+    # Open input stream with buffering
     if args.input_file:
         try:
-            input_stream = open(args.input_file, 'r', encoding='utf-8')
+            # Use buffered reader for better performance
+            input_stream = io.BufferedReader(io.FileIO(args.input_file, 'r'))
+            input_stream = io.TextIOWrapper(input_stream, encoding='utf-8')
         except FileNotFoundError:
             print(f"Error: File '{args.input_file}' not found", file=sys.stderr)
             sys.exit(1)
     else:
         input_stream = sys.stdin
 
-    # Open output stream
+    # Open output stream with buffering
     if args.output_file:
         try:
-            output_stream = open(args.output_file, 'w', encoding='utf-8')
+            # Use buffered writer for better performance
+            output_stream = io.BufferedWriter(io.FileIO(args.output_file, 'w'))
+            output_stream = io.TextIOWrapper(output_stream, encoding='utf-8')
         except IOError as e:
             print(f"Error: Cannot write to '{args.output_file}': {e}", file=sys.stderr)
             sys.exit(1)
@@ -264,43 +310,22 @@ def main():
         output_stream = sys.stdout
 
     try:
-        # Determine if input is JSONL or regular JSON
-        if args.input_file and is_jsonl_file(args.input_file):
-            # Process as JSONL
-            process_jsonl(input_stream, output_stream, converter, args.mode,
-                         args.pretty, args.without_item)
+        # Detect if input is JSONL
+        if args.input_file and args.input_file.endswith('.jsonl'):
+            # Fast path: .jsonl extension means JSONL format
+            is_jsonl = True
+            first_line = ""
         else:
-            # For stdin or non-jsonl files, try to detect format by reading first line
-            if args.input_file:
-                # Try to detect if file is JSONL by attempting to parse as single JSON
-                # If that fails, try JSONL
-                first_pos = input_stream.tell()
-                first_line = input_stream.readline()
-                input_stream.seek(first_pos)
+            # Detect from content by reading first line
+            is_jsonl, first_line = detect_jsonl_from_content(input_stream)
 
-                # Check if first line is valid JSON and if there's more content
-                try:
-                    json.loads(first_line)
-                    # First line is valid JSON, check if there's a second line
-                    second_line = input_stream.readline()
-                    input_stream.seek(first_pos)
-
-                    if second_line.strip():
-                        # Multiple lines with JSON - treat as JSONL
-                        process_jsonl(input_stream, output_stream, converter, args.mode,
-                                     args.pretty, args.without_item)
-                    else:
-                        # Single JSON object
-                        process_json(input_stream, output_stream, converter, args.mode,
-                                    args.pretty, args.without_item)
-                except (json.JSONDecodeError, ValueError):
-                    # First line is not valid JSON, try as single JSON object
-                    process_json(input_stream, output_stream, converter, args.mode,
-                                args.pretty, args.without_item)
-            else:
-                # For stdin, default to JSONL processing
-                process_jsonl(input_stream, output_stream, converter, args.mode,
-                             args.pretty, args.without_item)
+        # Process based on detected format
+        if is_jsonl:
+            process_jsonl(input_stream, output_stream, converter, args.mode,
+                         args.pretty, args.without_item, first_line)
+        else:
+            process_json(input_stream, output_stream, converter, args.mode,
+                        args.pretty, args.without_item, first_line)
     finally:
         # Close files if they were opened
         if args.input_file:

@@ -1,0 +1,115 @@
+{
+  "Item": {
+    "Id": {
+      "N": "103"
+    },
+    "Title": {
+      "S": "Book 103 Title"
+    },
+    "ISBN": {
+      "S": "333-3333333333"
+    },
+    "Authors": {
+      "L": [
+        {
+          "S": "Author1"
+        },
+        {
+          "S": "Author2"
+        }
+      ]
+    },
+    "Publisher": {
+      "M": {
+        "Name": {
+          "S": "Tech Publishing House"
+        },
+        "City": {
+          "S": "New York"
+        },
+        "Founded": {
+          "N": "1995"
+        }
+      }
+    },
+    "Price": {
+      "N": "2000"
+    },
+    "PageCount": {
+      "N": "600"
+    },
+    "Dimensions": {
+      "S": "8.5 x 11.0 x 1.5"
+    },
+    "InPublication": {
+      "BOOL": false
+    },
+    "ProductCategory": {
+      "S": "Book"
+    },
+    "Tags": {
+      "L": [
+        {
+          "S": "programming"
+        },
+        {
+          "S": "technology"
+        },
+        {
+          "S": "reference"
+        }
+      ]
+    },
+    "Ratings": {
+      "L": [
+        {
+          "N": "4.5"
+        },
+        {
+          "N": "4.8"
+        },
+        {
+          "N": "5.0"
+        },
+        {
+          "N": "4.2"
+        }
+      ]
+    },
+    "Reviews": {
+      "L": [
+        {
+          "S": "Excellent reference material"
+        },
+        {
+          "S": "Very comprehensive"
+        },
+        {
+          "S": "Great for beginners"
+        }
+      ]
+    },
+    "Metadata": {
+      "M": {
+        "CreatedAt": {
+          "S": "2023-01-15T10:30:00Z"
+        },
+        "UpdatedAt": {
+          "S": "2024-06-20T14:45:00Z"
+        },
+        "Version": {
+          "N": "2"
+        }
+      }
+    },
+    "Available": {
+      "BOOL": true
+    },
+    "Description": {
+      "NULL": true
+    },
+    "CoverImage": {
+      "S": "aVZCT1J3MEtHZ29BQUFBTlNVaEVVZ0FBQUFV"
+    }
+  }
+}

@@ -3,7 +3,7 @@
 use clap::{Parser, ValueEnum};
 use ddb_convert::{convert_ddb_to_normal, convert_normal_to_ddb, ConversionError};
 use embedded_io_adapters::std::FromStd;
-use std::io;
+use std::io::{self, BufReader, BufWriter};
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum ConversionMode {
@@ -48,7 +48,7 @@ fn convert_from_ddb<R: embedded_io::Read, W: embedded_io::Write>(
     output_writer: &mut W,
     pretty: bool,
 ) -> Result<(), ConversionError> {
-    let mut rjiter_buffer = vec![0u8; 4096];
+    let mut rjiter_buffer = vec![0u8; 64 * 1024];
     let mut context_buffer = vec![0u8; 2048];
     convert_ddb_to_normal(
         input_reader,
@@ -67,7 +67,7 @@ fn convert_to_ddb<R: embedded_io::Read, W: embedded_io::Write>(
     pretty: bool,
     with_item_wrapper: bool,
 ) -> Result<(), ConversionError> {
-    let mut rjiter_buffer = vec![0u8; 4096];
+    let mut rjiter_buffer = vec![0u8; 64 * 1024];
     let mut context_buffer = vec![0u8; 2048];
     convert_normal_to_ddb(
         input_reader,
@@ -86,32 +86,32 @@ fn main() {
         (ConversionMode::FromDdb, Some(input_path), Some(output_path)) => {
             let input_file = open_input_file(&input_path);
             let output_file = create_output_file(&output_path);
-            let mut input_reader = FromStd::new(input_file);
-            let mut output_writer = FromStd::new(output_file);
+            let mut input_reader = FromStd::new(BufReader::new(input_file));
+            let mut output_writer = FromStd::new(BufWriter::new(output_file));
             convert_from_ddb(&mut input_reader, &mut output_writer, args.pretty)
         }
         (ConversionMode::FromDdb, Some(input_path), None) => {
             let input_file = open_input_file(&input_path);
-            let mut input_reader = FromStd::new(input_file);
-            let mut output_writer = FromStd::new(io::stdout());
+            let mut input_reader = FromStd::new(BufReader::new(input_file));
+            let mut output_writer = FromStd::new(BufWriter::new(io::stdout()));
             convert_from_ddb(&mut input_reader, &mut output_writer, args.pretty)
         }
         (ConversionMode::FromDdb, None, Some(output_path)) => {
             let output_file = create_output_file(&output_path);
-            let mut input_reader = FromStd::new(io::stdin());
-            let mut output_writer = FromStd::new(output_file);
+            let mut input_reader = FromStd::new(BufReader::new(io::stdin()));
+            let mut output_writer = FromStd::new(BufWriter::new(output_file));
             convert_from_ddb(&mut input_reader, &mut output_writer, args.pretty)
         }
         (ConversionMode::FromDdb, None, None) => {
-            let mut input_reader = FromStd::new(io::stdin());
-            let mut output_writer = FromStd::new(io::stdout());
+            let mut input_reader = FromStd::new(BufReader::new(io::stdin()));
+            let mut output_writer = FromStd::new(BufWriter::new(io::stdout()));
             convert_from_ddb(&mut input_reader, &mut output_writer, args.pretty)
         }
         (ConversionMode::ToDdb, Some(input_path), Some(output_path)) => {
             let input_file = open_input_file(&input_path);
             let output_file = create_output_file(&output_path);
-            let mut input_reader = FromStd::new(input_file);
-            let mut output_writer = FromStd::new(output_file);
+            let mut input_reader = FromStd::new(BufReader::new(input_file));
+            let mut output_writer = FromStd::new(BufWriter::new(output_file));
             convert_to_ddb(
                 &mut input_reader,
                 &mut output_writer,
@@ -121,8 +121,8 @@ fn main() {
         }
         (ConversionMode::ToDdb, Some(input_path), None) => {
             let input_file = open_input_file(&input_path);
-            let mut input_reader = FromStd::new(input_file);
-            let mut output_writer = FromStd::new(io::stdout());
+            let mut input_reader = FromStd::new(BufReader::new(input_file));
+            let mut output_writer = FromStd::new(BufWriter::new(io::stdout()));
             convert_to_ddb(
                 &mut input_reader,
                 &mut output_writer,
@@ -132,8 +132,8 @@ fn main() {
         }
         (ConversionMode::ToDdb, None, Some(output_path)) => {
             let output_file = create_output_file(&output_path);
-            let mut input_reader = FromStd::new(io::stdin());
-            let mut output_writer = FromStd::new(output_file);
+            let mut input_reader = FromStd::new(BufReader::new(io::stdin()));
+            let mut output_writer = FromStd::new(BufWriter::new(output_file));
             convert_to_ddb(
                 &mut input_reader,
                 &mut output_writer,
@@ -142,8 +142,8 @@ fn main() {
             )
         }
         (ConversionMode::ToDdb, None, None) => {
-            let mut input_reader = FromStd::new(io::stdin());
-            let mut output_writer = FromStd::new(io::stdout());
+            let mut input_reader = FromStd::new(BufReader::new(io::stdin()));
+            let mut output_writer = FromStd::new(BufWriter::new(io::stdout()));
             convert_to_ddb(
                 &mut input_reader,
                 &mut output_writer,

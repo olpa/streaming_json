@@ -1,0 +1,124 @@
+{
+  "Item": {
+    "id": {
+      "S": "demo-001"
+    },
+    "stringField": {
+      "S": "Hello, World!"
+    },
+    "numberField": {
+      "N": "42"
+    },
+    "decimalField": {
+      "N": "3.14159"
+    },
+    "booleanTrue": {
+      "BOOL": true
+    },
+    "booleanFalse": {
+      "BOOL": false
+    },
+    "nullField": {
+      "NULL": true
+    },
+    "mixedList": {
+      "L": [
+        {
+          "S": "string"
+        },
+        {
+          "N": "123"
+        },
+        {
+          "BOOL": true
+        },
+        {
+          "M": {
+            "nested": {
+              "S": "object"
+            }
+          }
+        }
+      ]
+    },
+    "simpleMap": {
+      "M": {
+        "key1": {
+          "S": "value1"
+        },
+        "key2": {
+          "S": "value2"
+        },
+        "key3": {
+          "N": "999"
+        }
+      }
+    },
+    "nestedMap": {
+      "M": {
+        "level1": {
+          "M": {
+            "level2": {
+              "M": {
+                "level3": {
+                  "M": {
+                    "deepValue": {
+                      "S": "found it!"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "complexObject": {
+      "M": {
+        "name": {
+          "S": "Complex Item"
+        },
+        "count": {
+          "N": "100"
+        },
+        "active": {
+          "BOOL": true
+        },
+        "metadata": {
+          "M": {
+            "created": {
+              "S": "2024-01-01T00:00:00Z"
+            },
+            "updated": {
+              "S": "2024-10-22T00:00:00Z"
+            }
+          }
+        },
+        "items": {
+          "L": [
+            {
+              "M": {
+                "id": {
+                  "N": "1"
+                },
+                "label": {
+                  "S": "First"
+                }
+              }
+            },
+            {
+              "M": {
+                "id": {
+                  "N": "2"
+                },
+                "label": {
+                  "S": "Second"
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,160 @@
+{ "id": { "tool": "py-boto", "file": "business.json", "mode": "to-ddb" },
+    "user": 8.59, "system": 0.14, "elapsed": 8.99, "cpu_percent": 97,
+    "maxresident_kb": 32852, "inputs": 141168, "outputs": 286144,
+    "major_pagefaults": 28, "minor_pagefaults": 6559, "swaps": 0 }
+{ "id": { "tool": "py-boto", "file": "business.json", "mode": "from-ddb" },
+    "user": 10.18, "system": 0.12, "elapsed": 10.3, "cpu_percent": 99,
+    "maxresident_kb": 32928, "inputs": 0, "outputs": 232144,
+    "major_pagefaults": 0, "minor_pagefaults": 6568, "swaps": 0 }
+{ "id": { "tool": "py-boto", "file": "checkin.json", "mode": "to-ddb" },
+    "user": 2.54, "system": 0.2, "elapsed": 2.75, "cpu_percent": 99,
+    "maxresident_kb": 39196, "inputs": 0, "outputs": 565880,
+    "major_pagefaults": 0, "minor_pagefaults": 16677, "swaps": 0 }
+{ "id": { "tool": "py-boto", "file": "checkin.json", "mode": "from-ddb" },
+    "user": 2.47, "system": 0.2, "elapsed": 2.68, "cpu_percent": 99,
+    "maxresident_kb": 39452, "inputs": 0, "outputs": 560472,
+    "major_pagefaults": 0, "minor_pagefaults": 17422, "swaps": 0 }
+{ "id": { "tool": "py-boto", "file": "review.json", "mode": "to-ddb" },
+    "user": 188.53, "system": 4.88, "elapsed": 196.11, "cpu_percent": 98,
+    "maxresident_kb": 33116, "inputs": 8138112, "outputs": 11401064,
+    "major_pagefaults": 0, "minor_pagefaults": 6594, "swaps": 0 }
+{ "id": { "tool": "py-boto", "file": "review.json", "mode": "from-ddb" },
+    "user": 244.33, "system": 5.07, "elapsed": 249.98, "cpu_percent": 99,
+    "maxresident_kb": 32884, "inputs": 10387872, "outputs": 10431904,
+    "major_pagefaults": 0, "minor_pagefaults": 6589, "swaps": 0 }
+{ "id": { "tool": "py-boto", "file": "tip.json", "mode": "to-ddb" },
+    "user": 12.2, "system": 0.2, "elapsed": 12.4, "cpu_percent": 99,
+    "maxresident_kb": 32952, "inputs": 352744, "outputs": 425480,
+    "major_pagefaults": 0, "minor_pagefaults": 6545, "swaps": 0 }
+{ "id": { "tool": "py-boto", "file": "tip.json", "mode": "from-ddb" },
+    "user": 18.2, "system": 0.19, "elapsed": 18.4, "cpu_percent": 99,
+    "maxresident_kb": 32800, "inputs": 0, "outputs": 352696,
+    "major_pagefaults": 0, "minor_pagefaults": 6537, "swaps": 0 }
+{ "id": { "tool": "py-boto", "file": "user.json", "mode": "to-ddb" },
+    "user": 118.85, "system": 3.13, "elapsed": 124.65, "cpu_percent": 97,
+    "maxresident_kb": 35040, "inputs": 6535712, "outputs": 7248776,
+    "major_pagefaults": 0, "minor_pagefaults": 50839, "swaps": 0 }
+{ "id": { "tool": "py-boto", "file": "user.json", "mode": "from-ddb" },
+    "user": 142.8, "system": 3.3, "elapsed": 148.15, "cpu_percent": 98,
+    "maxresident_kb": 35268, "inputs": 7260024, "outputs": 6569264,
+    "major_pagefaults": 0, "minor_pagefaults": 44010, "swaps": 0 }
+{ "id": { "tool": "py-noboto", "file": "business.json", "mode": "to-ddb" },
+    "user": 4.18, "system": 0.11, "elapsed": 4.29, "cpu_percent": 99,
+    "maxresident_kb": 14076, "inputs": 130488, "outputs": 309728,
+    "major_pagefaults": 0, "minor_pagefaults": 1964, "swaps": 0 }
+{ "id": { "tool": "py-noboto", "file": "business.json", "mode": "from-ddb" },
+    "user": 3.74, "system": 0.08, "elapsed": 3.82, "cpu_percent": 99,
+    "maxresident_kb": 13920, "inputs": 0, "outputs": 247416,
+    "major_pagefaults": 0, "minor_pagefaults": 1959, "swaps": 0 }
+{ "id": { "tool": "py-noboto", "file": "checkin.json", "mode": "to-ddb" },
+    "user": 1.61, "system": 0.19, "elapsed": 1.81, "cpu_percent": 99,
+    "maxresident_kb": 20316, "inputs": 0, "outputs": 567424,
+    "major_pagefaults": 0, "minor_pagefaults": 13114, "swaps": 0 }
+{ "id": { "tool": "py-noboto", "file": "checkin.json", "mode": "from-ddb" },
+    "user": 1.58, "system": 0.16, "elapsed": 1.8, "cpu_percent": 97,
+    "maxresident_kb": 19464, "inputs": 0, "outputs": 561240,
+    "major_pagefaults": 0, "minor_pagefaults": 12844, "swaps": 0 }
+{ "id": { "tool": "py-noboto", "file": "review.json", "mode": "to-ddb" },
+    "user": 93.08, "system": 4.25, "elapsed": 109.03999999999999, "cpu_percent": 89,
+    "maxresident_kb": 13956, "inputs": 9138864, "outputs": 11771712,
+    "major_pagefaults": 0, "minor_pagefaults": 1992, "swaps": 0 }
+{ "id": { "tool": "py-noboto", "file": "review.json", "mode": "from-ddb" },
+    "user": 88.99, "system": 4.27, "elapsed": 105.35, "cpu_percent": 88,
+    "maxresident_kb": 14092, "inputs": 10169096, "outputs": 10665928,
+    "major_pagefaults": 0, "minor_pagefaults": 1979, "swaps": 0 }
+{ "id": { "tool": "py-noboto", "file": "tip.json", "mode": "to-ddb" },
+    "user": 6.73, "system": 0.16, "elapsed": 7.16, "cpu_percent": 96,
+    "maxresident_kb": 14212, "inputs": 352744, "outputs": 452200,
+    "major_pagefaults": 0, "minor_pagefaults": 2037, "swaps": 0 }
+{ "id": { "tool": "py-noboto", "file": "tip.json", "mode": "from-ddb" },
+    "user": 6.48, "system": 0.12, "elapsed": 6.61, "cpu_percent": 99,
+    "maxresident_kb": 13900, "inputs": 0, "outputs": 368768,
+    "major_pagefaults": 0, "minor_pagefaults": 1926, "swaps": 0 }
+{ "id": { "tool": "py-noboto", "file": "user.json", "mode": "to-ddb" },
+    "user": 49.34, "system": 2.79, "elapsed": 62.33, "cpu_percent": 83,
+    "maxresident_kb": 16180, "inputs": 6528456, "outputs": 7504808,
+    "major_pagefaults": 0, "minor_pagefaults": 46521, "swaps": 0 }
+{ "id": { "tool": "py-noboto", "file": "user.json", "mode": "from-ddb" },
+    "user": 50.3, "system": 2.86, "elapsed": 62.49, "cpu_percent": 85,
+    "maxresident_kb": 16152, "inputs": 7518592, "outputs": 6735992,
+    "major_pagefaults": 0, "minor_pagefaults": 48680, "swaps": 0 }
+{ "id": { "tool": "rust", "file": "business.json", "mode": "to-ddb" },
+    "user": 2.21, "system": 0.08, "elapsed": 2.31, "cpu_percent": 99,
+    "maxresident_kb": 2984, "inputs": 132760, "outputs": 286136,
+    "major_pagefaults": 9, "minor_pagefaults": 174, "swaps": 0 }
+{ "id": { "tool": "rust", "file": "business.json", "mode": "from-ddb" },
+    "user": 2.33, "system": 0.07, "elapsed": 2.41, "cpu_percent": 100,
+    "maxresident_kb": 3068, "inputs": 0, "outputs": 232144,
+    "major_pagefaults": 0, "minor_pagefaults": 180, "swaps": 0 }
+{ "id": { "tool": "rust", "file": "checkin.json", "mode": "to-ddb" },
+    "user": 0.41, "system": 0.16, "elapsed": 0.58, "cpu_percent": 99,
+    "maxresident_kb": 6252, "inputs": 0, "outputs": 565880,
+    "major_pagefaults": 0, "minor_pagefaults": 2835, "swaps": 0 }
+{ "id": { "tool": "rust", "file": "checkin.json", "mode": "from-ddb" },
+    "user": 0.4, "system": 0.18, "elapsed": 0.64, "cpu_percent": 90,
+    "maxresident_kb": 6020, "inputs": 0, "outputs": 560472,
+    "major_pagefaults": 0, "minor_pagefaults": 2275, "swaps": 0 }
+{ "id": { "tool": "rust", "file": "review.json", "mode": "to-ddb" },
+    "user": 37.66, "system": 4.21, "elapsed": 82.06, "cpu_percent": 51,
+    "maxresident_kb": 3084, "inputs": 9132128, "outputs": 11400632,
+    "major_pagefaults": 0, "minor_pagefaults": 179, "swaps": 0 }
+{ "id": { "tool": "rust", "file": "review.json", "mode": "from-ddb" },
+    "user": 40.09, "system": 4.33, "elapsed": 86.1, "cpu_percent": 51,
+    "maxresident_kb": 2848, "inputs": 11359824, "outputs": 10431280,
+    "major_pagefaults": 0, "minor_pagefaults": 180, "swaps": 0 }
+{ "id": { "tool": "rust", "file": "tip.json", "mode": "to-ddb" },
+    "user": 2.06, "system": 0.15, "elapsed": 2.67, "cpu_percent": 83,
+    "maxresident_kb": 2872, "inputs": 353096, "outputs": 425480,
+    "major_pagefaults": 0, "minor_pagefaults": 167, "swaps": 0 }
+{ "id": { "tool": "rust", "file": "tip.json", "mode": "from-ddb" },
+    "user": 2.28, "system": 0.11, "elapsed": 2.4, "cpu_percent": 99,
+    "maxresident_kb": 2928, "inputs": 0, "outputs": 352696,
+    "major_pagefaults": 0, "minor_pagefaults": 170, "swaps": 0 }
+{ "id": { "tool": "rust", "file": "user.json", "mode": "to-ddb" },
+    "user": 22.14, "system": 2.74, "elapsed": 53.93, "cpu_percent": 46,
+    "maxresident_kb": 4216, "inputs": 6493808, "outputs": 7248464,
+    "major_pagefaults": 0, "minor_pagefaults": 903, "swaps": 0 }
+{ "id": { "tool": "rust", "file": "user.json", "mode": "from-ddb" },
+    "user": 24.76, "system": 2.64, "elapsed": 54.01, "cpu_percent": 50,
+    "maxresident_kb": 4024, "inputs": 7258992, "outputs": 6569008,
+    "major_pagefaults": 0, "minor_pagefaults": 1088, "swaps": 0 }
+{ "id": { "tool": "scan-json", "file": "business.json", "mode": "to-ddb" },
+    "user": 0.54, "system": 0.08, "elapsed": 0.74, "cpu_percent": 84,
+    "maxresident_kb": 2792, "inputs": 123664, "outputs": 286152,
+    "major_pagefaults": 0, "minor_pagefaults": 126, "swaps": 0 }
+{ "id": { "tool": "scan-json", "file": "business.json", "mode": "from-ddb" },
+    "user": 0.93, "system": 0.06, "elapsed": 1.0, "cpu_percent": 99,
+    "maxresident_kb": 2796, "inputs": 0, "outputs": 232160,
+    "major_pagefaults": 0, "minor_pagefaults": 126, "swaps": 0 }
+{ "id": { "tool": "scan-json", "file": "checkin.json", "mode": "to-ddb" },
+    "user": 0.32, "system": 0.13, "elapsed": 0.46, "cpu_percent": 99,
+    "maxresident_kb": 2780, "inputs": 0, "outputs": 565880,
+    "major_pagefaults": 0, "minor_pagefaults": 125, "swaps": 0 }
+{ "id": { "tool": "scan-json", "file": "checkin.json", "mode": "from-ddb" },
+    "user": 0.32, "system": 0.17, "elapsed": 0.83, "cpu_percent": 59,
+    "maxresident_kb": 2772, "inputs": 0, "outputs": 560472,
+    "major_pagefaults": 0, "minor_pagefaults": 126, "swaps": 0 }
+{ "id": { "tool": "scan-json", "file": "review.json", "mode": "to-ddb" },
+    "user": 11.87, "system": 4.08, "elapsed": 83.95, "cpu_percent": 19,
+    "maxresident_kb": 2784, "inputs": 9537144, "outputs": 11402696,
+    "major_pagefaults": 0, "minor_pagefaults": 126, "swaps": 0 }
+{ "id": { "tool": "scan-json", "file": "review.json", "mode": "from-ddb" },
+    "user": 18.95, "system": 3.98, "elapsed": 75.93, "cpu_percent": 30,
+    "maxresident_kb": 2868, "inputs": 8965424, "outputs": 10433344,
+    "major_pagefaults": 0, "minor_pagefaults": 127, "swaps": 0 }
+{ "id": { "tool": "scan-json", "file": "tip.json", "mode": "to-ddb" },
+    "user": 0.67, "system": 0.14, "elapsed": 3.05, "cpu_percent": 26,
+    "maxresident_kb": 2772, "inputs": 352744, "outputs": 425528,
+    "major_pagefaults": 0, "minor_pagefaults": 126, "swaps": 0 }
+{ "id": { "tool": "scan-json", "file": "tip.json", "mode": "from-ddb" },
+    "user": 1.15, "system": 0.14, "elapsed": 1.31, "cpu_percent": 99,
+    "maxresident_kb": 2744, "inputs": 0, "outputs": 352744,
+    "major_pagefaults": 0, "minor_pagefaults": 127, "swaps": 0 }
+{ "id": { "tool": "scan-json", "file": "user.json", "mode": "to-ddb" },
+    "user": 7.74, "system": 2.54, "elapsed": 54.1, "cpu_percent": 19,
+    "maxresident_kb": 2860, "inputs": 6577400, "outputs": 7248464,
+    "major_pagefaults": 0, "minor_pagefaults": 127, "swaps": 0 }
+{ "id": { "tool": "scan-json", "file": "user.json", "mode": "from-ddb" },
+    "user": 11.96, "system": 2.5, "elapsed": 54.27, "cpu_percent": 26,
+    "maxresident_kb": 2668, "inputs": 7259632, "outputs": 6569008,
+    "major_pagefaults": 0, "minor_pagefaults": 127, "swaps": 0 }

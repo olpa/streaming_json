@@ -1,0 +1,58 @@
+{
+  "id": "demo-001",
+  "stringField": "Hello, World!",
+  "numberField": 42,
+  "decimalField": 3.14159,
+  "booleanTrue": true,
+  "booleanFalse": false,
+  "nullField": null,
+  "stringArray": ["apple", "banana", "cherry"],
+  "numberArray": [1, 2, 3, 5, 8, 13],
+  "mixedList": [
+    "string",
+    123,
+    true,
+    {
+      "nested": "object"
+    }
+  ],
+  "simpleMap": {
+    "key1": "value1",
+    "key2": "value2",
+    "key3": 999
+  },
+  "nestedMap": {
+    "level1": {
+      "level2": {
+        "level3": {
+          "deepValue": "found it!"
+        }
+      }
+    }
+  },
+  "binaryData": "VGhpcyBpcyBiYXNlNjQgZW5jb2RlZCBkYXRh",
+  "binarySet": [
+    "Zmlyc3Q=",
+    "c2Vjb25k",
+    "dGhpcmQ="
+  ],
+  "complexObject": {
+    "name": "Complex Item",
+    "count": 100,
+    "active": true,
+    "metadata": {
+      "created": "2024-01-01T00:00:00Z",
+      "updated": "2024-10-22T00:00:00Z"
+    },
+    "items": [
+      {
+        "id": 1,
+        "label": "First"
+      },
+      {
+        "id": 2,
+        "label": "Second"
+      }
+    ]
+  }
+}

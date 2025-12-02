@@ -41,20 +41,26 @@ enum Mode {
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    // Detect if input is JSONL
-    let is_jsonl = if let Some(path) = &cli.input {
-        detect_jsonl(path)?
-    } else {
-        false // stdin defaults to JSONL
-    };
-
     // Open input
-    let input: Box<dyn BufRead> = if let Some(path) = &cli.input {
+    let mut input: Box<dyn BufRead> = if let Some(path) = &cli.input {
         Box::new(BufReader::new(
             File::open(path).context("Failed to open input file")?,
         ))
     } else {
         Box::new(BufReader::new(io::stdin()))
+    };
+
+    // Detect if input is JSONL
+    let (is_jsonl, first_line) = if let Some(path) = &cli.input {
+        // Check file extension first
+        if path.extension().and_then(|s| s.to_str()) == Some("jsonl") {
+            (true, String::new())
+        } else {
+            detect_jsonl_from_content(&mut input)?
+        }
+    } else {
+        // For stdin, also detect from content
+        detect_jsonl_from_content(&mut input)?
     };
 
     // Open output
@@ -67,42 +73,27 @@ fn main() -> Result<()> {
     };
 
     if is_jsonl {
-        process_jsonl(input, &mut output, cli.mode, cli.pretty, cli.without_item)?;
+        process_jsonl(input, &mut output, cli.mode, cli.pretty, cli.without_item, first_line)?;
     } else {
-        process_json(input, &mut output, cli.mode, cli.pretty, cli.without_item)?;
+        process_json(input, &mut output, cli.mode, cli.pretty, cli.without_item, first_line)?;
     }
 
     output.flush()?;
     Ok(())
 }
 
-fn detect_jsonl(path: &PathBuf) -> Result<bool> {
-    // Check file extension first
-    if path.extension().and_then(|s| s.to_str()) == Some("jsonl") {
-        return Ok(true);
-    }
-
-    // For .json files, check if they contain multiple JSON objects
-    let file = File::open(path)?;
-    let mut reader = BufReader::new(file);
-
+fn detect_jsonl_from_content(reader: &mut Box<dyn BufRead>) -> Result<(bool, String)> {
     let mut first_line = String::new();
     reader.read_line(&mut first_line)?;
 
     if first_line.trim().is_empty() {
-        return Ok(false);
+        return Ok((false, first_line));
     }
 
-    // Check if first line is valid JSON
-    if serde_json::from_str::<Value>(&first_line).is_ok() {
-        // Check if there's a second line
-        let mut second_line = String::new();
-        reader.read_line(&mut second_line)?;
-
-        return Ok(!second_line.trim().is_empty());
-    }
-
-    Ok(false)
+    // Try to parse the first line as JSON
+    // If it parses successfully, it's JSONL; otherwise, it's a multi-line JSON
+    let is_jsonl = serde_json::from_str::<Value>(first_line.trim()).is_ok();
+    Ok((is_jsonl, first_line))
 }
 
 fn process_jsonl(
@@ -111,7 +102,27 @@ fn process_jsonl(
     mode: Mode,
     pretty: bool,
     without_item: bool,
+    first_line: String,
 ) -> Result<()> {
+    // Process the first line that was already read during detection
+    let line = first_line.trim();
+    if !line.is_empty() {
+        let input_data: Value =
+            serde_json::from_str(line).context("Invalid JSON on line 1")?;
+
+        let output_data = match mode {
+            Mode::FromDdb => from_dynamodb(input_data)?,
+            Mode::ToDdb => to_dynamodb(input_data, !without_item)?,
+        };
+
+        if pretty {
+            writeln!(output, "{}", serde_json::to_string_pretty(&output_data)?)?;
+        } else {
+            writeln!(output, "{}", serde_json::to_string(&output_data)?)?;
+        }
+    }
+
+    // Process remaining lines
     for (line_num, line) in input.lines().enumerate() {
         let line = line?;
         let line = line.trim();
@@ -121,7 +132,7 @@ fn process_jsonl(
         }
 
         let input_data: Value =
-            serde_json::from_str(line).context(format!("Invalid JSON on line {}", line_num + 1))?;
+            serde_json::from_str(line).context(format!("Invalid JSON on line {}", line_num + 2))?;
 
         let output_data = match mode {
             Mode::FromDdb => from_dynamodb(input_data)?,
@@ -144,8 +155,9 @@ fn process_json(
     mode: Mode,
     pretty: bool,
     without_item: bool,
+    first_line: String,
 ) -> Result<()> {
-    let mut content = String::new();
+    let mut content = first_line;
     input.read_to_string(&mut content)?;
 
     let input_data: Value = serde_json::from_str(&content).context("Invalid JSON")?;
@@ -165,17 +177,17 @@ fn process_json(
 }
 
 fn from_dynamodb(value: Value) -> Result<Value> {
-    let obj = value
-        .as_object()
-        .context("Expected JSON object")?
-        .clone();
+    let mut obj = match value {
+        Value::Object(o) => o,
+        _ => anyhow::bail!("Expected JSON object"),
+    };
 
-    // Check if it has "Item" wrapper
+    // Check if it has "Item" wrapper - consume instead of clone
     let obj = if obj.len() == 1 && obj.contains_key("Item") {
-        obj.get("Item")
-            .and_then(|v| v.as_object())
-            .context("Expected Item to be an object")?
-            .clone()
+        match obj.remove("Item") {
+            Some(Value::Object(o)) => o,
+            _ => anyhow::bail!("Expected Item to be an object"),
+        }
     } else {
         obj
     };
@@ -190,12 +202,15 @@ fn from_dynamodb(value: Value) -> Result<Value> {
 }
 
 fn to_dynamodb(value: Value, wrap_item: bool) -> Result<Value> {
-    let obj = value.as_object().context("Expected JSON object")?;
+    let obj = match value {
+        Value::Object(o) => o,
+        _ => anyhow::bail!("Expected JSON object"),
+    };
 
     // Marshall to DynamoDB format
     let mut result = Map::new();
     for (key, value) in obj {
-        result.insert(key.clone(), marshall_value(value.clone())?);
+        result.insert(key, marshall_value(value)?);
     }
 
     if wrap_item {
@@ -208,69 +223,62 @@ fn to_dynamodb(value: Value, wrap_item: bool) -> Result<Value> {
 }
 
 fn unmarshall_value(value: Value) -> Result<Value> {
-    let obj = value.as_object().context("Expected DynamoDB type object")?;
+    let obj = match value {
+        Value::Object(o) => o,
+        _ => anyhow::bail!("Expected DynamoDB type object"),
+    };
 
     if obj.len() != 1 {
         anyhow::bail!("DynamoDB type object must have exactly one key");
     }
 
-    let (type_key, type_value) = obj.iter().next().unwrap();
+    let (type_key, type_value) = obj.into_iter().next().unwrap();
 
     match type_key.as_str() {
-        "S" => Ok(type_value.clone()),
+        "S" => Ok(type_value),
         "N" => {
             let s = type_value.as_str().context("N type must be string")?;
-            // Try to parse as int first, then float
-            if let Ok(i) = s.parse::<i64>() {
-                Ok(Value::Number(i.into()))
-            } else if let Ok(f) = s.parse::<f64>() {
-                Ok(serde_json::Number::from_f64(f)
-                    .map(Value::Number)
-                    .unwrap_or(Value::String(s.to_string())))
-            } else {
-                Ok(Value::String(s.to_string()))
-            }
+            // Parse the number string into a JSON number
+            let num: serde_json::Number = s.parse().context("Invalid number format")?;
+            Ok(Value::Number(num))
         }
-        "BOOL" => Ok(type_value.clone()),
+        "BOOL" => Ok(type_value),
         "NULL" => Ok(Value::Null),
         "M" => {
-            let map = type_value.as_object().context("M type must be object")?;
+            let map = match type_value {
+                Value::Object(o) => o,
+                _ => anyhow::bail!("M type must be object"),
+            };
             let mut result = Map::new();
             for (k, v) in map {
-                result.insert(k.clone(), unmarshall_value(v.clone())?);
+                result.insert(k, unmarshall_value(v)?);
             }
             Ok(Value::Object(result))
         }
         "L" => {
-            let list = type_value.as_array().context("L type must be array")?;
+            let list = match type_value {
+                Value::Array(a) => a,
+                _ => anyhow::bail!("L type must be array"),
+            };
             let mut result = Vec::new();
             for item in list {
-                result.push(unmarshall_value(item.clone())?);
+                result.push(unmarshall_value(item)?);
             }
             Ok(Value::Array(result))
         }
-        "SS" => Ok(type_value.clone()),
+        "SS" => Ok(type_value),
         "NS" => {
             let arr = type_value.as_array().context("NS type must be array")?;
             let mut result = Vec::new();
             for item in arr {
                 let s = item.as_str().context("NS items must be strings")?;
-                if let Ok(i) = s.parse::<i64>() {
-                    result.push(Value::Number(i.into()));
-                } else if let Ok(f) = s.parse::<f64>() {
-                    result.push(
-                        serde_json::Number::from_f64(f)
-                            .map(Value::Number)
-                            .unwrap_or(Value::String(s.to_string())),
-                    );
-                } else {
-                    result.push(Value::String(s.to_string()));
-                }
+                let num: serde_json::Number = s.parse().context("Invalid number format")?;
+                result.push(Value::Number(num));
             }
             Ok(Value::Array(result))
         }
-        "BS" => Ok(type_value.clone()),
-        "B" => Ok(type_value.clone()),
+        "BS" => Ok(type_value),
+        "B" => Ok(type_value),
         _ => anyhow::bail!("Unknown DynamoDB type: {}", type_key),
     }
 }
@@ -298,40 +306,14 @@ fn marshall_value(value: Value) -> Result<Value> {
             Ok(Value::Object(map))
         }
         Value::Array(arr) => {
-            // Check if it's a homogeneous array of strings or numbers
-            if arr.is_empty() {
-                let mut map = Map::new();
-                map.insert("L".to_string(), Value::Array(vec![]));
-                return Ok(Value::Object(map));
+            // Always use generic List type (L)
+            let mut items = Vec::new();
+            for item in arr {
+                items.push(marshall_value(item)?);
             }
-
-            let all_strings = arr.iter().all(|v| v.is_string());
-            let all_numbers = arr.iter().all(|v| v.is_number());
-
-            if all_strings && arr.len() > 0 {
-                // String Set
-                let mut map = Map::new();
-                map.insert("SS".to_string(), Value::Array(arr));
-                Ok(Value::Object(map))
-            } else if all_numbers && arr.len() > 0 {
-                // Number Set - convert to strings
-                let num_strings: Vec<Value> = arr
-                    .iter()
-                    .map(|v| Value::String(v.as_number().unwrap().to_string()))
-                    .collect();
-                let mut map = Map::new();
-                map.insert("NS".to_string(), Value::Array(num_strings));
-                Ok(Value::Object(map))
-            } else {
-                // List
-                let mut items = Vec::new();
-                for item in arr {
-                    items.push(marshall_value(item)?);
-                }
-                let mut map = Map::new();
-                map.insert("L".to_string(), Value::Array(items));
-                Ok(Value::Object(map))
-            }
+            let mut map = Map::new();
+            map.insert("L".to_string(), Value::Array(items));
+            Ok(Value::Object(map))
         }
         Value::Object(obj) => {
             let mut map = Map::new();
