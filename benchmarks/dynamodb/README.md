@@ -4,16 +4,16 @@ About DynamoDB format: See [`scan_json` DynamoDB example](../../examples/dynamod
 
 Contents:
 
-- `ddb_convert_rust`: reimplementation of the DynamoDB example in Rust using `json_serde`, mapping json records to memory dictionaries, and transforming dictionaries between formats
-- `ddb_convert_python_noboto`: like `ddb_convert_rust` but in Python
-- `ddb_convert_python`: using `boto3.dynamodb` library to convert
-- `roundtrip_from_ddb`: start with a fixture in the DynamoDB format, convert it to the normal JSON, then convert again to DynamoDB format, and check that the result is equal to the original JSONs
-- `roundtrip_to_ddb': like `roundtrip_from_ddb`, but for the normal JSON format
+- `ddb_convert_rust`: reimplementation of the DynamoDB example in Rust using `json_serde`, mapping JSON records to memory dictionaries, and transforming dictionaries between formats
+- `ddb_convert_python_noboto`: similar to `ddb_convert_rust` but implemented in Python
+- `ddb_convert_python`: uses the `boto3.dynamodb` library for conversion
+- `roundtrip_from_ddb`: starts with a fixture in the DynamoDB format, converts it to normal JSON, then converts back to DynamoDB format, and checks that the result equals the original JSON
+- `roundtrip_to_ddb`: similar to `roundtrip_from_ddb`, but starts with the normal JSON format
 - `json-eq.sh`: tool to semantically compare JSON files
 
 ## Results
 
-`scan_json' is the fastest, outperforming Python boto version twelve times.
+`scan_json` is the fastest, outperforming the Python boto version by twelve times.
 
 ![performance plot](./transcript/performance_comparison.png)
 
@@ -21,11 +21,11 @@ Contents:
 
 Using:
 
-- AWS instance type: `c6i.large`.
-- Work in the suite `roundtrip_to_ddb`.
+- AWS instance type: `c6i.large`
+- Working in the suite `roundtrip_to_ddb`
 - Yelp academic dataset: download from https://business.yelp.com/data/resources/open-dataset/
 
-Delete existing files in `original-normal`, unpack Yelp jsons there.
+Delete existing files in `original-normal`, unpack Yelp JSONs there.
 
 ```
 $ wc -l original-normal/*.json
@@ -37,7 +37,7 @@ $ wc -l original-normal/*.json
   10169368 total
 ```
 
-Run "make clean" followed by "make check-eq" with a different "CONVTOOL", store the output in a "transcript/log-something" file.
+Run `make clean` followed by `make check-eq` with a different `CONVTOOL`, and store the output in a `transcript/log-something` file.
 
 Summarize logs:
 
@@ -55,7 +55,7 @@ Add file stats:
 ./file_stats.py ......./yelp_academic_dataset_*.json >file_stats.json
 ```
 
-Visualize, and check the stdout that stats make sense:
+Visualize, and check that the stats in stdout make sense:
 
 ```
 ./visualize_performance.py
