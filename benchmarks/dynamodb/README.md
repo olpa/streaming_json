@@ -1,3 +1,7 @@
+# Benchmark based on DynamoDB JSON format conversion
+
+About DynamoDB format: See [`scan_json` DynamoDB example](../../examples/dynamodb).
+
 ## Benchmark transcript
 
 Using:
@@ -41,3 +45,5 @@ Visualize, and check the stdout that stats make sense:
 ```
 ./visualize_performance.py
 ```
+
+Result is in `performance_comparison.png`.
