@@ -1,6 +1,6 @@
 [package]
 name = "ddb_convert"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["Oleg Parashchenko"]
 description = "Fast, streaming JSON converter between DynamoDB and standard JSON formats"

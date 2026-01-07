@@ -40,6 +40,10 @@ struct Args {
     /// in {"Item": {...}} by default. Use this flag to omit the wrapper.
     #[arg(long = "without-item", default_value_t = false)]
     without_item: bool,
+
+    /// Do unbuffered reads and writes
+    #[arg(long = "unbuffered", default_value_t = false)]
+    unbuffered: bool,
 }
 
 /// Helper to create buffers and run conversion from `DynamoDB` JSON to normal JSON
@@ -81,37 +85,42 @@ fn convert_to_ddb<R: embedded_io::Read, W: embedded_io::Write>(
 
 fn main() {
     let args = Args::parse();
+    let buf_size = if args.unbuffered {
+        1usize
+    } else {
+        32 * 1024usize
+    };
 
     let result = match (args.mode, args.input, args.output) {
         (ConversionMode::FromDdb, Some(input_path), Some(output_path)) => {
             let input_file = open_input_file(&input_path);
             let output_file = create_output_file(&output_path);
-            let mut input_reader = FromStd::new(BufReader::new(input_file));
-            let mut output_writer = FromStd::new(BufWriter::new(output_file));
+            let mut input_reader = FromStd::new(BufReader::with_capacity(buf_size, input_file));
+            let mut output_writer = FromStd::new(BufWriter::with_capacity(buf_size, output_file));
             convert_from_ddb(&mut input_reader, &mut output_writer, args.pretty)
         }
         (ConversionMode::FromDdb, Some(input_path), None) => {
             let input_file = open_input_file(&input_path);
-            let mut input_reader = FromStd::new(BufReader::new(input_file));
-            let mut output_writer = FromStd::new(BufWriter::new(io::stdout()));
+            let mut input_reader = FromStd::new(BufReader::with_capacity(buf_size, input_file));
+            let mut output_writer = FromStd::new(BufWriter::with_capacity(buf_size, io::stdout()));
             convert_from_ddb(&mut input_reader, &mut output_writer, args.pretty)
         }
         (ConversionMode::FromDdb, None, Some(output_path)) => {
             let output_file = create_output_file(&output_path);
-            let mut input_reader = FromStd::new(BufReader::new(io::stdin()));
-            let mut output_writer = FromStd::new(BufWriter::new(output_file));
+            let mut input_reader = FromStd::new(BufReader::with_capacity(buf_size, io::stdin()));
+            let mut output_writer = FromStd::new(BufWriter::with_capacity(buf_size, output_file));
             convert_from_ddb(&mut input_reader, &mut output_writer, args.pretty)
         }
         (ConversionMode::FromDdb, None, None) => {
-            let mut input_reader = FromStd::new(BufReader::new(io::stdin()));
-            let mut output_writer = FromStd::new(BufWriter::new(io::stdout()));
+            let mut input_reader = FromStd::new(BufReader::with_capacity(buf_size, io::stdin()));
+            let mut output_writer = FromStd::new(BufWriter::with_capacity(buf_size, io::stdout()));
             convert_from_ddb(&mut input_reader, &mut output_writer, args.pretty)
         }
         (ConversionMode::ToDdb, Some(input_path), Some(output_path)) => {
             let input_file = open_input_file(&input_path);
             let output_file = create_output_file(&output_path);
-            let mut input_reader = FromStd::new(BufReader::new(input_file));
-            let mut output_writer = FromStd::new(BufWriter::new(output_file));
+            let mut input_reader = FromStd::new(BufReader::with_capacity(buf_size, input_file));
+            let mut output_writer = FromStd::new(BufWriter::with_capacity(buf_size, output_file));
             convert_to_ddb(
                 &mut input_reader,
                 &mut output_writer,
@@ -121,8 +130,8 @@ fn main() {
         }
         (ConversionMode::ToDdb, Some(input_path), None) => {
             let input_file = open_input_file(&input_path);
-            let mut input_reader = FromStd::new(BufReader::new(input_file));
-            let mut output_writer = FromStd::new(BufWriter::new(io::stdout()));
+            let mut input_reader = FromStd::new(BufReader::with_capacity(buf_size, input_file));
+            let mut output_writer = FromStd::new(BufWriter::with_capacity(buf_size, io::stdout()));
             convert_to_ddb(
                 &mut input_reader,
                 &mut output_writer,
@@ -132,8 +141,8 @@ fn main() {
         }
         (ConversionMode::ToDdb, None, Some(output_path)) => {
             let output_file = create_output_file(&output_path);
-            let mut input_reader = FromStd::new(BufReader::new(io::stdin()));
-            let mut output_writer = FromStd::new(BufWriter::new(output_file));
+            let mut input_reader = FromStd::new(BufReader::with_capacity(buf_size, io::stdin()));
+            let mut output_writer = FromStd::new(BufWriter::with_capacity(buf_size, output_file));
             convert_to_ddb(
                 &mut input_reader,
                 &mut output_writer,
@@ -142,8 +151,8 @@ fn main() {
             )
         }
         (ConversionMode::ToDdb, None, None) => {
-            let mut input_reader = FromStd::new(BufReader::new(io::stdin()));
-            let mut output_writer = FromStd::new(BufWriter::new(io::stdout()));
+            let mut input_reader = FromStd::new(BufReader::with_capacity(buf_size, io::stdin()));
+            let mut output_writer = FromStd::new(BufWriter::with_capacity(buf_size, io::stdout()));
             convert_to_ddb(
                 &mut input_reader,
                 &mut output_writer,
