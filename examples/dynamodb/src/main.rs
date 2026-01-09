@@ -86,7 +86,7 @@ fn convert_to_ddb<R: embedded_io::Read, W: embedded_io::Write>(
 fn main() {
     let args = Args::parse();
     let buf_size = if args.unbuffered {
-        1usize
+        0usize
     } else {
         32 * 1024usize
     };
