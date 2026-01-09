@@ -85,27 +85,30 @@ fn convert_to_ddb<R: embedded_io::Read, W: embedded_io::Write>(
 
 fn main() {
     let args = Args::parse();
-    let buf_size = if args.unbuffered {
-        0usize
-    } else {
-        32 * 1024usize
-    };
 
     let mut input_reader: Box<dyn embedded_io::Read<Error = std::io::Error>> = {
-        if let Some(input_path) = &args.input {
-            let input_file = open_input_file(input_path);
-            Box::new(FromStd::new(BufReader::with_capacity(buf_size, input_file)))
+        let input_channel: Box<dyn io::Read> = if let Some(input_path) = &args.input {
+            Box::new(open_input_file(input_path))
         } else {
-            Box::new(FromStd::new(BufReader::with_capacity(buf_size, io::stdin())))
+            Box::new(io::stdin())
+        };
+        if args.unbuffered {
+            Box::new(FromStd::new(input_channel))
+        } else {
+            Box::new(FromStd::new(BufReader::new(input_channel)))
         }
     };
 
     let mut output_writer: Box<dyn embedded_io::Write<Error = std::io::Error>> = {
-        if let Some(output_path) = &args.output {
-            let output_file = create_output_file(output_path);
-            Box::new(FromStd::new(BufWriter::with_capacity(buf_size, output_file)))
+        let output_channel: Box<dyn io::Write> = if let Some(output_path) = &args.output {
+            Box::new(create_output_file(output_path))
         } else {
-            Box::new(FromStd::new(BufWriter::with_capacity(buf_size, io::stdout())))
+            Box::new(io::stdout())
+        };
+        if args.unbuffered {
+            Box::new(FromStd::new(output_channel))
+        } else {
+            Box::new(FromStd::new(BufWriter::new(output_channel)))
         }
     };
 
