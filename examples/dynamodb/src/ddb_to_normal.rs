@@ -7,6 +7,9 @@ use scan_json::matcher::StructuralPseudoname;
 use scan_json::stack::ContextIter;
 use scan_json::{scan, Action, EndAction, Options, StreamOp};
 use u8pool::U8Pool;
+use std::io::Write as StdWrite;
+use std::string::String;
+use std::time::SystemTime;
 
 /// Parse error without position information (used internally before position is known)
 #[derive(Debug, Clone)]
@@ -167,7 +170,21 @@ impl<'a, W: IoWrite> DdbConverter<'a, '_, W> {
     }
 
     fn write(&mut self, bytes: &[u8]) {
+        // Debug logging
+        if let Ok(duration) = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
+            let millis = duration.as_millis();
+            let escaped = String::from_utf8_lossy(bytes).replace('\n', "\\n");
+            if let Ok(mut file) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open("x.timings")
+            {
+                let _ = writeln!(file, "{} {}", millis, escaped);
+            }
+        }
+
         let _ = self.writer.write_all(bytes);
+        self.writer.flush().unwrap(); // FIXME
     }
 
     fn write_comma_if_pending(&mut self) {
@@ -257,6 +274,19 @@ fn write_string_value<R: embedded_io::Read, W: IoWrite>(
     if with_quotes {
         conv.write(b"\"");
     }
+
+    // Debug logging for write_long_bytes
+    if let Ok(duration) = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
+        let millis = duration.as_millis();
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open("x.timings")
+        {
+            let _ = writeln!(file, "{} <write_long_bytes>", millis);
+        }
+    }
+
     if let Err(e) = rjiter.write_long_bytes(conv.writer) {
         let position = rjiter.current_index();
         conv.store_rjiter_error(e, position, write_context);
