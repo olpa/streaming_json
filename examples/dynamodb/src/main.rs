@@ -103,22 +103,27 @@ fn main() {
         }
     };
 
+    let mut input_reader: Box<dyn embedded_io::Read<Error = std::io::Error>> = {
+        if let Some(input_path) = &args.input {
+            let input_file = open_input_file(input_path);
+            Box::new(FromStd::new(BufReader::with_capacity(buf_size, input_file)))
+        } else {
+            Box::new(FromStd::new(BufReader::with_capacity(buf_size, io::stdin())))
+        }
+    };
+
     let mut output_writer: Box<dyn embedded_io::Write<Error = std::io::Error>> = {
-        let output_channel: Box<dyn io::Write> = if let Some(output_path) = &args.output {
-            Box::new(create_output_file(output_path))
+        if let Some(output_path) = &args.output {
+            let output_file = create_output_file(output_path);
+            Box::new(FromStd::new(BufWriter::with_capacity(buf_size, output_file)))
         } else {
-            Box::new(io::stdout())
-        };
-        if args.unbuffered {
-            Box::new(FromStd::new(output_channel))
-        } else {
-            Box::new(FromStd::new(BufWriter::new(output_channel)))
+            Box::new(FromStd::new(BufWriter::with_capacity(buf_size, io::stdout())))
         }
     };
 
     let result = match args.mode {
         ConversionMode::FromDdb => {
-            convert_from_ddb(&mut input_reader, &mut output_writer, args.pretty, args.unbuffered)
+            convert_from_ddb(&mut input_reader, &mut output_writer, args.pretty)
         }
         ConversionMode::ToDdb => {
             convert_to_ddb(
