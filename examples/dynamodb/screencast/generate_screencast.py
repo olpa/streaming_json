@@ -75,12 +75,6 @@ def run_tmux_session():
         print(f"Error: {example_json} not found")
         sys.exit(1)
 
-    # Create named pipe
-    pipe_path = parent_dir / "example.pipe"
-    if pipe_path.exists():
-        pipe_path.unlink()
-    os.mkfifo(str(pipe_path))
-
     try:
         gen = ScreencastGenerator(width=80, height=24)
 
@@ -143,7 +137,7 @@ def run_tmux_session():
 
         gen.wait(0.3)
 
-        # Start both processes
+        # Start Docker process
         print("Starting Docker process in left pane...")
         docker_process = subprocess.Popen(
             ["docker", "run", "--rm", "-i", "olpa/ddb_convert",
@@ -151,38 +145,40 @@ def run_tmux_session():
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            bufsize=0,  # Unbuffered
             cwd=str(parent_dir)
         )
 
-        print("Starting pv process in right pane...")
-        pv_process = subprocess.Popen(
-            ["pv", "-qL", "20", str(example_json)],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            cwd=str(parent_dir)
-        )
+        # Read the JSON file content
+        print(f"Reading {example_json}...")
+        with open(example_json, 'r') as f:
+            json_content = f.read()
 
-        # Read from pv and feed to docker while capturing outputs
+        # Setup for feeding data at 20 chars/second
+        chars_per_second = 20
+        delay_per_char = 1.0 / chars_per_second
+
         left_line = left_output_line
         right_line = right_output_line
-
         left_col = 1
         right_col = 41
 
-        print("Processing data through pipe...")
+        print(f"Feeding data at {chars_per_second} chars/second (unbuffered)...")
 
-        # Read pv output and display in both panes
-        while True:
-            chunk = pv_process.stdout.read(1)
-            if not chunk:
-                break
+        # Feed data character by character at 20 chars/second
+        import select
+        import fcntl
 
-            # Send to docker
-            docker_process.stdin.write(chunk)
+        # Set docker stdout to non-blocking
+        flags = fcntl.fcntl(docker_process.stdout, fcntl.F_GETFL)
+        fcntl.fcntl(docker_process.stdout, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+
+        for char in json_content:
+            # Send to docker (unbuffered)
+            docker_process.stdin.write(char.encode('utf-8'))
             docker_process.stdin.flush()
 
             # Display in right pane
-            char = chunk.decode('utf-8', errors='replace')
             if char == '\n':
                 right_line += 1
                 right_col = 41
@@ -190,35 +186,43 @@ def run_tmux_session():
                     # Scroll right pane
                     right_line = 21
             else:
-                if right_col < 79:
+                if right_col <= 79:
                     gen.add_output(f"\x1b[{right_line};{right_col}H{char}", 0.001)
                     right_col += 1
 
-            # Check for docker output
+            # Check for docker output (non-blocking)
             try:
-                import select
                 ready, _, _ = select.select([docker_process.stdout], [], [], 0)
                 if ready:
-                    output_chunk = docker_process.stdout.read(1)
-                    if output_chunk:
-                        out_char = output_chunk.decode('utf-8', errors='replace')
-                        if out_char == '\n':
-                            left_line += 1
-                            left_col = 1
-                            if left_line >= 22:
-                                left_line = 21
-                        else:
-                            if left_col < 39:
-                                gen.add_output(f"\x1b[{left_line};{left_col}H{out_char}", 0.001)
-                                left_col += 1
+                    output_data = docker_process.stdout.read()
+                    if output_data:
+                        output_str = output_data.decode('utf-8', errors='replace')
+                        for out_char in output_str:
+                            if out_char == '\n':
+                                left_line += 1
+                                left_col = 1
+                                if left_line >= 22:
+                                    left_line = 21
+                            else:
+                                if left_col < 40:
+                                    gen.add_output(f"\x1b[{left_line};{left_col}H{out_char}", 0.001)
+                                    left_col += 1
             except:
                 pass
+
+            # Delay to achieve 20 chars/second
+            time.sleep(delay_per_char)
 
         # Close docker stdin
         docker_process.stdin.close()
 
         # Get remaining docker output
         print("Collecting remaining Docker output...")
+        time.sleep(0.5)  # Give docker time to finish processing
+
+        # Set back to blocking for final read
+        fcntl.fcntl(docker_process.stdout, fcntl.F_SETFL, flags)
+
         remaining = docker_process.stdout.read().decode('utf-8', errors='replace')
         for char in remaining:
             if char == '\n':
@@ -228,15 +232,14 @@ def run_tmux_session():
                     # Scroll
                     left_line = 21
             else:
-                if left_col < 39:
+                if left_col < 40:
                     gen.add_output(f"\x1b[{left_line};{left_col}H{char}", 0.001)
                     left_col += 1
-                    if left_col >= 39:
+                    if left_col >= 40:
                         left_line += 1
                         left_col = 1
 
-        # Wait for processes to complete
-        pv_process.wait()
+        # Wait for process to complete
         docker_process.wait()
 
         gen.wait(1.0)
@@ -253,9 +256,7 @@ def run_tmux_session():
         return 0
 
     finally:
-        # Cleanup pipe
-        if pipe_path.exists():
-            pipe_path.unlink()
+        pass  # No pipe cleanup needed
 
 if __name__ == "__main__":
     try:
