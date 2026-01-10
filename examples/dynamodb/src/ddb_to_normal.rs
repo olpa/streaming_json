@@ -92,6 +92,7 @@ pub struct DdbConverter<'a, 'workbuf, W: IoWrite> {
     writer: &'a mut W,
     pending_comma: bool,
     pretty: bool,
+    unbuffered: bool,
     output_depth: usize, // JSON output nesting depth (for pretty-printing indentation and root level detection)
     current_field: Option<&'workbuf [u8]>,
     item_wrapper_mode: ItemWrapperMode, // How to handle "Item" key at top level
@@ -103,11 +104,12 @@ pub struct DdbConverter<'a, 'workbuf, W: IoWrite> {
 }
 
 impl<'a, W: IoWrite> DdbConverter<'a, '_, W> {
-    fn new(writer: &'a mut W, pretty: bool, item_wrapper_mode: ItemWrapperMode) -> Self {
+    fn new(writer: &'a mut W, pretty: bool, unbuffered: bool, item_wrapper_mode: ItemWrapperMode) -> Self {
         Self {
             writer,
             pending_comma: false,
             pretty,
+            unbuffered,
             output_depth: 0,
             current_field: None,
             item_wrapper_mode,
@@ -168,6 +170,9 @@ impl<'a, W: IoWrite> DdbConverter<'a, '_, W> {
 
     fn write(&mut self, bytes: &[u8]) {
         let _ = self.writer.write_all(bytes);
+        if self.unbuffered {
+            let _ = self.writer.flush();
+        }
     }
 
     fn write_comma_if_pending(&mut self) {
@@ -908,6 +913,7 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
 /// * `rjiter_buffer` - Buffer for rjiter to use (recommended: 4096 bytes)
 /// * `context_buffer` - Buffer for `scan_json` context tracking (recommended: 2048 bytes)
 /// * `pretty` - Whether to pretty-print the output
+/// * `unbuffered` - Whether to flush after every write
 /// * `item_wrapper_mode` - How to handle "Item" key at top level (`AsWrapper` or `AsField`)
 ///
 /// # Errors
@@ -925,11 +931,12 @@ pub fn convert_ddb_to_normal<R: IoRead, W: IoWrite>(
     rjiter_buffer: &mut [u8],
     context_buffer: &mut [u8],
     pretty: bool,
+    unbuffered: bool,
     item_wrapper_mode: ItemWrapperMode,
 ) -> Result<(), ConversionError> {
     let mut rjiter = RJiter::new(reader, rjiter_buffer);
 
-    let converter = DdbConverter::new(writer, pretty, item_wrapper_mode);
+    let converter = DdbConverter::new(writer, pretty, unbuffered, item_wrapper_mode);
     let baton = RefCell::new(converter);
 
     // DynamoDB supports up to 32 levels of nesting in the original data.

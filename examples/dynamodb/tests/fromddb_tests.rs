@@ -26,6 +26,7 @@ fn convert_test_with_mode(
         &mut rjiter_buffer,
         &mut context_buffer,
         pretty,
+        false,
         mode,
     )
     .unwrap();
@@ -449,6 +450,7 @@ fn test_error_incomplete_json() {
         &mut output_slice,
         &mut rjiter_buffer,
         &mut context_buffer,
+        false,
         false,
         ddb_convert::ItemWrapperMode::AsWrapper,
     );

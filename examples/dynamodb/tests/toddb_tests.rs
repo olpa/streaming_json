@@ -21,6 +21,7 @@ fn convert_to_ddb_test_with_pretty(
         &mut rjiter_buffer,
         &mut context_buffer,
         pretty,
+        false,
         with_item_wrapper,
     )
     .unwrap();
@@ -301,6 +302,7 @@ fn test_roundtrip_int_like_float() {
         &mut rjiter_buffer,
         &mut context_buffer,
         false,
+        false,
         ddb_convert::ItemWrapperMode::AsWrapper,
     )
     .unwrap();
@@ -359,6 +361,7 @@ fn test_roundtrip_various_int_like_floats() {
             &mut output_slice,
             &mut rjiter_buffer,
             &mut context_buffer,
+            false,
             false,
             ddb_convert::ItemWrapperMode::AsWrapper,
         )
@@ -506,6 +509,7 @@ fn test_error_incomplete_json_to_ddb() {
         &mut output_slice,
         &mut rjiter_buffer,
         &mut context_buffer,
+        false,
         false,
         true,
     );

@@ -12,17 +12,19 @@ pub struct NormalToDdbConverter<'a, 'workbuf, W: IoWrite> {
     writer: &'a mut W,
     pending_comma: bool,
     with_item_wrapper: bool,
+    unbuffered: bool,
     current_field: Option<&'workbuf [u8]>,
     pretty: bool,
     depth: usize,
 }
 
 impl<'a, W: IoWrite> NormalToDdbConverter<'a, '_, W> {
-    fn new(writer: &'a mut W, with_item_wrapper: bool, pretty: bool) -> Self {
+    fn new(writer: &'a mut W, with_item_wrapper: bool, pretty: bool, unbuffered: bool) -> Self {
         Self {
             writer,
             pending_comma: false,
             with_item_wrapper,
+            unbuffered,
             current_field: None,
             pretty,
             depth: 0,
@@ -31,6 +33,9 @@ impl<'a, W: IoWrite> NormalToDdbConverter<'a, '_, W> {
 
     fn write(&mut self, bytes: &[u8]) {
         let _ = self.writer.write_all(bytes);
+        if self.unbuffered {
+            let _ = self.writer.flush();
+        }
     }
 
     fn write_comma(&mut self) {
@@ -563,6 +568,7 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
 /// * `rjiter_buffer` - Buffer for rjiter to use (recommended: 4096 bytes)
 /// * `context_buffer` - Buffer for `scan_json` context tracking (recommended: 2048 bytes)
 /// * `pretty` - Whether to pretty-print the output (currently unused, may be added later)
+/// * `unbuffered` - Whether to flush after every write
 /// * `with_item_wrapper` - Whether to wrap the output in an "Item" key
 ///
 /// # Errors
@@ -580,11 +586,12 @@ pub fn convert_normal_to_ddb<R: IoRead, W: IoWrite>(
     rjiter_buffer: &mut [u8],
     context_buffer: &mut [u8],
     pretty: bool,
+    unbuffered: bool,
     with_item_wrapper: bool,
 ) -> Result<(), ConversionError> {
     let mut rjiter = RJiter::new(reader, rjiter_buffer);
 
-    let converter = NormalToDdbConverter::new(writer, with_item_wrapper, pretty);
+    let converter = NormalToDdbConverter::new(writer, with_item_wrapper, pretty, unbuffered);
     let baton = RefCell::new(converter);
 
     // DynamoDB supports up to 32 levels of nesting.

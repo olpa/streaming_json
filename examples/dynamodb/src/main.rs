@@ -51,6 +51,7 @@ fn convert_from_ddb<R: embedded_io::Read, W: embedded_io::Write>(
     input_reader: &mut R,
     output_writer: &mut W,
     pretty: bool,
+    unbuffered: bool,
 ) -> Result<(), ConversionError> {
     let mut rjiter_buffer = vec![0u8; 64 * 1024];
     let mut context_buffer = vec![0u8; 2048];
@@ -60,6 +61,7 @@ fn convert_from_ddb<R: embedded_io::Read, W: embedded_io::Write>(
         &mut rjiter_buffer,
         &mut context_buffer,
         pretty,
+        unbuffered,
         ddb_convert::ItemWrapperMode::AsWrapper,
     )
 }
@@ -69,6 +71,7 @@ fn convert_to_ddb<R: embedded_io::Read, W: embedded_io::Write>(
     input_reader: &mut R,
     output_writer: &mut W,
     pretty: bool,
+    unbuffered: bool,
     with_item_wrapper: bool,
 ) -> Result<(), ConversionError> {
     let mut rjiter_buffer = vec![0u8; 64 * 1024];
@@ -79,6 +82,7 @@ fn convert_to_ddb<R: embedded_io::Read, W: embedded_io::Write>(
         &mut rjiter_buffer,
         &mut context_buffer,
         pretty,
+        unbuffered,
         with_item_wrapper,
     )
 }
@@ -114,13 +118,14 @@ fn main() {
 
     let result = match args.mode {
         ConversionMode::FromDdb => {
-            convert_from_ddb(&mut input_reader, &mut output_writer, args.pretty)
+            convert_from_ddb(&mut input_reader, &mut output_writer, args.pretty, args.unbuffered)
         }
         ConversionMode::ToDdb => {
             convert_to_ddb(
                 &mut input_reader,
                 &mut output_writer,
                 args.pretty,
+                args.unbuffered,
                 !args.without_item,
             )
         }
