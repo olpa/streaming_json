@@ -1,6 +1,6 @@
 use crate::ConversionError;
 use core::cell::RefCell;
-use embedded_io::{Read as IoRead, Write as IoWrite};
+use embedded_io::{Error as IoError, Read as IoRead, Write as IoWrite};
 use rjiter::jiter::Peek;
 use rjiter::RJiter;
 use scan_json::matcher::StructuralPseudoname;
@@ -16,6 +16,7 @@ pub struct NormalToDdbConverter<'a, 'workbuf, W: IoWrite> {
     current_field: Option<&'workbuf [u8]>,
     pretty: bool,
     depth: usize,
+    last_error: Option<ConversionError>,
 }
 
 impl<'a, W: IoWrite> NormalToDdbConverter<'a, '_, W> {
@@ -28,57 +29,107 @@ impl<'a, W: IoWrite> NormalToDdbConverter<'a, '_, W> {
             current_field: None,
             pretty,
             depth: 0,
+            last_error: None,
         }
     }
 
-    fn write(&mut self, bytes: &[u8]) {
-        let _ = self.writer.write_all(bytes);
+    fn store_io_error(
+        &mut self,
+        kind: embedded_io::ErrorKind,
+        position: usize,
+        context: &'static str,
+    ) {
+        self.last_error = Some(ConversionError::IOError {
+            kind,
+            position,
+            context,
+        });
+    }
+
+    fn write(&mut self, bytes: &[u8]) -> Result<(), embedded_io::ErrorKind> {
+        self.writer.write_all(bytes).map_err(|e| e.kind())?;
         if self.unbuffered {
-            let _ = self.writer.flush();
+            self.writer.flush().map_err(|e| e.kind())?;
+        }
+        Ok(())
+    }
+
+    /// Helper that writes and stores error if write fails
+    fn try_write(&mut self, bytes: &[u8], position: usize, context: &'static str) -> bool {
+        if let Err(kind) = self.write(bytes) {
+            self.store_io_error(kind, position, context);
+            false
+        } else {
+            true
         }
     }
 
-    fn write_comma(&mut self) {
+    fn write_comma(&mut self, position: usize) -> bool {
         if self.pending_comma {
-            self.write(b",");
-            self.newline();
+            if !self.try_write(b",", position, "writing comma") {
+                return false;
+            }
+            if !self.newline(position) {
+                return false;
+            }
             self.pending_comma = false;
         }
+        true
     }
 
-    fn newline(&mut self) {
+    fn newline(&mut self, position: usize) -> bool {
         if self.pretty {
-            self.write(b"\n");
+            self.try_write(b"\n", position, "writing newline")
+        } else {
+            true
         }
     }
 
-    fn indent(&mut self) {
+    fn indent(&mut self, position: usize) -> bool {
         if self.pretty {
             for _ in 0..self.depth {
-                self.write(b"  ");
+                if !self.try_write(b"  ", position, "writing indentation") {
+                    return false;
+                }
             }
         }
+        true
     }
 }
 
 type NormalToDdbBaton<'a, 'workbuf, W> = &'a RefCell<NormalToDdbConverter<'a, 'workbuf, W>>;
 
 fn on_root_object_begin<R: embedded_io::Read, W: IoWrite>(
-    _rjiter: &mut RJiter<R>,
+    rjiter: &mut RJiter<R>,
     baton: NormalToDdbBaton<'_, '_, W>,
 ) -> StreamOp {
     let mut conv = baton.borrow_mut();
+    let position = rjiter.current_index();
     if conv.with_item_wrapper {
-        conv.write(b"{");
-        conv.newline();
+        if !conv.try_write(b"{", position, "writing root object opening brace") {
+            return StreamOp::Error("Failed to write opening brace");
+        }
+        if !conv.newline(position) {
+            return StreamOp::Error("Failed to write newline");
+        }
         conv.depth += 1;
-        conv.indent();
-        conv.write(b"\"Item\":{");
-        conv.newline();
+        if !conv.indent(position) {
+            return StreamOp::Error("Failed to write indentation");
+        }
+        if !conv.try_write(b"\"Item\":{", position, "writing Item wrapper") {
+            return StreamOp::Error("Failed to write Item wrapper");
+        }
+        if !conv.newline(position) {
+            return StreamOp::Error("Failed to write newline");
+        }
         conv.depth += 1;
     } else {
-        conv.write(b"{");
-        conv.newline();
+        if !conv.try_write(b"{", position, "writing root object opening brace") {
+            return StreamOp::Error("Failed to write opening brace");
+        }
+        if !conv.newline(position) {
+            return StreamOp::Error("Failed to write newline");
+        }
         conv.depth += 1;
     }
     conv.pending_comma = false;
@@ -93,14 +144,20 @@ fn on_root_literal<R: embedded_io::Read, W: IoWrite>(
     // Write opening { and increment depth, then delegate to atom handler
     {
         let mut conv = baton.borrow_mut();
-        conv.write(b"{");
+        let position = rjiter.current_index();
+        if !conv.try_write(b"{", position, "writing root literal opening brace") {
+            return StreamOp::Error("Failed to write opening brace");
+        }
         conv.depth += 1;
     }
     let result = on_atom_value_toddb(rjiter, baton);
     // Atom handlers close the } and set pending_comma, but for root we need final newline
     {
         let mut conv = baton.borrow_mut();
-        conv.write(b"\n");
+        let position = rjiter.current_index();
+        if !conv.try_write(b"\n", position, "writing final newline") {
+            return StreamOp::Error("Failed to write final newline");
+        }
         conv.pending_comma = false;
     }
     result
@@ -112,8 +169,13 @@ fn on_root_array<R: embedded_io::Read, W: IoWrite>(
 ) -> StreamOp {
     // Root-level array: write opening { and increment depth, then delegate
     let mut conv = baton.borrow_mut();
-    conv.write(b"{");
-    conv.newline();
+    let position = rjiter.current_index();
+    if !conv.try_write(b"{", position, "writing root array opening brace") {
+        return StreamOp::Error("Failed to write opening brace");
+    }
+    if !conv.newline(position) {
+        return StreamOp::Error("Failed to write newline");
+    }
     conv.depth += 1;
     drop(conv);
     on_array_begin_toddb(rjiter, baton)
@@ -123,24 +185,39 @@ fn on_root_array_end<W: IoWrite>(baton: NormalToDdbBaton<'_, '_, W>) -> Result<(
     // Close root-level array: write ]} and newline
     on_array_end_toddb(baton)?;
     let mut conv = baton.borrow_mut();
-    conv.write(b"\n");
+    if !conv.try_write(b"\n", 0, "writing final newline") {
+        return Err("Failed to write final newline");
+    }
     Ok(())
 }
 
 fn on_field_key<R: embedded_io::Read, W: IoWrite>(
-    _rjiter: &mut RJiter<R>,
+    rjiter: &mut RJiter<R>,
     baton: NormalToDdbBaton<'_, '_, W>,
 ) -> StreamOp {
     let mut conv = baton.borrow_mut();
     let Some(field_name) = conv.current_field else {
         return StreamOp::Error("Internal error: current_field not set (impossible)");
     };
-    conv.write_comma();
-    conv.indent();
-    conv.write(b"\"");
-    conv.write(field_name);
-    conv.write(b"\":{");
-    conv.newline();
+    let position = rjiter.current_index();
+    if !conv.write_comma(position) {
+        return StreamOp::Error("Failed to write comma");
+    }
+    if !conv.indent(position) {
+        return StreamOp::Error("Failed to write indentation");
+    }
+    if !conv.try_write(b"\"", position, "writing field name opening quote") {
+        return StreamOp::Error("Failed to write quote");
+    }
+    if !conv.try_write(field_name, position, "writing field name") {
+        return StreamOp::Error("Failed to write field name");
+    }
+    if !conv.try_write(b"\":{", position, "writing field name closing quote and colon") {
+        return StreamOp::Error("Failed to write quote and colon");
+    }
+    if !conv.newline(position) {
+        return StreamOp::Error("Failed to write newline");
+    }
     conv.depth += 1;
     conv.pending_comma = false;
     StreamOp::None
@@ -151,14 +228,29 @@ fn on_string_value_toddb<R: embedded_io::Read, W: IoWrite>(
     baton: NormalToDdbBaton<'_, '_, W>,
 ) -> StreamOp {
     let mut conv = baton.borrow_mut();
-    conv.indent();
-    conv.write(b"\"S\":\"");
-    let _ = rjiter.write_long_bytes(conv.writer);
-    conv.write(b"\"");
-    conv.newline();
+    let position = rjiter.current_index();
+    if !conv.indent(position) {
+        return StreamOp::Error("Failed to write indentation");
+    }
+    if !conv.try_write(b"\"S\":\"", position, "writing S type opening") {
+        return StreamOp::Error("Failed to write S type opening");
+    }
+    if let Err(_) = rjiter.write_long_bytes(conv.writer) {
+        return StreamOp::Error("Failed to write string value");
+    }
+    if !conv.try_write(b"\"", position, "writing S type closing quote") {
+        return StreamOp::Error("Failed to write closing quote");
+    }
+    if !conv.newline(position) {
+        return StreamOp::Error("Failed to write newline");
+    }
     conv.depth -= 1;
-    conv.indent();
-    conv.write(b"}");
+    if !conv.indent(position) {
+        return StreamOp::Error("Failed to write indentation");
+    }
+    if !conv.try_write(b"}", position, "writing closing brace") {
+        return StreamOp::Error("Failed to write closing brace");
+    }
     conv.pending_comma = true;
     StreamOp::ValueIsConsumed
 }
@@ -172,22 +264,35 @@ fn on_bool_value_toddb<R: embedded_io::Read, W: IoWrite>(
     };
 
     let mut conv = baton.borrow_mut();
-    conv.indent();
+    let position = rjiter.current_index();
+    if !conv.indent(position) {
+        return StreamOp::Error("Failed to write indentation");
+    }
     match peek {
         Peek::True => {
             let _ = rjiter.known_bool(peek);
-            conv.write(b"\"BOOL\":true");
+            if !conv.try_write(b"\"BOOL\":true", position, "writing BOOL true") {
+                return StreamOp::Error("Failed to write BOOL true");
+            }
         }
         Peek::False => {
             let _ = rjiter.known_bool(peek);
-            conv.write(b"\"BOOL\":false");
+            if !conv.try_write(b"\"BOOL\":false", position, "writing BOOL false") {
+                return StreamOp::Error("Failed to write BOOL false");
+            }
         }
         _ => return StreamOp::Error("Expected boolean value"),
     }
-    conv.newline();
+    if !conv.newline(position) {
+        return StreamOp::Error("Failed to write newline");
+    }
     conv.depth -= 1;
-    conv.indent();
-    conv.write(b"}");
+    if !conv.indent(position) {
+        return StreamOp::Error("Failed to write indentation");
+    }
+    if !conv.try_write(b"}", position, "writing closing brace") {
+        return StreamOp::Error("Failed to write closing brace");
+    }
     conv.pending_comma = true;
     StreamOp::ValueIsConsumed
 }
@@ -205,12 +310,23 @@ fn on_null_value_toddb<R: embedded_io::Read, W: IoWrite>(
     let _ = rjiter.known_null();
 
     let mut conv = baton.borrow_mut();
-    conv.indent();
-    conv.write(b"\"NULL\":true");
-    conv.newline();
+    let position = rjiter.current_index();
+    if !conv.indent(position) {
+        return StreamOp::Error("Failed to write indentation");
+    }
+    if !conv.try_write(b"\"NULL\":true", position, "writing NULL type") {
+        return StreamOp::Error("Failed to write NULL type");
+    }
+    if !conv.newline(position) {
+        return StreamOp::Error("Failed to write newline");
+    }
     conv.depth -= 1;
-    conv.indent();
-    conv.write(b"}");
+    if !conv.indent(position) {
+        return StreamOp::Error("Failed to write indentation");
+    }
+    if !conv.try_write(b"}", position, "writing closing brace") {
+        return StreamOp::Error("Failed to write closing brace");
+    }
     conv.pending_comma = true;
     StreamOp::ValueIsConsumed
 }
@@ -223,7 +339,10 @@ fn on_atom_value_toddb<R: embedded_io::Read, W: IoWrite>(
     // The opening { is written here, closing } is written by type handlers
     {
         let mut conv = baton.borrow_mut();
-        conv.write_comma();
+        let position = rjiter.current_index();
+        if !conv.write_comma(position) {
+            return StreamOp::Error("Failed to write comma");
+        }
         // Note: field handlers already wrote the opening {, so we don't write it for field values
         // But for array elements, we need it
     }
@@ -241,19 +360,34 @@ fn on_atom_value_toddb<R: embedded_io::Read, W: IoWrite>(
         _ => {
             // Use next_number_bytes to preserve the exact string representation
             // This ensures "4.0" stays as "4.0" and doesn't become "4"
+            let position = rjiter.current_index();
             let Ok(number_bytes) = rjiter.next_number_bytes() else {
                 return StreamOp::Error("Failed to parse number");
             };
 
             let mut conv = baton.borrow_mut();
-            conv.indent();
-            conv.write(b"\"N\":\"");
-            conv.write(number_bytes);
-            conv.write(b"\"");
-            conv.newline();
+            if !conv.indent(position) {
+                return StreamOp::Error("Failed to write indentation");
+            }
+            if !conv.try_write(b"\"N\":\"", position, "writing N type opening") {
+                return StreamOp::Error("Failed to write N type opening");
+            }
+            if !conv.try_write(number_bytes, position, "writing number value") {
+                return StreamOp::Error("Failed to write number value");
+            }
+            if !conv.try_write(b"\"", position, "writing N type closing quote") {
+                return StreamOp::Error("Failed to write closing quote");
+            }
+            if !conv.newline(position) {
+                return StreamOp::Error("Failed to write newline");
+            }
             conv.depth -= 1;
-            conv.indent();
-            conv.write(b"}");
+            if !conv.indent(position) {
+                return StreamOp::Error("Failed to write indentation");
+            }
+            if !conv.try_write(b"}", position, "writing closing brace") {
+                return StreamOp::Error("Failed to write closing brace");
+            }
             conv.pending_comma = true;
             StreamOp::ValueIsConsumed
         }
@@ -261,13 +395,20 @@ fn on_atom_value_toddb<R: embedded_io::Read, W: IoWrite>(
 }
 
 fn on_array_begin_toddb<R: embedded_io::Read, W: IoWrite>(
-    _rjiter: &mut RJiter<R>,
+    rjiter: &mut RJiter<R>,
     baton: NormalToDdbBaton<'_, '_, W>,
 ) -> StreamOp {
     let mut conv = baton.borrow_mut();
-    conv.indent();
-    conv.write(b"\"L\":[");
-    conv.newline();
+    let position = rjiter.current_index();
+    if !conv.indent(position) {
+        return StreamOp::Error("Failed to write indentation");
+    }
+    if !conv.try_write(b"\"L\":[", position, "writing L type opening") {
+        return StreamOp::Error("Failed to write L type opening");
+    }
+    if !conv.newline(position) {
+        return StreamOp::Error("Failed to write newline");
+    }
     conv.pending_comma = false;
     StreamOp::None
 }
@@ -279,9 +420,16 @@ fn on_array_element_atom<R: embedded_io::Read, W: IoWrite>(
     // Write opening brace for array element type wrapper, then handle the atom value
     {
         let mut conv = baton.borrow_mut();
-        conv.write_comma();
-        conv.write(b"{");
-        conv.newline();
+        let position = rjiter.current_index();
+        if !conv.write_comma(position) {
+            return StreamOp::Error("Failed to write comma");
+        }
+        if !conv.try_write(b"{", position, "writing array element opening brace") {
+            return StreamOp::Error("Failed to write opening brace");
+        }
+        if !conv.newline(position) {
+            return StreamOp::Error("Failed to write newline");
+        }
         conv.depth += 1;
         conv.pending_comma = false;
     }
@@ -296,9 +444,16 @@ fn on_array_element_array<R: embedded_io::Read, W: IoWrite>(
     // Array inside array - write element wrapper and L type
     {
         let mut conv = baton.borrow_mut();
-        conv.write_comma();
-        conv.write(b"{");
-        conv.newline();
+        let position = rjiter.current_index();
+        if !conv.write_comma(position) {
+            return StreamOp::Error("Failed to write comma");
+        }
+        if !conv.try_write(b"{", position, "writing array element opening brace") {
+            return StreamOp::Error("Failed to write opening brace");
+        }
+        if !conv.newline(position) {
+            return StreamOp::Error("Failed to write newline");
+        }
         conv.depth += 1;
         conv.pending_comma = false;
     }
@@ -313,9 +468,16 @@ fn on_array_element_object<R: embedded_io::Read, W: IoWrite>(
     // Object inside array - write element wrapper and M type
     {
         let mut conv = baton.borrow_mut();
-        conv.write_comma();
-        conv.write(b"{");
-        conv.newline();
+        let position = rjiter.current_index();
+        if !conv.write_comma(position) {
+            return StreamOp::Error("Failed to write comma");
+        }
+        if !conv.try_write(b"{", position, "writing array element opening brace") {
+            return StreamOp::Error("Failed to write opening brace");
+        }
+        if !conv.newline(position) {
+            return StreamOp::Error("Failed to write newline");
+        }
         conv.depth += 1;
         conv.pending_comma = false;
     }
@@ -324,13 +486,20 @@ fn on_array_element_object<R: embedded_io::Read, W: IoWrite>(
 }
 
 fn on_nested_object_begin_toddb<R: embedded_io::Read, W: IoWrite>(
-    _rjiter: &mut RJiter<R>,
+    rjiter: &mut RJiter<R>,
     baton: NormalToDdbBaton<'_, '_, W>,
 ) -> StreamOp {
     let mut conv = baton.borrow_mut();
-    conv.indent();
-    conv.write(b"\"M\":{");
-    conv.newline();
+    let position = rjiter.current_index();
+    if !conv.indent(position) {
+        return StreamOp::Error("Failed to write indentation");
+    }
+    if !conv.try_write(b"\"M\":{", position, "writing M type opening") {
+        return StreamOp::Error("Failed to write M type opening");
+    }
+    if !conv.newline(position) {
+        return StreamOp::Error("Failed to write newline");
+    }
     conv.depth += 1;
     conv.pending_comma = false;
     StreamOp::None
@@ -339,19 +508,35 @@ fn on_nested_object_begin_toddb<R: embedded_io::Read, W: IoWrite>(
 #[allow(clippy::unnecessary_wraps)]
 fn on_root_object_end<W: IoWrite>(baton: NormalToDdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     let mut conv = baton.borrow_mut();
-    conv.newline();
-    conv.depth -= 1;
-    conv.indent();
-    if conv.with_item_wrapper {
-        conv.write(b"}");
-        conv.newline();
-        conv.depth -= 1;
-        conv.indent();
-        conv.write(b"}");
-    } else {
-        conv.write(b"}");
+    if !conv.newline(0) {
+        return Err("Failed to write newline");
     }
-    conv.write(b"\n");
+    conv.depth -= 1;
+    if !conv.indent(0) {
+        return Err("Failed to write indentation");
+    }
+    if conv.with_item_wrapper {
+        if !conv.try_write(b"}", 0, "writing root object closing brace") {
+            return Err("Failed to write closing brace");
+        }
+        if !conv.newline(0) {
+            return Err("Failed to write newline");
+        }
+        conv.depth -= 1;
+        if !conv.indent(0) {
+            return Err("Failed to write indentation");
+        }
+        if !conv.try_write(b"}", 0, "writing Item wrapper closing brace") {
+            return Err("Failed to write closing brace");
+        }
+    } else {
+        if !conv.try_write(b"}", 0, "writing root object closing brace") {
+            return Err("Failed to write closing brace");
+        }
+    }
+    if !conv.try_write(b"\n", 0, "writing final newline") {
+        return Err("Failed to write final newline");
+    }
     Ok(())
 }
 
@@ -360,14 +545,26 @@ fn on_nested_object_end<W: IoWrite>(
     baton: NormalToDdbBaton<'_, '_, W>,
 ) -> Result<(), &'static str> {
     let mut conv = baton.borrow_mut();
-    conv.newline();
+    if !conv.newline(0) {
+        return Err("Failed to write newline");
+    }
     conv.depth -= 1;
-    conv.indent();
-    conv.write(b"}");
-    conv.newline();
+    if !conv.indent(0) {
+        return Err("Failed to write indentation");
+    }
+    if !conv.try_write(b"}", 0, "writing M closing brace") {
+        return Err("Failed to write closing brace");
+    }
+    if !conv.newline(0) {
+        return Err("Failed to write newline");
+    }
     conv.depth -= 1;
-    conv.indent();
-    conv.write(b"}");
+    if !conv.indent(0) {
+        return Err("Failed to write indentation");
+    }
+    if !conv.try_write(b"}", 0, "writing element wrapper closing brace") {
+        return Err("Failed to write closing brace");
+    }
     conv.pending_comma = true;
     Ok(())
 }
@@ -375,13 +572,25 @@ fn on_nested_object_end<W: IoWrite>(
 #[allow(clippy::unnecessary_wraps)]
 fn on_array_end_toddb<W: IoWrite>(baton: NormalToDdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     let mut conv = baton.borrow_mut();
-    conv.newline();
-    conv.indent();
-    conv.write(b"]");
-    conv.newline();
+    if !conv.newline(0) {
+        return Err("Failed to write newline");
+    }
+    if !conv.indent(0) {
+        return Err("Failed to write indentation");
+    }
+    if !conv.try_write(b"]", 0, "writing L closing bracket") {
+        return Err("Failed to write closing bracket");
+    }
+    if !conv.newline(0) {
+        return Err("Failed to write newline");
+    }
     conv.depth -= 1;
-    conv.indent();
-    conv.write(b"}");
+    if !conv.indent(0) {
+        return Err("Failed to write indentation");
+    }
+    if !conv.try_write(b"}", 0, "writing element wrapper closing brace") {
+        return Err("Failed to write closing brace");
+    }
     conv.pending_comma = true;
     Ok(())
 }
@@ -402,14 +611,26 @@ fn on_object_in_array_end<W: IoWrite>(
 ) -> Result<(), &'static str> {
     // Close the M object with } and then close the element wrapper with }
     let mut conv = baton.borrow_mut();
-    conv.newline();
+    if !conv.newline(0) {
+        return Err("Failed to write newline");
+    }
     conv.depth -= 1;
-    conv.indent();
-    conv.write(b"}");
-    conv.newline();
+    if !conv.indent(0) {
+        return Err("Failed to write indentation");
+    }
+    if !conv.try_write(b"}", 0, "writing M closing brace") {
+        return Err("Failed to write closing brace");
+    }
+    if !conv.newline(0) {
+        return Err("Failed to write newline");
+    }
     conv.depth -= 1;
-    conv.indent();
-    conv.write(b"}");
+    if !conv.indent(0) {
+        return Err("Failed to write indentation");
+    }
+    if !conv.try_write(b"}", 0, "writing element wrapper closing brace") {
+        return Err("Failed to write closing brace");
+    }
     conv.pending_comma = true;
     Ok(())
 }
@@ -420,13 +641,25 @@ fn on_array_in_array_end<W: IoWrite>(
 ) -> Result<(), &'static str> {
     // Close the L array with ] and the element wrapper with }
     let mut conv = baton.borrow_mut();
-    conv.newline();
-    conv.indent();
-    conv.write(b"]");
-    conv.newline();
+    if !conv.newline(0) {
+        return Err("Failed to write newline");
+    }
+    if !conv.indent(0) {
+        return Err("Failed to write indentation");
+    }
+    if !conv.try_write(b"]", 0, "writing L closing bracket") {
+        return Err("Failed to write closing bracket");
+    }
+    if !conv.newline(0) {
+        return Err("Failed to write newline");
+    }
     conv.depth -= 1;
-    conv.indent();
-    conv.write(b"}");
+    if !conv.indent(0) {
+        return Err("Failed to write indentation");
+    }
+    if !conv.try_write(b"}", 0, "writing element wrapper closing brace") {
+        return Err("Failed to write closing brace");
+    }
     conv.pending_comma = true;
     Ok(())
 }
@@ -604,15 +837,22 @@ pub fn convert_normal_to_ddb<R: IoRead, W: IoWrite>(
         })
     })?;
 
-    scan(
+    if let Err(e) = scan(
         find_action,
         find_end_action,
         &mut rjiter,
         &baton,
         &mut context,
         &Options::new(),
-    )
-    .map_err(ConversionError::ScanError)?;
+    ) {
+        // Check if there's a stored detailed error in the baton
+        let stored_error = baton.borrow().last_error.clone();
+        if let Some(err) = stored_error {
+            return Err(err);
+        }
+        // Otherwise return the scan error
+        return Err(ConversionError::ScanError(e));
+    }
 
     Ok(())
 }
