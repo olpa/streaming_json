@@ -228,6 +228,12 @@ fn on_string_value_toddb<R: embedded_io::Read, W: IoWrite>(
     if let Err(_) = rjiter.write_long_bytes(conv.writer) {
         return StreamOp::Error("Failed to write string value");
     }
+    if conv.unbuffered {
+        if let Err(e) = conv.writer.flush() {
+            conv.store_io_error(e.kind(), position, "flushing after write_long_bytes");
+            return StreamOp::Error("Failed to flush writer");
+        }
+    }
     if let Err(e) = conv.try_write(b"\"", position, "writing S type closing quote") {
         return StreamOp::Error(e);
     }

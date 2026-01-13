@@ -299,6 +299,12 @@ fn write_string_value<R: embedded_io::Read, W: IoWrite>(
         conv.store_rjiter_error(e, position, write_context);
         return StreamOp::Error("Failed to write value");
     }
+    if conv.unbuffered {
+        if let Err(e) = conv.writer.flush() {
+            conv.store_io_error(e.kind(), position, "flushing after write_long_bytes");
+            return StreamOp::Error("Failed to flush writer");
+        }
+    }
     if with_quotes {
         if let Err(e) = conv.try_write(b"\"", position, "writing closing quote") {
             return StreamOp::Error(e);
