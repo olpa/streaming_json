@@ -140,7 +140,7 @@ def run_tmux_session():
         # Start Docker process
         print("Starting Docker process in left pane...")
         docker_process = subprocess.Popen(
-            ["docker", "run", "--rm", "-i", "olpa/ddb_convert",
+            ["./target/release/ddb_convert",
              "--pretty", "--unbuffered", "from-ddb"],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
