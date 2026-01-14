@@ -131,14 +131,6 @@ impl<'a, W: IoWrite> DdbConverter<'a, '_, W> {
         });
     }
 
-    fn store_io_error(&mut self, kind: embedded_io::ErrorKind, context: &'static str) {
-        self.last_error = Some(ConversionError::IOError {
-            kind,
-            position: POSITION_UPDATED_LATER,
-            context,
-        });
-    }
-
     fn store_parse_error(&mut self, context: &'static str, unknown_type_bytes: Option<&[u8]>) {
         let unknown_type = if let Some(bytes) = unknown_type_bytes {
             let len = bytes.len().min(32);
@@ -178,7 +170,11 @@ impl<'a, W: IoWrite> DdbConverter<'a, '_, W> {
     fn try_write_any(&mut self, bytes: &[u8], context: &'static str) -> Result<(), &'static str> {
         self.write(bytes).map_err(|kind| {
             // Store error with sentinel position - scan_json will provide accurate position
-            self.store_io_error(kind, context);
+            self.last_error = Some(ConversionError::IOError {
+                kind,
+                position: POSITION_UPDATED_LATER,
+                context,
+            });
             "Write failed"
         })
     }
@@ -297,7 +293,11 @@ fn write_string_value<R: embedded_io::Read, W: IoWrite>(
     }
     if conv.unbuffered {
         if let Err(e) = conv.writer.flush() {
-            conv.store_io_error(e.kind(), "flushing after write_long_bytes");
+            conv.last_error = Some(ConversionError::IOError {
+                kind: e.kind(),
+                position: POSITION_UPDATED_LATER,
+                context: "flushing after write_long_bytes",
+            });
             return StreamOp::Error("Failed to flush writer");
         }
     }
