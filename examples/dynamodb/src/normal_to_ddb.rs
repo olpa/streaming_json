@@ -8,6 +8,9 @@ use scan_json::stack::ContextIter;
 use scan_json::{scan, Action, EndAction, Options, StreamOp};
 use u8pool::U8Pool;
 
+/// Sentinel value indicating position will be updated later from scan_json
+const POSITION_UPDATED_LATER: usize = usize::MAX;
+
 pub struct NormalToDdbConverter<'a, 'workbuf, W: IoWrite> {
     writer: &'a mut W,
     pending_comma: bool,
@@ -33,15 +36,10 @@ impl<'a, W: IoWrite> NormalToDdbConverter<'a, '_, W> {
         }
     }
 
-    fn store_io_error(
-        &mut self,
-        kind: embedded_io::ErrorKind,
-        position: usize,
-        context: &'static str,
-    ) {
+    fn store_io_error(&mut self, kind: embedded_io::ErrorKind, context: &'static str) {
         self.last_error = Some(ConversionError::IOError {
             kind,
-            position,
+            position: POSITION_UPDATED_LATER,
             context,
         });
     }
@@ -57,12 +55,9 @@ impl<'a, W: IoWrite> NormalToDdbConverter<'a, '_, W> {
     /// Helper that writes and stores error without position
     /// Position will be added later from scan_json's ActionError which calls rjiter.current_index()
     fn try_write_any(&mut self, bytes: &[u8], context: &'static str) -> Result<(), &'static str> {
-        // Sentinel value indicating position will be updated later from scan_json
-        const POSITION_UPDATED_LATER: usize = usize::MAX;
-
         self.write(bytes).map_err(|kind| {
             // Store error with sentinel position - scan_json will provide accurate position
-            self.store_io_error(kind, POSITION_UPDATED_LATER, context);
+            self.store_io_error(kind, context);
             "Write failed"
         })
     }
@@ -229,8 +224,7 @@ fn on_string_value_toddb<R: embedded_io::Read, W: IoWrite>(
     }
     if conv.unbuffered {
         if let Err(e) = conv.writer.flush() {
-            let position = rjiter.current_index();
-            conv.store_io_error(e.kind(), position, "flushing after write_long_bytes");
+            conv.store_io_error(e.kind(), "flushing after write_long_bytes");
             return StreamOp::Error("Failed to flush writer");
         }
     }

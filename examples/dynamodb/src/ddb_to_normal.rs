@@ -8,6 +8,9 @@ use scan_json::stack::ContextIter;
 use scan_json::{scan, Action, EndAction, Options, StreamOp};
 use u8pool::U8Pool;
 
+/// Sentinel value indicating position will be updated later from scan_json
+const POSITION_UPDATED_LATER: usize = usize::MAX;
+
 /// Parse error without position information (used internally before position is known)
 #[derive(Debug, Clone)]
 struct ParseErrorNoPos {
@@ -120,23 +123,18 @@ impl<'a, W: IoWrite> DdbConverter<'a, '_, W> {
         }
     }
 
-    fn store_rjiter_error(&mut self, error: rjiter::Error, position: usize, context: &'static str) {
+    fn store_rjiter_error(&mut self, error: rjiter::Error, context: &'static str) {
         self.last_error = Some(ConversionError::RJiterError {
             kind: error.error_type,
-            position,
+            position: POSITION_UPDATED_LATER,
             context,
         });
     }
 
-    fn store_io_error(
-        &mut self,
-        kind: embedded_io::ErrorKind,
-        position: usize,
-        context: &'static str,
-    ) {
+    fn store_io_error(&mut self, kind: embedded_io::ErrorKind, context: &'static str) {
         self.last_error = Some(ConversionError::IOError {
             kind,
-            position,
+            position: POSITION_UPDATED_LATER,
             context,
         });
     }
@@ -160,10 +158,10 @@ impl<'a, W: IoWrite> DdbConverter<'a, '_, W> {
         });
     }
 
-    /// Convert stored `ParseErrorNoPos` to `ParseError` with position
-    fn finalize_parse_error(&mut self, position: usize) {
+    /// Convert stored `ParseErrorNoPos` to `ParseError` (position added later by scan_json)
+    fn finalize_parse_error(&mut self) {
         if let Some(parse_error_no_pos) = self.last_parse_error_no_pos.take() {
-            self.last_error = Some(parse_error_no_pos.with_position(position));
+            self.last_error = Some(parse_error_no_pos.with_position(POSITION_UPDATED_LATER));
         }
     }
 
@@ -178,12 +176,9 @@ impl<'a, W: IoWrite> DdbConverter<'a, '_, W> {
     /// Helper that writes and stores error without position
     /// Position will be added later from scan_json's ActionError which calls rjiter.current_index()
     fn try_write_any(&mut self, bytes: &[u8], context: &'static str) -> Result<(), &'static str> {
-        // Sentinel value indicating position will be updated later from scan_json
-        const POSITION_UPDATED_LATER: usize = usize::MAX;
-
         self.write(bytes).map_err(|kind| {
             // Store error with sentinel position - scan_json will provide accurate position
-            self.store_io_error(kind, POSITION_UPDATED_LATER, context);
+            self.store_io_error(kind, context);
             "Write failed"
         })
     }
@@ -277,8 +272,7 @@ fn write_string_value<R: embedded_io::Read, W: IoWrite>(
     let peek = match rjiter.peek() {
         Ok(p) => p,
         Err(e) => {
-            let position = rjiter.current_index();
-            conv.store_rjiter_error(e, position, peek_context);
+            conv.store_rjiter_error(e, peek_context);
             return StreamOp::Error("Failed to peek string value");
         }
     };
@@ -298,14 +292,12 @@ fn write_string_value<R: embedded_io::Read, W: IoWrite>(
         }
     }
     if let Err(e) = rjiter.write_long_bytes(conv.writer) {
-        let position = rjiter.current_index();
-        conv.store_rjiter_error(e, position, write_context);
+        conv.store_rjiter_error(e, write_context);
         return StreamOp::Error("Failed to write value");
     }
     if conv.unbuffered {
         if let Err(e) = conv.writer.flush() {
-            let position = rjiter.current_index();
-            conv.store_io_error(e.kind(), position, "flushing after write_long_bytes");
+            conv.store_io_error(e.kind(), "flushing after write_long_bytes");
             return StreamOp::Error("Failed to flush writer");
         }
     }
@@ -329,8 +321,7 @@ fn handle_bool_based_type<R: embedded_io::Read, W: IoWrite>(
     let peek = match rjiter.peek() {
         Ok(p) => p,
         Err(e) => {
-            let position = rjiter.current_index();
-            conv.store_rjiter_error(e, position, type_name);
+            conv.store_rjiter_error(e, type_name);
             return StreamOp::Error("Failed to peek value");
         }
     };
@@ -348,8 +339,7 @@ fn handle_bool_based_type<R: embedded_io::Read, W: IoWrite>(
 
     // Consume the value
     if let Err(e) = rjiter.known_bool(peek) {
-        let position = rjiter.current_index();
-        conv.store_rjiter_error(e, position, type_name);
+        conv.store_rjiter_error(e, type_name);
         return StreamOp::Error("Failed to consume boolean value");
     }
     if let Err(e) = conv.try_write_any(output, type_name) {
@@ -480,7 +470,7 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(
                 "Invalid DynamoDB JSON format: unknown type descriptor",
                 Some(type_key),
             );
-            conv.finalize_parse_error(rjiter.current_index());
+            conv.finalize_parse_error();
             StreamOp::Error("Unknown type descriptor")
         }
     }
@@ -518,13 +508,13 @@ fn on_set_number_element<R: embedded_io::Read, W: IoWrite>(
     )
 }
 
-// Generic error handler that converts ParseErrorNoPos to ParseError with position
+// Generic error handler that converts ParseErrorNoPos to ParseError (position added by scan_json)
 fn on_error<R: embedded_io::Read, W: IoWrite>(
-    rjiter: &mut RJiter<R>,
+    _rjiter: &mut RJiter<R>,
     baton: DdbBaton<'_, '_, W>,
 ) -> StreamOp {
     let mut conv = baton.borrow_mut();
-    conv.finalize_parse_error(rjiter.current_index());
+    conv.finalize_parse_error();
     StreamOp::Error("Validation error (see stored error)")
 }
 /// Handle Object structural pseudoname
