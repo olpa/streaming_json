@@ -118,7 +118,7 @@ fn main() {
 
     let result = match args.mode {
         ConversionMode::FromDdb => {
-            convert_from_ddb(&mut input_reader, &mut output_writer, args.pretty)
+            convert_from_ddb(&mut input_reader, &mut output_writer, args.pretty, args.unbuffered)
         }
         ConversionMode::ToDdb => {
             convert_to_ddb(
