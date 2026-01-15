@@ -52,7 +52,7 @@ fn convert_from_ddb<R: embedded_io::Read, W: embedded_io::Write>(
     output_writer: &mut W,
     pretty: bool,
     unbuffered: bool,
-) -> Result<(), ConversionError> {
+) -> Result<(), (ConversionError, usize)> {
     let mut rjiter_buffer = vec![0u8; 64 * 1024];
     let mut context_buffer = vec![0u8; 2048];
     convert_ddb_to_normal(
@@ -73,7 +73,7 @@ fn convert_to_ddb<R: embedded_io::Read, W: embedded_io::Write>(
     pretty: bool,
     unbuffered: bool,
     with_item_wrapper: bool,
-) -> Result<(), ConversionError> {
+) -> Result<(), (ConversionError, usize)> {
     let mut rjiter_buffer = vec![0u8; 64 * 1024];
     let mut context_buffer = vec![0u8; 2048];
     convert_normal_to_ddb(
@@ -131,8 +131,8 @@ fn main() {
         }
     };
 
-    if let Err(e) = result {
-        eprintln!("Error: {e}");
+    if let Err((e, position)) = result {
+        eprintln!("Error at position {position}: {e}");
         std::process::exit(1);
     }
 }

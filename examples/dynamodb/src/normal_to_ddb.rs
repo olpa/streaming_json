@@ -8,9 +8,6 @@ use scan_json::stack::ContextIter;
 use scan_json::{scan, Action, EndAction, Options, StreamOp};
 use u8pool::U8Pool;
 
-/// Sentinel value indicating position will be updated later from scan_json
-const POSITION_UPDATED_LATER: usize = usize::MAX;
-
 pub struct NormalToDdbConverter<'a, 'workbuf, W: IoWrite> {
     writer: &'a mut W,
     pending_comma: bool,
@@ -44,16 +41,11 @@ impl<'a, W: IoWrite> NormalToDdbConverter<'a, '_, W> {
         Ok(())
     }
 
-    /// Helper that writes and stores error without position
-    /// Position will be added later from scan_json's ActionError which calls rjiter.current_index()
+    /// Helper that writes and stores error
+    /// Position will be added later from scan_json when error is reported
     fn try_write_any(&mut self, bytes: &[u8], context: &'static str) -> Result<(), &'static str> {
         self.write(bytes).map_err(|kind| {
-            // Store error with sentinel position - scan_json will provide accurate position
-            self.last_error = Some(ConversionError::IOError {
-                kind,
-                position: POSITION_UPDATED_LATER,
-                context,
-            });
+            self.last_error = Some(ConversionError::IOError { kind, context });
             "Write failed"
         })
     }
@@ -222,7 +214,6 @@ fn on_string_value_toddb<R: embedded_io::Read, W: IoWrite>(
         if let Err(e) = conv.writer.flush() {
             conv.last_error = Some(ConversionError::IOError {
                 kind: e.kind(),
-                position: POSITION_UPDATED_LATER,
                 context: "flushing after write_long_bytes",
             });
             return StreamOp::Error("Failed to flush writer");
@@ -736,7 +727,7 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
 /// - Buffer sizes are insufficient for the input data
 ///
 /// # Returns
-/// `Ok(())` on success, or `Err(ConversionError)` with detailed error information on failure
+/// `Ok(())` on success, or `Err((ConversionError, position))` with detailed error information on failure
 pub fn convert_normal_to_ddb<R: IoRead, W: IoWrite>(
     reader: &mut R,
     writer: &mut W,
@@ -745,7 +736,7 @@ pub fn convert_normal_to_ddb<R: IoRead, W: IoWrite>(
     pretty: bool,
     unbuffered: bool,
     with_item_wrapper: bool,
-) -> Result<(), ConversionError> {
+) -> Result<(), (ConversionError, usize)> {
     let mut rjiter = RJiter::new(reader, rjiter_buffer);
 
     let converter = NormalToDdbConverter::new(writer, with_item_wrapper, pretty, unbuffered);
@@ -755,10 +746,13 @@ pub fn convert_normal_to_ddb<R: IoRead, W: IoWrite>(
     // Context stores: "#top" + field names at each level + final field
     // For 32 levels: 1 (#top) + 32 (level_N) + 1 (final field) = 34 slots
     let mut context = U8Pool::new(context_buffer, 34).map_err(|_| {
-        ConversionError::ScanError(scan_json::Error::InternalError {
-            position: 0,
-            message: "Failed to create context pool",
-        })
+        (
+            ConversionError::ScanError(scan_json::Error::InternalError {
+                position: 0,
+                message: "Failed to create context pool",
+            }),
+            0,
+        )
     })?;
 
     if let Err(e) = scan(
@@ -771,9 +765,8 @@ pub fn convert_normal_to_ddb<R: IoRead, W: IoWrite>(
     ) {
         // Check if there's a stored detailed error in the baton
         let stored_error = baton.borrow_mut().last_error.take();
-        if let Some(mut err) = stored_error {
-            // Extract position from scan_json's error and update our stored error
-            // scan_json calls rjiter.current_index() which gives accurate position
+        if let Some(err) = stored_error {
+            // Extract position from scan_json's error - scan_json provides accurate position
             let position = match &e {
                 scan_json::Error::ActionError { position, .. } => *position,
                 scan_json::Error::MaxNestingExceeded { position, .. } => *position,
@@ -781,19 +774,21 @@ pub fn convert_normal_to_ddb<R: IoRead, W: IoWrite>(
                 scan_json::Error::UnhandledPeek { position, .. } => *position,
                 scan_json::Error::UnbalancedJson(position) => *position,
                 scan_json::Error::RJiterError(e) => e.index,
-                scan_json::Error::IOError(_) => rjiter.current_index(), // Get position from rjiter
+                scan_json::Error::IOError(_) => rjiter.current_index(),
             };
-            // Update position in stored error (replaces POSITION_UPDATED_LATER sentinel)
-            match &mut err {
-                ConversionError::IOError { position: p, .. } => *p = position,
-                ConversionError::RJiterError { position: p, .. } => *p = position,
-                ConversionError::ParseError { position: p, .. } => *p = position,
-                ConversionError::ScanError(_) => {}
-            }
-            return Err(err);
+            return Err((err, position));
         }
-        // Otherwise return the scan error
-        return Err(ConversionError::ScanError(e));
+        // Otherwise return the scan error (which includes position)
+        let position = match &e {
+            scan_json::Error::ActionError { position, .. } => *position,
+            scan_json::Error::MaxNestingExceeded { position, .. } => *position,
+            scan_json::Error::InternalError { position, .. } => *position,
+            scan_json::Error::UnhandledPeek { position, .. } => *position,
+            scan_json::Error::UnbalancedJson(position) => *position,
+            scan_json::Error::RJiterError(e) => e.index,
+            scan_json::Error::IOError(_) => rjiter.current_index(),
+        };
+        return Err((ConversionError::ScanError(e), position));
     }
 
     Ok(())

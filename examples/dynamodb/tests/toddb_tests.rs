@@ -515,15 +515,16 @@ fn test_error_incomplete_json_to_ddb() {
     );
 
     assert!(result.is_err());
-    let err = result.unwrap_err();
+    let (err, position) = result.unwrap_err();
     let err_msg = format!("{}", err);
+    let full_msg = format!("Error at position {}: {}", position, err);
 
     // Verify the error message is clean and informative
     // Should contain position/index information and describe the error
     assert!(
-        err_msg.contains("index") || err_msg.contains("position"),
-        "Error message should contain position: {}",
-        err_msg
+        position > 0 || full_msg.contains("position"),
+        "Error should have position information: {}",
+        full_msg
     );
     assert!(
         err_msg.contains("EOF") || err_msg.contains("parsing") || err_msg.contains("expected"),

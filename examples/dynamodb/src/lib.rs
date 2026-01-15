@@ -17,14 +17,13 @@ pub use ddb_to_normal::{convert_ddb_to_normal, ItemWrapperMode};
 pub use normal_to_ddb::convert_normal_to_ddb;
 
 /// Detailed error information for conversion errors
+/// Position is returned separately by convert functions
 #[derive(Debug, Clone)]
 pub enum ConversionError {
     /// `RJiter` error with context
     RJiterError {
         /// The type of `RJiter` error that occurred
         kind: rjiter::error::ErrorType,
-        /// Byte position in the input where the error occurred
-        position: usize,
         /// Description of what operation was being performed when the error occurred
         context: &'static str,
     },
@@ -32,15 +31,11 @@ pub enum ConversionError {
     IOError {
         /// The kind of IO error that occurred
         kind: embedded_io::ErrorKind,
-        /// Byte position in the input where the error occurred
-        position: usize,
         /// Description of what operation was being performed when the error occurred
         context: &'static str,
     },
     /// Parse error (invalid `DynamoDB` JSON format)
     ParseError {
-        /// Byte position in the input where the error occurred
-        position: usize,
         /// Description of what parsing operation failed
         context: &'static str,
         /// Unknown type descriptor bytes (buffer, actual length used)
@@ -54,28 +49,13 @@ pub enum ConversionError {
 impl core::fmt::Display for ConversionError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            ConversionError::RJiterError {
-                kind,
-                position,
-                context,
-            } => {
-                write!(
-                    f,
-                    "RJiter error at position {position}: {kind:?} (while {context})"
-                )
+            ConversionError::RJiterError { kind, context } => {
+                write!(f, "RJiter error: {kind:?} (while {context})")
             }
-            ConversionError::IOError {
-                kind,
-                position,
-                context,
-            } => {
-                write!(
-                    f,
-                    "IO error at position {position}: {kind:?} (while {context})"
-                )
+            ConversionError::IOError { kind, context } => {
+                write!(f, "IO error: {kind:?} (while {context})")
             }
             ConversionError::ParseError {
-                position,
                 context,
                 unknown_type,
             } => {
@@ -84,10 +64,10 @@ impl core::fmt::Display for ConversionError {
                         std::string::String::from_utf8_lossy(bytes.get(..*len).unwrap_or(&[]));
                     write!(
                         f,
-                        "Parse error at position {position}: {context} (unknown type descriptor '{type_str}')"
+                        "Parse error: {context} (unknown type descriptor '{type_str}')"
                     )
                 } else {
-                    write!(f, "Parse error at position {position}: {context}")
+                    write!(f, "Parse error: {context}")
                 }
             }
             ConversionError::ScanError(err) => {

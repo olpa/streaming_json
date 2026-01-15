@@ -8,27 +8,6 @@ use scan_json::stack::ContextIter;
 use scan_json::{scan, Action, EndAction, Options, StreamOp};
 use u8pool::U8Pool;
 
-/// Sentinel value indicating position will be updated later from scan_json
-const POSITION_UPDATED_LATER: usize = usize::MAX;
-
-/// Parse error without position information (used internally before position is known)
-#[derive(Debug, Clone)]
-struct ParseErrorNoPos {
-    context: &'static str,
-    /// Unknown type descriptor bytes (buffer, actual length used)
-    unknown_type: Option<([u8; 32], usize)>,
-}
-
-impl ParseErrorNoPos {
-    /// Convert to `ParseError` by adding position information
-    fn with_position(self, position: usize) -> ConversionError {
-        ConversionError::ParseError {
-            position,
-            context: self.context,
-            unknown_type: self.unknown_type,
-        }
-    }
-}
 
 /// What phase of parsing we're in
 ///
@@ -99,8 +78,7 @@ pub struct DdbConverter<'a, 'workbuf, W: IoWrite> {
     output_depth: usize, // JSON output nesting depth (for pretty-printing indentation and root level detection)
     current_field: Option<&'workbuf [u8]>,
     item_wrapper_mode: ItemWrapperMode, // How to handle "Item" key at top level
-    last_error: Option<ConversionError>, // Stores detailed error information (with position)
-    last_parse_error_no_pos: Option<ParseErrorNoPos>, // Stores parse error without position (position added later by error handler)
+    last_error: Option<ConversionError>, // Stores detailed error information
 
     phase: Phase,
     current_type: Option<TypeDesc>,
@@ -117,7 +95,6 @@ impl<'a, W: IoWrite> DdbConverter<'a, '_, W> {
             current_field: None,
             item_wrapper_mode,
             last_error: None,
-            last_parse_error_no_pos: None,
             phase: Phase::ExpectingField,
             current_type: None,
         }
@@ -126,7 +103,6 @@ impl<'a, W: IoWrite> DdbConverter<'a, '_, W> {
     fn store_rjiter_error(&mut self, error: rjiter::Error, context: &'static str) {
         self.last_error = Some(ConversionError::RJiterError {
             kind: error.error_type,
-            position: POSITION_UPDATED_LATER,
             context,
         });
     }
@@ -144,17 +120,10 @@ impl<'a, W: IoWrite> DdbConverter<'a, '_, W> {
             None
         };
 
-        self.last_parse_error_no_pos = Some(ParseErrorNoPos {
+        self.last_error = Some(ConversionError::ParseError {
             context,
             unknown_type,
         });
-    }
-
-    /// Convert stored `ParseErrorNoPos` to `ParseError` (position added later by scan_json)
-    fn finalize_parse_error(&mut self) {
-        if let Some(parse_error_no_pos) = self.last_parse_error_no_pos.take() {
-            self.last_error = Some(parse_error_no_pos.with_position(POSITION_UPDATED_LATER));
-        }
     }
 
     fn write(&mut self, bytes: &[u8]) -> Result<(), embedded_io::ErrorKind> {
@@ -165,16 +134,11 @@ impl<'a, W: IoWrite> DdbConverter<'a, '_, W> {
         Ok(())
     }
 
-    /// Helper that writes and stores error without position
-    /// Position will be added later from scan_json's ActionError which calls rjiter.current_index()
+    /// Helper that writes and stores error
+    /// Position will be added later from scan_json when error is reported
     fn try_write_any(&mut self, bytes: &[u8], context: &'static str) -> Result<(), &'static str> {
         self.write(bytes).map_err(|kind| {
-            // Store error with sentinel position - scan_json will provide accurate position
-            self.last_error = Some(ConversionError::IOError {
-                kind,
-                position: POSITION_UPDATED_LATER,
-                context,
-            });
+            self.last_error = Some(ConversionError::IOError { kind, context });
             "Write failed"
         })
     }
@@ -295,7 +259,6 @@ fn write_string_value<R: embedded_io::Read, W: IoWrite>(
         if let Err(e) = conv.writer.flush() {
             conv.last_error = Some(ConversionError::IOError {
                 kind: e.kind(),
-                position: POSITION_UPDATED_LATER,
                 context: "flushing after write_long_bytes",
             });
             return StreamOp::Error("Failed to flush writer");
@@ -470,7 +433,6 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(
                 "Invalid DynamoDB JSON format: unknown type descriptor",
                 Some(type_key),
             );
-            conv.finalize_parse_error();
             StreamOp::Error("Unknown type descriptor")
         }
     }
@@ -508,13 +470,11 @@ fn on_set_number_element<R: embedded_io::Read, W: IoWrite>(
     )
 }
 
-// Generic error handler that converts ParseErrorNoPos to ParseError (position added by scan_json)
+// Generic error handler for parse errors
 fn on_error<R: embedded_io::Read, W: IoWrite>(
     _rjiter: &mut RJiter<R>,
-    baton: DdbBaton<'_, '_, W>,
+    _baton: DdbBaton<'_, '_, W>,
 ) -> StreamOp {
-    let mut conv = baton.borrow_mut();
-    conv.finalize_parse_error();
     StreamOp::Error("Validation error (see stored error)")
 }
 /// Handle Object structural pseudoname
@@ -976,7 +936,7 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
 /// - Buffer sizes are insufficient for the input data
 ///
 /// # Returns
-/// `Ok(())` on success, or `Err(ConversionError)` with detailed error information on failure
+/// `Ok(())` on success, or `Err((ConversionError, position))` with detailed error information on failure
 pub fn convert_ddb_to_normal<R: IoRead, W: IoWrite>(
     reader: &mut R,
     writer: &mut W,
@@ -985,7 +945,7 @@ pub fn convert_ddb_to_normal<R: IoRead, W: IoWrite>(
     pretty: bool,
     unbuffered: bool,
     item_wrapper_mode: ItemWrapperMode,
-) -> Result<(), ConversionError> {
+) -> Result<(), (ConversionError, usize)> {
     let mut rjiter = RJiter::new(reader, rjiter_buffer);
 
     let converter = DdbConverter::new(writer, pretty, unbuffered, item_wrapper_mode);
@@ -998,10 +958,13 @@ pub fn convert_ddb_to_normal<R: IoRead, W: IoWrite>(
     // - Optional "Item" wrapper adds 1 level
     // For 32 levels: 1 (Item/#top) + 32 (level_N) + 32 (M) + 1 (value) + 1 (S) + 1 (leaf value) = 68 slots
     let mut context = U8Pool::new(context_buffer, 68).map_err(|_| {
-        ConversionError::ScanError(scan_json::Error::InternalError {
-            position: 0,
-            message: "Failed to create context pool",
-        })
+        (
+            ConversionError::ScanError(scan_json::Error::InternalError {
+                position: 0,
+                message: "Failed to create context pool",
+            }),
+            0,
+        )
     })?;
 
     if let Err(e) = scan(
@@ -1014,9 +977,8 @@ pub fn convert_ddb_to_normal<R: IoRead, W: IoWrite>(
     ) {
         // Check if there's a stored detailed error in the baton
         let stored_error = baton.borrow_mut().last_error.take();
-        if let Some(mut err) = stored_error {
-            // Extract position from scan_json's error and update our stored error
-            // scan_json calls rjiter.current_index() which gives accurate position
+        if let Some(err) = stored_error {
+            // Extract position from scan_json's error - scan_json provides accurate position
             let position = match &e {
                 scan_json::Error::ActionError { position, .. } => *position,
                 scan_json::Error::MaxNestingExceeded { position, .. } => *position,
@@ -1024,19 +986,21 @@ pub fn convert_ddb_to_normal<R: IoRead, W: IoWrite>(
                 scan_json::Error::UnhandledPeek { position, .. } => *position,
                 scan_json::Error::UnbalancedJson(position) => *position,
                 scan_json::Error::RJiterError(e) => e.index,
-                scan_json::Error::IOError(_) => rjiter.current_index(), // Get position from rjiter
+                scan_json::Error::IOError(_) => rjiter.current_index(),
             };
-            // Update position in stored error (replaces POSITION_UPDATED_LATER sentinel)
-            match &mut err {
-                ConversionError::IOError { position: p, .. } => *p = position,
-                ConversionError::RJiterError { position: p, .. } => *p = position,
-                ConversionError::ParseError { position: p, .. } => *p = position,
-                ConversionError::ScanError(_) => {}
-            }
-            return Err(err);
+            return Err((err, position));
         }
-        // Otherwise return the scan error
-        return Err(ConversionError::ScanError(e));
+        // Otherwise return the scan error (which includes position)
+        let position = match &e {
+            scan_json::Error::ActionError { position, .. } => *position,
+            scan_json::Error::MaxNestingExceeded { position, .. } => *position,
+            scan_json::Error::InternalError { position, .. } => *position,
+            scan_json::Error::UnhandledPeek { position, .. } => *position,
+            scan_json::Error::UnbalancedJson(position) => *position,
+            scan_json::Error::RJiterError(e) => e.index,
+            scan_json::Error::IOError(_) => rjiter.current_index(),
+        };
+        return Err((ConversionError::ScanError(e), position));
     }
 
     Ok(())

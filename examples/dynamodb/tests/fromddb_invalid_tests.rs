@@ -1,7 +1,7 @@
 /// Tests for invalid DynamoDB JSON format validation
 
 /// Helper function to test that conversion fails with an error
-fn convert_test_expect_error(ddb_json: &str) -> ddb_convert::ConversionError {
+fn convert_test_expect_error(ddb_json: &str) -> (ddb_convert::ConversionError, usize) {
     let mut reader = ddb_json.as_bytes();
     let mut output = vec![0u8; 4096];
     let mut output_slice = output.as_mut_slice();
