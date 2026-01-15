@@ -1,6 +1,6 @@
 use crate::ConversionError;
 use core::cell::RefCell;
-use embedded_io::{Read as IoRead, Write as IoWrite};
+use embedded_io::{Error as IoError, Read as IoRead, Write as IoWrite};
 use rjiter::jiter::Peek;
 use rjiter::RJiter;
 use scan_json::matcher::StructuralPseudoname;
@@ -12,47 +12,68 @@ pub struct NormalToDdbConverter<'a, 'workbuf, W: IoWrite> {
     writer: &'a mut W,
     pending_comma: bool,
     with_item_wrapper: bool,
+    unbuffered: bool,
     current_field: Option<&'workbuf [u8]>,
     pretty: bool,
     depth: usize,
+    last_error: Option<ConversionError>,
 }
 
 impl<'a, W: IoWrite> NormalToDdbConverter<'a, '_, W> {
-    fn new(writer: &'a mut W, with_item_wrapper: bool, pretty: bool) -> Self {
+    fn new(writer: &'a mut W, with_item_wrapper: bool, pretty: bool, unbuffered: bool) -> Self {
         Self {
             writer,
             pending_comma: false,
             with_item_wrapper,
+            unbuffered,
             current_field: None,
             pretty,
             depth: 0,
+            last_error: None,
         }
     }
 
-    fn write(&mut self, bytes: &[u8]) {
-        let _ = self.writer.write_all(bytes);
+    fn write(&mut self, bytes: &[u8]) -> Result<(), embedded_io::ErrorKind> {
+        self.writer.write_all(bytes).map_err(|e| e.kind())?;
+        if self.unbuffered {
+            self.writer.flush().map_err(|e| e.kind())?;
+        }
+        Ok(())
     }
 
-    fn write_comma(&mut self) {
+    /// Helper that writes and stores error
+    /// Position will be added later from scan_json when error is reported
+    fn try_write_any(&mut self, bytes: &[u8], context: &'static str) -> Result<(), &'static str> {
+        self.write(bytes).map_err(|kind| {
+            self.last_error = Some(ConversionError::IOError { kind, context });
+            "Write failed"
+        })
+    }
+
+    fn write_comma(&mut self) -> Result<(), &'static str> {
         if self.pending_comma {
-            self.write(b",");
-            self.newline();
+            self.try_write_any(b",", "writing comma")?;
+            self.newline()?;
             self.pending_comma = false;
         }
+        Ok(())
     }
 
-    fn newline(&mut self) {
+    fn newline(&mut self) -> Result<(), &'static str> {
         if self.pretty {
-            self.write(b"\n");
+            self.try_write_any(b"\n", "writing newline")
+        } else {
+            Ok(())
         }
     }
 
-    fn indent(&mut self) {
+    fn indent(&mut self) -> Result<(), &'static str> {
         if self.pretty {
             for _ in 0..self.depth {
-                self.write(b"  ");
+                self.try_write_any(b"  ", "writing indentation")?;
             }
         }
+        Ok(())
     }
 }
 
@@ -64,16 +85,30 @@ fn on_root_object_begin<R: embedded_io::Read, W: IoWrite>(
 ) -> StreamOp {
     let mut conv = baton.borrow_mut();
     if conv.with_item_wrapper {
-        conv.write(b"{");
-        conv.newline();
+        if let Err(e) = conv.try_write_any(b"{", "writing root object opening brace") {
+            return StreamOp::Error(e);
+        }
+        if let Err(e) = conv.newline() {
+            return StreamOp::Error(e);
+        }
         conv.depth += 1;
-        conv.indent();
-        conv.write(b"\"Item\":{");
-        conv.newline();
+        if let Err(e) = conv.indent() {
+            return StreamOp::Error(e);
+        }
+        if let Err(e) = conv.try_write_any(b"\"Item\":{", "writing Item wrapper") {
+            return StreamOp::Error(e);
+        }
+        if let Err(e) = conv.newline() {
+            return StreamOp::Error(e);
+        }
         conv.depth += 1;
     } else {
-        conv.write(b"{");
-        conv.newline();
+        if let Err(e) = conv.try_write_any(b"{", "writing root object opening brace") {
+            return StreamOp::Error(e);
+        }
+        if let Err(e) = conv.newline() {
+            return StreamOp::Error(e);
+        }
         conv.depth += 1;
     }
     conv.pending_comma = false;
@@ -88,14 +123,18 @@ fn on_root_literal<R: embedded_io::Read, W: IoWrite>(
     // Write opening { and increment depth, then delegate to atom handler
     {
         let mut conv = baton.borrow_mut();
-        conv.write(b"{");
+        if let Err(e) = conv.try_write_any(b"{", "writing root literal opening brace") {
+            return StreamOp::Error(e);
+        }
         conv.depth += 1;
     }
     let result = on_atom_value_toddb(rjiter, baton);
     // Atom handlers close the } and set pending_comma, but for root we need final newline
     {
         let mut conv = baton.borrow_mut();
-        conv.write(b"\n");
+        if let Err(e) = conv.try_write_any(b"\n", "writing final newline") {
+            return StreamOp::Error(e);
+        }
         conv.pending_comma = false;
     }
     result
@@ -107,8 +146,12 @@ fn on_root_array<R: embedded_io::Read, W: IoWrite>(
 ) -> StreamOp {
     // Root-level array: write opening { and increment depth, then delegate
     let mut conv = baton.borrow_mut();
-    conv.write(b"{");
-    conv.newline();
+    if let Err(e) = conv.try_write_any(b"{", "writing root array opening brace") {
+        return StreamOp::Error(e);
+    }
+    if let Err(e) = conv.newline() {
+        return StreamOp::Error(e);
+    }
     conv.depth += 1;
     drop(conv);
     on_array_begin_toddb(rjiter, baton)
@@ -118,7 +161,7 @@ fn on_root_array_end<W: IoWrite>(baton: NormalToDdbBaton<'_, '_, W>) -> Result<(
     // Close root-level array: write ]} and newline
     on_array_end_toddb(baton)?;
     let mut conv = baton.borrow_mut();
-    conv.write(b"\n");
+    conv.try_write_any(b"\n", "writing final newline")?;
     Ok(())
 }
 
@@ -130,12 +173,24 @@ fn on_field_key<R: embedded_io::Read, W: IoWrite>(
     let Some(field_name) = conv.current_field else {
         return StreamOp::Error("Internal error: current_field not set (impossible)");
     };
-    conv.write_comma();
-    conv.indent();
-    conv.write(b"\"");
-    conv.write(field_name);
-    conv.write(b"\":{");
-    conv.newline();
+    if let Err(e) = conv.write_comma() {
+        return StreamOp::Error(e);
+    }
+    if let Err(e) = conv.indent() {
+        return StreamOp::Error(e);
+    }
+    if let Err(e) = conv.try_write_any(b"\"", "writing field name opening quote") {
+        return StreamOp::Error(e);
+    }
+    if let Err(e) = conv.try_write_any(field_name, "writing field name") {
+        return StreamOp::Error(e);
+    }
+    if let Err(e) = conv.try_write_any(b"\":{", "writing field name closing quote and colon") {
+        return StreamOp::Error(e);
+    }
+    if let Err(e) = conv.newline() {
+        return StreamOp::Error(e);
+    }
     conv.depth += 1;
     conv.pending_comma = false;
     StreamOp::None
@@ -146,14 +201,37 @@ fn on_string_value_toddb<R: embedded_io::Read, W: IoWrite>(
     baton: NormalToDdbBaton<'_, '_, W>,
 ) -> StreamOp {
     let mut conv = baton.borrow_mut();
-    conv.indent();
-    conv.write(b"\"S\":\"");
-    let _ = rjiter.write_long_bytes(conv.writer);
-    conv.write(b"\"");
-    conv.newline();
+    if let Err(e) = conv.indent() {
+        return StreamOp::Error(e);
+    }
+    if let Err(e) = conv.try_write_any(b"\"S\":\"", "writing S type opening") {
+        return StreamOp::Error(e);
+    }
+    if let Err(_) = rjiter.write_long_bytes(conv.writer) {
+        return StreamOp::Error("Failed to write string value");
+    }
+    if conv.unbuffered {
+        if let Err(e) = conv.writer.flush() {
+            conv.last_error = Some(ConversionError::IOError {
+                kind: e.kind(),
+                context: "flushing after write_long_bytes",
+            });
+            return StreamOp::Error("Failed to flush writer");
+        }
+    }
+    if let Err(e) = conv.try_write_any(b"\"", "writing S type closing quote") {
+        return StreamOp::Error(e);
+    }
+    if let Err(e) = conv.newline() {
+        return StreamOp::Error(e);
+    }
     conv.depth -= 1;
-    conv.indent();
-    conv.write(b"}");
+    if let Err(e) = conv.indent() {
+        return StreamOp::Error(e);
+    }
+    if let Err(e) = conv.try_write_any(b"}", "writing closing brace") {
+        return StreamOp::Error(e);
+    }
     conv.pending_comma = true;
     StreamOp::ValueIsConsumed
 }
@@ -167,22 +245,34 @@ fn on_bool_value_toddb<R: embedded_io::Read, W: IoWrite>(
     };
 
     let mut conv = baton.borrow_mut();
-    conv.indent();
+    if let Err(e) = conv.indent() {
+        return StreamOp::Error(e);
+    }
     match peek {
         Peek::True => {
             let _ = rjiter.known_bool(peek);
-            conv.write(b"\"BOOL\":true");
+            if let Err(e) = conv.try_write_any(b"\"BOOL\":true", "writing BOOL true") {
+                return StreamOp::Error(e);
+            }
         }
         Peek::False => {
             let _ = rjiter.known_bool(peek);
-            conv.write(b"\"BOOL\":false");
+            if let Err(e) = conv.try_write_any(b"\"BOOL\":false", "writing BOOL false") {
+                return StreamOp::Error(e);
+            }
         }
         _ => return StreamOp::Error("Expected boolean value"),
     }
-    conv.newline();
+    if let Err(e) = conv.newline() {
+        return StreamOp::Error(e);
+    }
     conv.depth -= 1;
-    conv.indent();
-    conv.write(b"}");
+    if let Err(e) = conv.indent() {
+        return StreamOp::Error(e);
+    }
+    if let Err(e) = conv.try_write_any(b"}", "writing closing brace") {
+        return StreamOp::Error(e);
+    }
     conv.pending_comma = true;
     StreamOp::ValueIsConsumed
 }
@@ -200,12 +290,22 @@ fn on_null_value_toddb<R: embedded_io::Read, W: IoWrite>(
     let _ = rjiter.known_null();
 
     let mut conv = baton.borrow_mut();
-    conv.indent();
-    conv.write(b"\"NULL\":true");
-    conv.newline();
+    if let Err(e) = conv.indent() {
+        return StreamOp::Error(e);
+    }
+    if let Err(e) = conv.try_write_any(b"\"NULL\":true", "writing NULL type") {
+        return StreamOp::Error(e);
+    }
+    if let Err(e) = conv.newline() {
+        return StreamOp::Error(e);
+    }
     conv.depth -= 1;
-    conv.indent();
-    conv.write(b"}");
+    if let Err(e) = conv.indent() {
+        return StreamOp::Error(e);
+    }
+    if let Err(e) = conv.try_write_any(b"}", "writing closing brace") {
+        return StreamOp::Error(e);
+    }
     conv.pending_comma = true;
     StreamOp::ValueIsConsumed
 }
@@ -218,7 +318,9 @@ fn on_atom_value_toddb<R: embedded_io::Read, W: IoWrite>(
     // The opening { is written here, closing } is written by type handlers
     {
         let mut conv = baton.borrow_mut();
-        conv.write_comma();
+        if let Err(e) = conv.write_comma() {
+            return StreamOp::Error(e);
+        }
         // Note: field handlers already wrote the opening {, so we don't write it for field values
         // But for array elements, we need it
     }
@@ -236,19 +338,40 @@ fn on_atom_value_toddb<R: embedded_io::Read, W: IoWrite>(
         _ => {
             // Use next_number_bytes to preserve the exact string representation
             // This ensures "4.0" stays as "4.0" and doesn't become "4"
-            let Ok(number_bytes) = rjiter.next_number_bytes() else {
-                return StreamOp::Error("Failed to parse number");
+            // Copy the bytes so we can use rjiter later
+            let number_bytes = match rjiter.next_number_bytes() {
+                Ok(bytes) => {
+                    let mut buf = [0u8; 32];
+                    let len = bytes.len().min(32);
+                    buf[..len].copy_from_slice(&bytes[..len]);
+                    (buf, len)
+                }
+                Err(_) => return StreamOp::Error("Failed to parse number"),
             };
 
             let mut conv = baton.borrow_mut();
-            conv.indent();
-            conv.write(b"\"N\":\"");
-            conv.write(number_bytes);
-            conv.write(b"\"");
-            conv.newline();
+            if let Err(e) = conv.indent() {
+                return StreamOp::Error(e);
+            }
+            if let Err(e) = conv.try_write_any(b"\"N\":\"", "writing N type opening") {
+                return StreamOp::Error(e);
+            }
+            if let Err(e) = conv.try_write_any(&number_bytes.0[..number_bytes.1], "writing number value") {
+                return StreamOp::Error(e);
+            }
+            if let Err(e) = conv.try_write_any(b"\"", "writing N type closing quote") {
+                return StreamOp::Error(e);
+            }
+            if let Err(e) = conv.newline() {
+                return StreamOp::Error(e);
+            }
             conv.depth -= 1;
-            conv.indent();
-            conv.write(b"}");
+            if let Err(e) = conv.indent() {
+                return StreamOp::Error(e);
+            }
+            if let Err(e) = conv.try_write_any(b"}", "writing closing brace") {
+                return StreamOp::Error(e);
+            }
             conv.pending_comma = true;
             StreamOp::ValueIsConsumed
         }
@@ -260,9 +383,15 @@ fn on_array_begin_toddb<R: embedded_io::Read, W: IoWrite>(
     baton: NormalToDdbBaton<'_, '_, W>,
 ) -> StreamOp {
     let mut conv = baton.borrow_mut();
-    conv.indent();
-    conv.write(b"\"L\":[");
-    conv.newline();
+    if let Err(e) = conv.indent() {
+        return StreamOp::Error(e);
+    }
+    if let Err(e) = conv.try_write_any(b"\"L\":[", "writing L type opening") {
+        return StreamOp::Error(e);
+    }
+    if let Err(e) = conv.newline() {
+        return StreamOp::Error(e);
+    }
     conv.pending_comma = false;
     StreamOp::None
 }
@@ -274,9 +403,15 @@ fn on_array_element_atom<R: embedded_io::Read, W: IoWrite>(
     // Write opening brace for array element type wrapper, then handle the atom value
     {
         let mut conv = baton.borrow_mut();
-        conv.write_comma();
-        conv.write(b"{");
-        conv.newline();
+        if let Err(e) = conv.write_comma() {
+            return StreamOp::Error(e);
+        }
+        if let Err(e) = conv.try_write_any(b"{", "writing array element opening brace") {
+            return StreamOp::Error(e);
+        }
+        if let Err(e) = conv.newline() {
+            return StreamOp::Error(e);
+        }
         conv.depth += 1;
         conv.pending_comma = false;
     }
@@ -291,9 +426,15 @@ fn on_array_element_array<R: embedded_io::Read, W: IoWrite>(
     // Array inside array - write element wrapper and L type
     {
         let mut conv = baton.borrow_mut();
-        conv.write_comma();
-        conv.write(b"{");
-        conv.newline();
+        if let Err(e) = conv.write_comma() {
+            return StreamOp::Error(e);
+        }
+        if let Err(e) = conv.try_write_any(b"{", "writing array element opening brace") {
+            return StreamOp::Error(e);
+        }
+        if let Err(e) = conv.newline() {
+            return StreamOp::Error(e);
+        }
         conv.depth += 1;
         conv.pending_comma = false;
     }
@@ -308,9 +449,15 @@ fn on_array_element_object<R: embedded_io::Read, W: IoWrite>(
     // Object inside array - write element wrapper and M type
     {
         let mut conv = baton.borrow_mut();
-        conv.write_comma();
-        conv.write(b"{");
-        conv.newline();
+        if let Err(e) = conv.write_comma() {
+            return StreamOp::Error(e);
+        }
+        if let Err(e) = conv.try_write_any(b"{", "writing array element opening brace") {
+            return StreamOp::Error(e);
+        }
+        if let Err(e) = conv.newline() {
+            return StreamOp::Error(e);
+        }
         conv.depth += 1;
         conv.pending_comma = false;
     }
@@ -323,9 +470,15 @@ fn on_nested_object_begin_toddb<R: embedded_io::Read, W: IoWrite>(
     baton: NormalToDdbBaton<'_, '_, W>,
 ) -> StreamOp {
     let mut conv = baton.borrow_mut();
-    conv.indent();
-    conv.write(b"\"M\":{");
-    conv.newline();
+    if let Err(e) = conv.indent() {
+        return StreamOp::Error(e);
+    }
+    if let Err(e) = conv.try_write_any(b"\"M\":{", "writing M type opening") {
+        return StreamOp::Error(e);
+    }
+    if let Err(e) = conv.newline() {
+        return StreamOp::Error(e);
+    }
     conv.depth += 1;
     conv.pending_comma = false;
     StreamOp::None
@@ -334,19 +487,19 @@ fn on_nested_object_begin_toddb<R: embedded_io::Read, W: IoWrite>(
 #[allow(clippy::unnecessary_wraps)]
 fn on_root_object_end<W: IoWrite>(baton: NormalToDdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     let mut conv = baton.borrow_mut();
-    conv.newline();
+    conv.newline()?;
     conv.depth -= 1;
-    conv.indent();
+    conv.indent()?;
     if conv.with_item_wrapper {
-        conv.write(b"}");
-        conv.newline();
+        conv.try_write_any(b"}", "writing root object closing brace")?;
+        conv.newline()?;
         conv.depth -= 1;
-        conv.indent();
-        conv.write(b"}");
+        conv.indent()?;
+        conv.try_write_any(b"}", "writing Item wrapper closing brace")?;
     } else {
-        conv.write(b"}");
+        conv.try_write_any(b"}", "writing root object closing brace")?;
     }
-    conv.write(b"\n");
+    conv.try_write_any(b"\n", "writing final newline")?;
     Ok(())
 }
 
@@ -355,14 +508,14 @@ fn on_nested_object_end<W: IoWrite>(
     baton: NormalToDdbBaton<'_, '_, W>,
 ) -> Result<(), &'static str> {
     let mut conv = baton.borrow_mut();
-    conv.newline();
+    conv.newline()?;
     conv.depth -= 1;
-    conv.indent();
-    conv.write(b"}");
-    conv.newline();
+    conv.indent()?;
+    conv.try_write_any(b"}", "writing M closing brace")?;
+    conv.newline()?;
     conv.depth -= 1;
-    conv.indent();
-    conv.write(b"}");
+    conv.indent()?;
+    conv.try_write_any(b"}", "writing element wrapper closing brace")?;
     conv.pending_comma = true;
     Ok(())
 }
@@ -370,13 +523,13 @@ fn on_nested_object_end<W: IoWrite>(
 #[allow(clippy::unnecessary_wraps)]
 fn on_array_end_toddb<W: IoWrite>(baton: NormalToDdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     let mut conv = baton.borrow_mut();
-    conv.newline();
-    conv.indent();
-    conv.write(b"]");
-    conv.newline();
+    conv.newline()?;
+    conv.indent()?;
+    conv.try_write_any(b"]", "writing L closing bracket")?;
+    conv.newline()?;
     conv.depth -= 1;
-    conv.indent();
-    conv.write(b"}");
+    conv.indent()?;
+    conv.try_write_any(b"}", "writing element wrapper closing brace")?;
     conv.pending_comma = true;
     Ok(())
 }
@@ -397,14 +550,14 @@ fn on_object_in_array_end<W: IoWrite>(
 ) -> Result<(), &'static str> {
     // Close the M object with } and then close the element wrapper with }
     let mut conv = baton.borrow_mut();
-    conv.newline();
+    conv.newline()?;
     conv.depth -= 1;
-    conv.indent();
-    conv.write(b"}");
-    conv.newline();
+    conv.indent()?;
+    conv.try_write_any(b"}", "writing M closing brace")?;
+    conv.newline()?;
     conv.depth -= 1;
-    conv.indent();
-    conv.write(b"}");
+    conv.indent()?;
+    conv.try_write_any(b"}", "writing element wrapper closing brace")?;
     conv.pending_comma = true;
     Ok(())
 }
@@ -415,13 +568,13 @@ fn on_array_in_array_end<W: IoWrite>(
 ) -> Result<(), &'static str> {
     // Close the L array with ] and the element wrapper with }
     let mut conv = baton.borrow_mut();
-    conv.newline();
-    conv.indent();
-    conv.write(b"]");
-    conv.newline();
+    conv.newline()?;
+    conv.indent()?;
+    conv.try_write_any(b"]", "writing L closing bracket")?;
+    conv.newline()?;
     conv.depth -= 1;
-    conv.indent();
-    conv.write(b"}");
+    conv.indent()?;
+    conv.try_write_any(b"}", "writing element wrapper closing brace")?;
     conv.pending_comma = true;
     Ok(())
 }
@@ -563,6 +716,7 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
 /// * `rjiter_buffer` - Buffer for rjiter to use (recommended: 4096 bytes)
 /// * `context_buffer` - Buffer for `scan_json` context tracking (recommended: 2048 bytes)
 /// * `pretty` - Whether to pretty-print the output (currently unused, may be added later)
+/// * `unbuffered` - Whether to flush after every write
 /// * `with_item_wrapper` - Whether to wrap the output in an "Item" key
 ///
 /// # Errors
@@ -573,39 +727,69 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
 /// - Buffer sizes are insufficient for the input data
 ///
 /// # Returns
-/// `Ok(())` on success, or `Err(ConversionError)` with detailed error information on failure
+/// `Ok(())` on success, or `Err((ConversionError, position))` with detailed error information on failure
 pub fn convert_normal_to_ddb<R: IoRead, W: IoWrite>(
     reader: &mut R,
     writer: &mut W,
     rjiter_buffer: &mut [u8],
     context_buffer: &mut [u8],
     pretty: bool,
+    unbuffered: bool,
     with_item_wrapper: bool,
-) -> Result<(), ConversionError> {
+) -> Result<(), (ConversionError, usize)> {
     let mut rjiter = RJiter::new(reader, rjiter_buffer);
 
-    let converter = NormalToDdbConverter::new(writer, with_item_wrapper, pretty);
+    let converter = NormalToDdbConverter::new(writer, with_item_wrapper, pretty, unbuffered);
     let baton = RefCell::new(converter);
 
     // DynamoDB supports up to 32 levels of nesting.
     // Context stores: "#top" + field names at each level + final field
     // For 32 levels: 1 (#top) + 32 (level_N) + 1 (final field) = 34 slots
     let mut context = U8Pool::new(context_buffer, 34).map_err(|_| {
-        ConversionError::ScanError(scan_json::Error::InternalError {
-            position: 0,
-            message: "Failed to create context pool",
-        })
+        (
+            ConversionError::ScanError(scan_json::Error::InternalError {
+                position: 0,
+                message: "Failed to create context pool",
+            }),
+            0,
+        )
     })?;
 
-    scan(
+    if let Err(e) = scan(
         find_action,
         find_end_action,
         &mut rjiter,
         &baton,
         &mut context,
         &Options::new(),
-    )
-    .map_err(ConversionError::ScanError)?;
+    ) {
+        // Check if there's a stored detailed error in the baton
+        let stored_error = baton.borrow_mut().last_error.take();
+        if let Some(err) = stored_error {
+            // Extract position from scan_json's error - scan_json provides accurate position
+            let position = match &e {
+                scan_json::Error::ActionError { position, .. } => *position,
+                scan_json::Error::MaxNestingExceeded { position, .. } => *position,
+                scan_json::Error::InternalError { position, .. } => *position,
+                scan_json::Error::UnhandledPeek { position, .. } => *position,
+                scan_json::Error::UnbalancedJson(position) => *position,
+                scan_json::Error::RJiterError(e) => e.index,
+                scan_json::Error::IOError(_) => rjiter.current_index(),
+            };
+            return Err((err, position));
+        }
+        // Otherwise return the scan error (which includes position)
+        let position = match &e {
+            scan_json::Error::ActionError { position, .. } => *position,
+            scan_json::Error::MaxNestingExceeded { position, .. } => *position,
+            scan_json::Error::InternalError { position, .. } => *position,
+            scan_json::Error::UnhandledPeek { position, .. } => *position,
+            scan_json::Error::UnbalancedJson(position) => *position,
+            scan_json::Error::RJiterError(e) => e.index,
+            scan_json::Error::IOError(_) => rjiter.current_index(),
+        };
+        return Err((ConversionError::ScanError(e), position));
+    }
 
     Ok(())
 }

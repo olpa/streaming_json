@@ -1,6 +1,6 @@
 use crate::ConversionError;
 use core::cell::RefCell;
-use embedded_io::{Read as IoRead, Write as IoWrite};
+use embedded_io::{Error as IoError, Read as IoRead, Write as IoWrite};
 use rjiter::jiter::Peek;
 use rjiter::RJiter;
 use scan_json::matcher::StructuralPseudoname;
@@ -8,24 +8,6 @@ use scan_json::stack::ContextIter;
 use scan_json::{scan, Action, EndAction, Options, StreamOp};
 use u8pool::U8Pool;
 
-/// Parse error without position information (used internally before position is known)
-#[derive(Debug, Clone)]
-struct ParseErrorNoPos {
-    context: &'static str,
-    /// Unknown type descriptor bytes (buffer, actual length used)
-    unknown_type: Option<([u8; 32], usize)>,
-}
-
-impl ParseErrorNoPos {
-    /// Convert to `ParseError` by adding position information
-    fn with_position(self, position: usize) -> ConversionError {
-        ConversionError::ParseError {
-            position,
-            context: self.context,
-            unknown_type: self.unknown_type,
-        }
-    }
-}
 
 /// What phase of parsing we're in
 ///
@@ -92,50 +74,35 @@ pub struct DdbConverter<'a, 'workbuf, W: IoWrite> {
     writer: &'a mut W,
     pending_comma: bool,
     pretty: bool,
+    unbuffered: bool,
     output_depth: usize, // JSON output nesting depth (for pretty-printing indentation and root level detection)
     current_field: Option<&'workbuf [u8]>,
     item_wrapper_mode: ItemWrapperMode, // How to handle "Item" key at top level
-    last_error: Option<ConversionError>, // Stores detailed error information (with position)
-    last_parse_error_no_pos: Option<ParseErrorNoPos>, // Stores parse error without position (position added later by error handler)
+    last_error: Option<ConversionError>, // Stores detailed error information
 
     phase: Phase,
     current_type: Option<TypeDesc>,
 }
 
 impl<'a, W: IoWrite> DdbConverter<'a, '_, W> {
-    fn new(writer: &'a mut W, pretty: bool, item_wrapper_mode: ItemWrapperMode) -> Self {
+    fn new(writer: &'a mut W, pretty: bool, unbuffered: bool, item_wrapper_mode: ItemWrapperMode) -> Self {
         Self {
             writer,
             pending_comma: false,
             pretty,
+            unbuffered,
             output_depth: 0,
             current_field: None,
             item_wrapper_mode,
             last_error: None,
-            last_parse_error_no_pos: None,
             phase: Phase::ExpectingField,
             current_type: None,
         }
     }
 
-    fn store_rjiter_error(&mut self, error: rjiter::Error, position: usize, context: &'static str) {
+    fn store_rjiter_error(&mut self, error: rjiter::Error, context: &'static str) {
         self.last_error = Some(ConversionError::RJiterError {
             kind: error.error_type,
-            position,
-            context,
-        });
-    }
-
-    #[allow(dead_code)]
-    fn store_io_error(
-        &mut self,
-        kind: embedded_io::ErrorKind,
-        position: usize,
-        context: &'static str,
-    ) {
-        self.last_error = Some(ConversionError::IOError {
-            kind,
-            position,
             context,
         });
     }
@@ -153,43 +120,53 @@ impl<'a, W: IoWrite> DdbConverter<'a, '_, W> {
             None
         };
 
-        self.last_parse_error_no_pos = Some(ParseErrorNoPos {
+        self.last_error = Some(ConversionError::ParseError {
             context,
             unknown_type,
         });
     }
 
-    /// Convert stored `ParseErrorNoPos` to `ParseError` with position
-    fn finalize_parse_error(&mut self, position: usize) {
-        if let Some(parse_error_no_pos) = self.last_parse_error_no_pos.take() {
-            self.last_error = Some(parse_error_no_pos.with_position(position));
+    fn write(&mut self, bytes: &[u8]) -> Result<(), embedded_io::ErrorKind> {
+        self.writer.write_all(bytes).map_err(|e| e.kind())?;
+        if self.unbuffered {
+            self.writer.flush().map_err(|e| e.kind())?;
         }
+        Ok(())
     }
 
-    fn write(&mut self, bytes: &[u8]) {
-        let _ = self.writer.write_all(bytes);
+    /// Helper that writes and stores error
+    /// Position will be added later from scan_json when error is reported
+    fn try_write_any(&mut self, bytes: &[u8], context: &'static str) -> Result<(), &'static str> {
+        self.write(bytes).map_err(|kind| {
+            self.last_error = Some(ConversionError::IOError { kind, context });
+            "Write failed"
+        })
     }
 
-    fn write_comma_if_pending(&mut self) {
+    fn write_comma_if_pending(&mut self) -> Result<(), &'static str> {
         if self.pending_comma {
-            self.write(b",");
-            self.newline_if_pretty();
+            self.try_write_any(b",", "writing comma")?;
+            self.newline_if_pretty()?;
             self.pending_comma = false;
         }
+        Ok(())
     }
 
-    fn newline_if_pretty(&mut self) {
+    fn newline_if_pretty(&mut self) -> Result<(), &'static str> {
         if self.pretty {
-            self.write(b"\n");
+            self.try_write_any(b"\n", "writing newline")
+        } else {
+            Ok(())
         }
     }
 
-    fn indent_if_pretty(&mut self) {
+    fn indent_if_pretty(&mut self) -> Result<(), &'static str> {
         if self.pretty {
             for _ in 0..self.output_depth {
-                self.write(b"  ");
+                self.try_write_any(b"  ", "writing indentation")?;
             }
         }
+        Ok(())
     }
 }
 
@@ -201,8 +178,12 @@ fn on_root_object_begin<R: embedded_io::Read, W: IoWrite>(
     baton: DdbBaton<'_, '_, W>,
 ) -> StreamOp {
     let mut conv = baton.borrow_mut();
-    conv.write(b"{");
-    conv.newline_if_pretty();
+    if let Err(e) = conv.try_write_any(b"{", "writing root object opening brace") {
+        return StreamOp::Error(e);
+    }
+    if let Err(e) = conv.newline_if_pretty() {
+        return StreamOp::Error(e);
+    }
     conv.output_depth = 1;
     StreamOp::None
 }
@@ -217,11 +198,21 @@ fn on_field_key<R: embedded_io::Read, W: IoWrite>(
         return StreamOp::Error("Internal error: current_field not set (impossible)");
     };
 
-    conv.write_comma_if_pending();
-    conv.indent_if_pretty();
-    conv.write(b"\"");
-    conv.write(field_name);
-    conv.write(b"\":");
+    if let Err(e) = conv.write_comma_if_pending() {
+        return StreamOp::Error(e);
+    }
+    if let Err(e) = conv.indent_if_pretty() {
+        return StreamOp::Error(e);
+    }
+    if let Err(e) = conv.try_write_any(b"\"", "writing field name opening quote") {
+        return StreamOp::Error(e);
+    }
+    if let Err(e) = conv.try_write_any(field_name, "writing field name") {
+        return StreamOp::Error(e);
+    }
+    if let Err(e) = conv.try_write_any(b"\":", "writing field name closing quote and colon") {
+        return StreamOp::Error(e);
+    }
     conv.pending_comma = false;
     conv.phase = Phase::ExpectingTypeKey;
 
@@ -241,8 +232,7 @@ fn write_string_value<R: embedded_io::Read, W: IoWrite>(
     let peek = match rjiter.peek() {
         Ok(p) => p,
         Err(e) => {
-            let position = rjiter.current_index();
-            conv.store_rjiter_error(e, position, peek_context);
+            conv.store_rjiter_error(e, peek_context);
             return StreamOp::Error("Failed to peek string value");
         }
     };
@@ -251,19 +241,33 @@ fn write_string_value<R: embedded_io::Read, W: IoWrite>(
     }
 
     if write_comma_if_pending {
-        conv.write_comma_if_pending();
+        if let Err(e) = conv.write_comma_if_pending() {
+            return StreamOp::Error(e);
+        }
     }
 
     if with_quotes {
-        conv.write(b"\"");
+        if let Err(e) = conv.try_write_any(b"\"", "writing opening quote") {
+            return StreamOp::Error(e);
+        }
     }
     if let Err(e) = rjiter.write_long_bytes(conv.writer) {
-        let position = rjiter.current_index();
-        conv.store_rjiter_error(e, position, write_context);
+        conv.store_rjiter_error(e, write_context);
         return StreamOp::Error("Failed to write value");
     }
+    if conv.unbuffered {
+        if let Err(e) = conv.writer.flush() {
+            conv.last_error = Some(ConversionError::IOError {
+                kind: e.kind(),
+                context: "flushing after write_long_bytes",
+            });
+            return StreamOp::Error("Failed to flush writer");
+        }
+    }
     if with_quotes {
-        conv.write(b"\"");
+        if let Err(e) = conv.try_write_any(b"\"", "writing closing quote") {
+            return StreamOp::Error(e);
+        }
     }
 
     conv.pending_comma = true;
@@ -280,8 +284,7 @@ fn handle_bool_based_type<R: embedded_io::Read, W: IoWrite>(
     let peek = match rjiter.peek() {
         Ok(p) => p,
         Err(e) => {
-            let position = rjiter.current_index();
-            conv.store_rjiter_error(e, position, type_name);
+            conv.store_rjiter_error(e, type_name);
             return StreamOp::Error("Failed to peek value");
         }
     };
@@ -293,15 +296,18 @@ fn handle_bool_based_type<R: embedded_io::Read, W: IoWrite>(
     };
 
     // Write comma (pending_comma tracks whether we need it)
-    conv.write_comma_if_pending();
+    if let Err(e) = conv.write_comma_if_pending() {
+        return StreamOp::Error(e);
+    }
 
     // Consume the value
     if let Err(e) = rjiter.known_bool(peek) {
-        let position = rjiter.current_index();
-        conv.store_rjiter_error(e, position, type_name);
+        conv.store_rjiter_error(e, type_name);
         return StreamOp::Error("Failed to consume boolean value");
     }
-    conv.write(output);
+    if let Err(e) = conv.try_write_any(output, type_name) {
+        return StreamOp::Error(e);
+    }
 
     conv.pending_comma = true;
     conv.current_type = None;
@@ -374,7 +380,9 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(
         }
         b"SS" | b"BS" => {
             // SS/BS type - write opening bracket here (parent handles it, not find_action_array)
-            conv.write(b"[");
+            if let Err(e) = conv.try_write_any(b"[", "writing SS/BS opening bracket") {
+                return StreamOp::Error(e);
+            }
             conv.pending_comma = false;
             conv.current_type = Some(TypeDesc::SS);
             conv.phase = Phase::ExpectingValue; // Stay in ExpectingValue, SS elements are atoms
@@ -382,7 +390,9 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(
         }
         b"NS" => {
             // NS type - write opening bracket here (parent handles it, not find_action_array)
-            conv.write(b"[");
+            if let Err(e) = conv.try_write_any(b"[", "writing NS opening bracket") {
+                return StreamOp::Error(e);
+            }
             conv.pending_comma = false;
             conv.current_type = Some(TypeDesc::NS);
             conv.phase = Phase::ExpectingValue; // Stay in ExpectingValue, NS elements are atoms
@@ -390,8 +400,12 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(
         }
         b"L" => {
             // L type - write opening bracket here (parent handles it, not find_action_array)
-            conv.write_comma_if_pending();
-            conv.write(b"[");
+            if let Err(e) = conv.write_comma_if_pending() {
+                return StreamOp::Error(e);
+            }
+            if let Err(e) = conv.try_write_any(b"[", "writing L opening bracket") {
+                return StreamOp::Error(e);
+            }
             conv.pending_comma = false;
             conv.current_type = Some(TypeDesc::L);
             conv.phase = Phase::ExpectingTypeKey; // In L, we expect type keys (type descriptors are ignored)
@@ -399,9 +413,15 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(
         }
         b"M" => {
             // M type - write opening brace here (parent handles it, not find_action_object)
-            conv.write_comma_if_pending();
-            conv.write(b"{");
-            conv.newline_if_pretty();
+            if let Err(e) = conv.write_comma_if_pending() {
+                return StreamOp::Error(e);
+            }
+            if let Err(e) = conv.try_write_any(b"{", "writing M opening brace") {
+                return StreamOp::Error(e);
+            }
+            if let Err(e) = conv.newline_if_pretty() {
+                return StreamOp::Error(e);
+            }
             conv.output_depth += 1;
             conv.pending_comma = false;
             conv.current_type = Some(TypeDesc::M);
@@ -413,7 +433,6 @@ fn on_type_key<R: embedded_io::Read, W: IoWrite>(
                 "Invalid DynamoDB JSON format: unknown type descriptor",
                 Some(type_key),
             );
-            conv.finalize_parse_error(rjiter.current_index());
             StreamOp::Error("Unknown type descriptor")
         }
     }
@@ -451,13 +470,11 @@ fn on_set_number_element<R: embedded_io::Read, W: IoWrite>(
     )
 }
 
-// Generic error handler that converts ParseErrorNoPos to ParseError with position
+// Generic error handler for parse errors
 fn on_error<R: embedded_io::Read, W: IoWrite>(
-    rjiter: &mut RJiter<R>,
-    baton: DdbBaton<'_, '_, W>,
+    _rjiter: &mut RJiter<R>,
+    _baton: DdbBaton<'_, '_, W>,
 ) -> StreamOp {
-    let mut conv = baton.borrow_mut();
-    conv.finalize_parse_error(rjiter.current_index());
     StreamOp::Error("Validation error (see stored error)")
 }
 /// Handle Object structural pseudoname
@@ -696,7 +713,7 @@ fn on_list_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static st
         return Err("Invalid phase when ending L array (expected ExpectingTypeKey)");
     }
 
-    conv.write(b"]");
+    conv.try_write_any(b"]", "writing L closing bracket")?;
     conv.pending_comma = true;
 
     // Transition: ExpectingTypeKey -> ExpectingValue (at end of array)
@@ -708,7 +725,7 @@ fn on_list_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static st
 #[allow(clippy::unnecessary_wraps)]
 fn on_set_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     let mut conv = baton.borrow_mut();
-    conv.write(b"]");
+    conv.try_write_any(b"]", "writing SS/NS/BS closing bracket")?;
     conv.pending_comma = true;
 
     // Ending SS/NS set - transition to ExpectingValue
@@ -720,10 +737,10 @@ fn on_set_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str
 #[allow(clippy::unnecessary_wraps)]
 fn on_map_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     let mut conv = baton.borrow_mut();
-    conv.newline_if_pretty();
+    conv.newline_if_pretty()?;
     conv.output_depth -= 1;
-    conv.indent_if_pretty();
-    conv.write(b"}");
+    conv.indent_if_pretty()?;
+    conv.try_write_any(b"}", "writing M closing brace")?;
     conv.pending_comma = true;
 
     // M container value is consumed
@@ -765,9 +782,9 @@ fn on_type_key_end_in_array<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<()
 #[allow(clippy::unnecessary_wraps)]
 fn on_root_object_end<W: IoWrite>(baton: DdbBaton<'_, '_, W>) -> Result<(), &'static str> {
     let mut conv = baton.borrow_mut();
-    conv.newline_if_pretty();
-    conv.write(b"}");
-    conv.write(b"\n");
+    conv.newline_if_pretty()?;
+    conv.try_write_any(b"}", "writing root object closing brace")?;
+    conv.try_write_any(b"\n", "writing final newline")?;
 
     // Reset state for next JSONL record
     conv.pending_comma = false;
@@ -908,6 +925,7 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
 /// * `rjiter_buffer` - Buffer for rjiter to use (recommended: 4096 bytes)
 /// * `context_buffer` - Buffer for `scan_json` context tracking (recommended: 2048 bytes)
 /// * `pretty` - Whether to pretty-print the output
+/// * `unbuffered` - Whether to flush after every write
 /// * `item_wrapper_mode` - How to handle "Item" key at top level (`AsWrapper` or `AsField`)
 ///
 /// # Errors
@@ -918,18 +936,19 @@ fn find_end_action<'a, 'workbuf, W: IoWrite>(
 /// - Buffer sizes are insufficient for the input data
 ///
 /// # Returns
-/// `Ok(())` on success, or `Err(ConversionError)` with detailed error information on failure
+/// `Ok(())` on success, or `Err((ConversionError, position))` with detailed error information on failure
 pub fn convert_ddb_to_normal<R: IoRead, W: IoWrite>(
     reader: &mut R,
     writer: &mut W,
     rjiter_buffer: &mut [u8],
     context_buffer: &mut [u8],
     pretty: bool,
+    unbuffered: bool,
     item_wrapper_mode: ItemWrapperMode,
-) -> Result<(), ConversionError> {
+) -> Result<(), (ConversionError, usize)> {
     let mut rjiter = RJiter::new(reader, rjiter_buffer);
 
-    let converter = DdbConverter::new(writer, pretty, item_wrapper_mode);
+    let converter = DdbConverter::new(writer, pretty, unbuffered, item_wrapper_mode);
     let baton = RefCell::new(converter);
 
     // DynamoDB supports up to 32 levels of nesting in the original data.
@@ -939,10 +958,13 @@ pub fn convert_ddb_to_normal<R: IoRead, W: IoWrite>(
     // - Optional "Item" wrapper adds 1 level
     // For 32 levels: 1 (Item/#top) + 32 (level_N) + 32 (M) + 1 (value) + 1 (S) + 1 (leaf value) = 68 slots
     let mut context = U8Pool::new(context_buffer, 68).map_err(|_| {
-        ConversionError::ScanError(scan_json::Error::InternalError {
-            position: 0,
-            message: "Failed to create context pool",
-        })
+        (
+            ConversionError::ScanError(scan_json::Error::InternalError {
+                position: 0,
+                message: "Failed to create context pool",
+            }),
+            0,
+        )
     })?;
 
     if let Err(e) = scan(
@@ -954,12 +976,31 @@ pub fn convert_ddb_to_normal<R: IoRead, W: IoWrite>(
         &Options::new(),
     ) {
         // Check if there's a stored detailed error in the baton
-        let stored_error = baton.borrow().last_error.clone();
+        let stored_error = baton.borrow_mut().last_error.take();
         if let Some(err) = stored_error {
-            return Err(err);
+            // Extract position from scan_json's error - scan_json provides accurate position
+            let position = match &e {
+                scan_json::Error::ActionError { position, .. } => *position,
+                scan_json::Error::MaxNestingExceeded { position, .. } => *position,
+                scan_json::Error::InternalError { position, .. } => *position,
+                scan_json::Error::UnhandledPeek { position, .. } => *position,
+                scan_json::Error::UnbalancedJson(position) => *position,
+                scan_json::Error::RJiterError(e) => e.index,
+                scan_json::Error::IOError(_) => rjiter.current_index(),
+            };
+            return Err((err, position));
         }
-        // Otherwise return the scan error
-        return Err(ConversionError::ScanError(e));
+        // Otherwise return the scan error (which includes position)
+        let position = match &e {
+            scan_json::Error::ActionError { position, .. } => *position,
+            scan_json::Error::MaxNestingExceeded { position, .. } => *position,
+            scan_json::Error::InternalError { position, .. } => *position,
+            scan_json::Error::UnhandledPeek { position, .. } => *position,
+            scan_json::Error::UnbalancedJson(position) => *position,
+            scan_json::Error::RJiterError(e) => e.index,
+            scan_json::Error::IOError(_) => rjiter.current_index(),
+        };
+        return Err((ConversionError::ScanError(e), position));
     }
 
     Ok(())

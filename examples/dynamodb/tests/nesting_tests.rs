@@ -147,6 +147,7 @@ fn convert_to_ddb_test(normal_json: &str, with_item_wrapper: bool) -> String {
         &mut rjiter_buffer,
         &mut context_buffer,
         false,
+        false,
         with_item_wrapper,
     )
     .unwrap();
@@ -170,6 +171,7 @@ fn convert_from_ddb_test(ddb_json: &str) -> String {
         &mut output_slice,
         &mut rjiter_buffer,
         &mut context_buffer,
+        false,
         false,
         ddb_convert::ItemWrapperMode::AsWrapper,
     )
