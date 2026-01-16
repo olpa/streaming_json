@@ -102,7 +102,7 @@ def run_tmux_session():
 
         # Draw status line
         gen.add_output("\x1b[23;1H\x1b[30m\x1b[42m", 0)
-        status = "[0] 0:ddb_convert* 1:pv                                        \"ddb-demo\" Jan-26"
+        status = "[0] 0:ddb_convert* 1:pv                                \"ddb-convert-demo\" Jan-26"
         gen.add_output(status.ljust(79), 0)
         gen.add_output("\x1b[m", 0)  # Reset colors
 
@@ -305,12 +305,7 @@ def run_tmux_session():
         # Wait for process to complete
         docker_process.wait()
 
-        gen.wait(1.0)
-
-        # Exit tmux
-        gen.add_output("\x1b[?1049l")  # Exit alternative screen
-
-        gen.wait(0.5)
+        gen.wait(2.0)
 
         # Save screencast
         output_file = script_dir / "generated.cast"
