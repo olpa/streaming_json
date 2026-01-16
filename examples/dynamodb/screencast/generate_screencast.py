@@ -132,7 +132,7 @@ def run_tmux_session():
             if col > 39:
                 left_line += 1
                 col = 1
-            gen.add_output(f"\x1b[{left_line};{col}H{char}")
+            gen.add_output(f"\x1b[{left_line};{col}H{char}", 0)
             col += 1
 
         # Position cursor at start of next line in left pane (where output will appear)
