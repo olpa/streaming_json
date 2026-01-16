@@ -209,6 +209,9 @@ def run_tmux_session():
         flags = fcntl.fcntl(docker_process.stdout, fcntl.F_GETFL)
         fcntl.fcntl(docker_process.stdout, fcntl.F_SETFL, flags | os.O_NONBLOCK)
 
+        # Track highlighted positions in left pane
+        highlighted_positions = []
+
         for char in json_content:
             # Send to docker (unbuffered)
             docker_process.stdin.write(char.encode('utf-8'))
@@ -232,6 +235,12 @@ def run_tmux_session():
                 if ready:
                     output_data = docker_process.stdout.read()
                     if output_data:
+                        # Clear previous highlights
+                        for pos_line, pos_col, char in highlighted_positions:
+                            gen.add_output(f"\x1b[{pos_line};{pos_col}H{char}", 0)
+                        highlighted_positions = []
+
+                        # Write new output with highlight
                         output_str = output_data.decode('utf-8', errors='replace')
                         for out_char in output_str:
                             if out_char == '\n':
@@ -241,7 +250,10 @@ def run_tmux_session():
                                     left_line = 21
                             else:
                                 if left_col < 40:
-                                    gen.add_output(f"\x1b[{left_line};{left_col}H{out_char}", 0)
+                                    # Store position for later unhighlighting
+                                    highlighted_positions.append((left_line, left_col, out_char))
+                                    # Write with highlight (reverse video)
+                                    gen.add_output(f"\x1b[{left_line};{left_col}H\x1b[7m{out_char}\x1b[27m", 0)
                                     left_col += 1
             except:
                 pass
@@ -260,20 +272,35 @@ def run_tmux_session():
         fcntl.fcntl(docker_process.stdout, fcntl.F_SETFL, flags)
 
         remaining = docker_process.stdout.read().decode('utf-8', errors='replace')
-        for char in remaining:
-            if char == '\n':
-                left_line += 1
-                left_col = 1
-                if left_line >= 22:
-                    # Scroll
-                    left_line = 21
-            else:
-                if left_col < 40:
-                    gen.add_output(f"\x1b[{left_line};{left_col}H{char}", 0)
-                    left_col += 1
-                    if left_col >= 40:
-                        left_line += 1
-                        left_col = 1
+        if remaining:
+            # Clear previous highlights
+            for pos_line, pos_col, char in highlighted_positions:
+                gen.add_output(f"\x1b[{pos_line};{pos_col}H{char}", 0)
+            highlighted_positions = []
+
+            # Write remaining output with highlight
+            for char in remaining:
+                if char == '\n':
+                    left_line += 1
+                    left_col = 1
+                    if left_line >= 22:
+                        # Scroll
+                        left_line = 21
+                else:
+                    if left_col < 40:
+                        # Store position for later unhighlighting
+                        highlighted_positions.append((left_line, left_col, char))
+                        # Write with highlight
+                        gen.add_output(f"\x1b[{left_line};{left_col}H\x1b[7m{char}\x1b[27m", 0)
+                        left_col += 1
+                        if left_col >= 40:
+                            left_line += 1
+                            left_col = 1
+
+            # Clear final highlights after a moment
+            gen.wait(0.5)
+            for pos_line, pos_col, char in highlighted_positions:
+                gen.add_output(f"\x1b[{pos_line};{pos_col}H{char}", 0)
 
         # Wait for process to complete
         docker_process.wait()
