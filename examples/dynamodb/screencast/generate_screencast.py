@@ -98,14 +98,30 @@ def run_tmux_session():
 
         # Draw status line
         gen.add_output("\x1b[23;1H\x1b[30m\x1b[42m", 0.01)
-        status = "[0] 0:cat* 1:pv                                        \"cliqz\" " + time.strftime("%H:%M %d-%b-%y")
+        status = "[0] 0:ddb_convert* 1:pv                                        \"ddb-demo\" Jan-26"
         gen.add_output(status.ljust(79), 0.01)
         gen.add_output("\x1b[m", 0.01)  # Reset colors
 
-        # Left pane: show docker command already entered and running (cursor waiting)
-        docker_cmd = "cat example.pipe | docker run --rm -i olpa/ddb_convert --pretty --unbuffered from-ddb"
+        # Left pane: show banner and docker command already entered and running (cursor waiting)
+        banner1_text = "#\n# Processing JSON stream here\n#\n\n"
+
         left_line = 1
         col = 1
+
+        # Display banner1
+        for char in banner1_text:
+            if char == '\n':
+                left_line += 1
+                col = 1
+            elif col < 40:
+                gen.add_output(f"\x1b[{left_line};{col}H{char}")
+                col += 1
+                if col >= 40:
+                    left_line += 1
+                    col = 1
+
+        # Add command with $ prefix
+        docker_cmd = "$ cat example.pipe | docker run --rm -i olpa/ddb_convert --pretty --unbuffered from-ddb"
 
         # Display command with line wrapping
         for char in docker_cmd:
@@ -119,10 +135,26 @@ def run_tmux_session():
         left_output_line = left_line + 1
         gen.add_output(f"\x1b[{left_output_line};1H", 0.01)
 
-        # Right pane: show pv command already entered and running
-        pv_cmd = "pv -qL 20 example.json | tee example.pipe"
+        # Right pane: show banner and pv command already entered and running
+        banner2_text = "#\n# Sending JSON\n#\n\n"
+
         right_line = 1
         col = 41
+
+        # Display banner2
+        for char in banner2_text:
+            if char == '\n':
+                right_line += 1
+                col = 41
+            elif col <= 79:
+                gen.add_output(f"\x1b[{right_line};{col}H{char}")
+                col += 1
+                if col > 79:
+                    right_line += 1
+                    col = 41
+
+        # Add command with $ prefix
+        pv_cmd = "$ pv -qL 20 example.json | tee example.pipe"
 
         for char in pv_cmd:
             if col > 79:
