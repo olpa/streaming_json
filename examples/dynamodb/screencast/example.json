@@ -1,0 +1,8 @@
+{
+  "Item": {
+    "Id": { "N": "103" },
+    "Title": { "S": "Book 103 Title" },
+    "Price": { "N": "2000" },
+    "Available": { "BOOL": true }
+  }
+}
