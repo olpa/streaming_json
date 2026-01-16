@@ -15,14 +15,18 @@ import random
 from pathlib import Path
 
 class ScreencastGenerator:
+    CHARS_PER_SECOND = 20
+
     def __init__(self, width=80, height=24):
         self.width = width
         self.height = height
         self.events = []
         self.start_time = time.time()
 
-    def add_output(self, text, delay=0.0):
+    def add_output(self, text, delay=None):
         """Add output event with optional delay from previous event"""
+        if delay is None:
+            delay = 1.0 / self.CHARS_PER_SECOND
         if delay > 0:
             time.sleep(delay)
         elapsed = time.time() - self.start_time
@@ -80,27 +84,27 @@ def run_tmux_session():
 
         # Start with tmux already open and panes split
         # Tmux initialization sequence
-        gen.add_output("\x1b[?1049h", 0.02)  # Alternative screen buffer
-        gen.add_output("\x1b[?1h\x1b=", 0.01)  # Application keypad mode
-        gen.add_output("\x1b[H\x1b[2J", 0.01)  # Clear screen
-        gen.add_output("\x1b[?25h", 0.01)  # Show cursor
+        gen.add_output("\x1b[?1049h", 0)  # Alternative screen buffer
+        gen.add_output("\x1b[?1h\x1b=", 0)  # Application keypad mode
+        gen.add_output("\x1b[H\x1b[2J", 0)  # Clear screen
+        gen.add_output("\x1b[?25h", 0)  # Show cursor
 
         # Draw tmux layout with vertical split
         gen.wait(0.05)
 
         # Clear screen and draw panes
         for i in range(1, 23):
-            gen.add_output(f"\x1b[{i};1H\x1b[K", 0.001)  # Clear line
+            gen.add_output(f"\x1b[{i};1H\x1b[K", 0)  # Clear line
 
         # Draw vertical separator at column 40
         for i in range(1, 23):
-            gen.add_output(f"\x1b[{i};40H│", 0.001)
+            gen.add_output(f"\x1b[{i};40H│", 0)
 
         # Draw status line
-        gen.add_output("\x1b[23;1H\x1b[30m\x1b[42m", 0.01)
+        gen.add_output("\x1b[23;1H\x1b[30m\x1b[42m", 0)
         status = "[0] 0:ddb_convert* 1:pv                                        \"ddb-demo\" Jan-26"
-        gen.add_output(status.ljust(79), 0.01)
-        gen.add_output("\x1b[m", 0.01)  # Reset colors
+        gen.add_output(status.ljust(79), 0)
+        gen.add_output("\x1b[m", 0)  # Reset colors
 
         # Left pane: show banner and docker command already entered and running (cursor waiting)
         banner1_text = "#\n# Processing JSON stream here\n#\n\n"
@@ -114,7 +118,7 @@ def run_tmux_session():
                 left_line += 1
                 col = 1
             elif col < 40:
-                gen.add_output(f"\x1b[{left_line};{col}H{char}")
+                gen.add_output(f"\x1b[{left_line};{col}H{char}", 0)
                 col += 1
                 if col >= 40:
                     left_line += 1
@@ -128,12 +132,12 @@ def run_tmux_session():
             if col > 39:
                 left_line += 1
                 col = 1
-            gen.add_output(f"\x1b[{left_line};{col}H{char}", 0.001)
+            gen.add_output(f"\x1b[{left_line};{col}H{char}")
             col += 1
 
         # Position cursor at start of next line in left pane (where output will appear)
         left_output_line = left_line + 1
-        gen.add_output(f"\x1b[{left_output_line};1H", 0.01)
+        gen.add_output(f"\x1b[{left_output_line};1H", 0)
 
         # Right pane: show banner and pv command already entered and running
         banner2_text = "#\n# Sending JSON\n#\n\n"
@@ -147,7 +151,7 @@ def run_tmux_session():
                 right_line += 1
                 col = 41
             elif col <= 79:
-                gen.add_output(f"\x1b[{right_line};{col}H{char}")
+                gen.add_output(f"\x1b[{right_line};{col}H{char}", 0)
                 col += 1
                 if col > 79:
                     right_line += 1
@@ -160,12 +164,12 @@ def run_tmux_session():
             if col > 79:
                 right_line += 1
                 col = 41
-            gen.add_output(f"\x1b[{right_line};{col}H{char}", 0.001)
+            gen.add_output(f"\x1b[{right_line};{col}H{char}")
             col += 1
 
         # Position cursor at start of next line in right pane (where output will appear)
         right_output_line = right_line + 1
-        gen.add_output(f"\x1b[{right_output_line};41H", 0.01)
+        gen.add_output(f"\x1b[{right_output_line};41H", 0)
 
         gen.wait(0.3)
 
@@ -186,8 +190,8 @@ def run_tmux_session():
         with open(example_json, 'r') as f:
             json_content = f.read()
 
-        # Setup for feeding data at 20 chars/second
-        chars_per_second = 20
+        # Setup for feeding data at CHARS_PER_SECOND
+        chars_per_second = ScreencastGenerator.CHARS_PER_SECOND
         delay_per_char = 1.0 / chars_per_second
 
         left_line = left_output_line
@@ -219,7 +223,7 @@ def run_tmux_session():
                     right_line = 21
             else:
                 if right_col <= 79:
-                    gen.add_output(f"\x1b[{right_line};{right_col}H{char}", 0.001)
+                    gen.add_output(f"\x1b[{right_line};{right_col}H{char}", 0)
                     right_col += 1
 
             # Check for docker output (non-blocking)
@@ -237,7 +241,7 @@ def run_tmux_session():
                                     left_line = 21
                             else:
                                 if left_col < 40:
-                                    gen.add_output(f"\x1b[{left_line};{left_col}H{out_char}", 0.001)
+                                    gen.add_output(f"\x1b[{left_line};{left_col}H{out_char}", 0)
                                     left_col += 1
             except:
                 pass
@@ -265,7 +269,7 @@ def run_tmux_session():
                     left_line = 21
             else:
                 if left_col < 40:
-                    gen.add_output(f"\x1b[{left_line};{left_col}H{char}", 0.001)
+                    gen.add_output(f"\x1b[{left_line};{left_col}H{char}", 0)
                     left_col += 1
                     if left_col >= 40:
                         left_line += 1
@@ -277,7 +281,7 @@ def run_tmux_session():
         gen.wait(1.0)
 
         # Exit tmux
-        gen.add_output("\x1b[?1049l", 0.1)  # Exit alternative screen
+        gen.add_output("\x1b[?1049l")  # Exit alternative screen
 
         gen.wait(0.5)
 
