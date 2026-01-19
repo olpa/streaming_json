@@ -2,6 +2,8 @@
 
 Parse and transform JSON through a sliding window, without waiting for the complete document to load.
 
+![Screencast from `ddb_convert` example](./examples/dynamodb/screencast/ddb_convert_screencast.gif)
+
 ## Contents
 
 - [`RJiter`](./rjiter/): streaming JSON parser for Rust
