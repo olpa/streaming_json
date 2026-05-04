@@ -371,6 +371,19 @@ impl<'rj, R: Read> RJiter<'rj, R> {
 
         self.skip_spaces_feeding(jiter_pos, skip_spaces_token)?;
 
+        // The initial call to `f` may have advanced the embedded
+        // `jiter`'s internal index past `jiter_pos` before failing
+        // (for example, `known_object` consumes `{` then fails inside
+        // the key string). `skip_spaces_feeding` only rebuilds jiter
+        // when the *buffer* changed; if there was no whitespace and
+        // no shift, the stale jiter index persists into the retry
+        // loop and the first retry call reads from the wrong buffer
+        // offset, producing spurious `KeyMustBeAString`-class errors.
+        //
+        // Force a fresh jiter at the (now stable) buffer start so the
+        // first retry sees a clean parser state.
+        self.create_new_jiter();
+
         loop {
             let result = f(&mut self.jiter);
 
