@@ -380,9 +380,12 @@ impl<'rj, R: Read> RJiter<'rj, R> {
         // loop and the first retry call reads from the wrong buffer
         // offset, producing spurious `KeyMustBeAString`-class errors.
         //
-        // Force a fresh jiter at the (now stable) buffer start so the
-        // first retry sees a clean parser state.
-        self.create_new_jiter();
+        // We should force a fresh jiter here, but only when
+        // `skip_spaces_feeding` has not already done so: if it rebuilt
+        // jiter its index is 0; a non-zero index means it is stale.
+        if self.jiter.current_index() != 0 {
+            self.create_new_jiter();
+        }
 
         loop {
             let result = f(&mut self.jiter);
