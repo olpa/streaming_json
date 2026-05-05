@@ -1030,3 +1030,81 @@ fn next_key_bytes() {
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some(&b"key"[..]));
 }
+
+// -----------------------------------------------------------------
+// Regression: `loop_until_success` retry path used to leave the
+// embedded `jiter` at a stale internal index when:
+//
+//   1. The first call to `f` advances past `{` (or `[`) into a
+//      string token, then fails inside the string with
+//      `EofWhileParsingString` because the buffer has only a
+//      partial read.
+//   2. `skip_spaces_feeding(jiter_pos=0, Some(b'{'))` finds nothing
+//      to do (no whitespace, structural prefix already at position
+//      0) so `change_flag.is_changed = false` and `create_new_jiter`
+//      is NOT called.
+//   3. The retry inside the loop runs against the stale jiter and
+//      reads from the wrong offset, producing a spurious
+//      `KeyMustBeAString` error.
+//
+// Fix: force `create_new_jiter` after `skip_spaces_feeding` so the
+// retry loop always starts from a clean parser state.
+// -----------------------------------------------------------------
+
+#[test]
+fn known_object_retry_with_unterminated_key_in_first_read() {
+    // Embed a NUL between the bytes the first read returns
+    // (`{"k`) and the rest (`ey":"value"}`). `ChunkReader` uses
+    // NUL as the chunk-boundary sentinel.
+    let mut data = Vec::new();
+    data.extend_from_slice(b"{\"k");
+    data.push(0);
+    data.extend_from_slice(b"ey\":\"value\"}");
+    let mut reader = ChunkReader::new(&data, 0);
+    let mut buf = vec![0u8; 4096];
+    let mut rjiter = RJiter::new(&mut reader, &mut buf);
+
+    assert_eq!(rjiter.peek().unwrap(), Peek::Object);
+    let first_key = rjiter.known_object().unwrap().unwrap();
+    assert_eq!(first_key, "key");
+    let val = rjiter.known_str().unwrap();
+    assert_eq!(val, "value");
+    assert!(rjiter.next_key().unwrap().is_none());
+}
+
+#[test]
+fn known_array_retry_with_partial_first_read() {
+    let mut data = Vec::new();
+    data.extend_from_slice(b"[1");
+    data.push(0);
+    data.extend_from_slice(b",2]");
+    let mut reader = ChunkReader::new(&data, 0);
+    let mut buf = vec![0u8; 4096];
+    let mut rjiter = RJiter::new(&mut reader, &mut buf);
+
+    assert_eq!(rjiter.peek().unwrap(), Peek::Array);
+    let first = rjiter.known_array().unwrap();
+    assert!(first.is_some());
+    let n1 = rjiter.known_int(first.unwrap()).unwrap();
+    assert_eq!(n1, NumberInt::Int(1));
+    let next = rjiter.array_step().unwrap();
+    assert!(next.is_some());
+    let n2 = rjiter.known_int(next.unwrap()).unwrap();
+    assert_eq!(n2, NumberInt::Int(2));
+    assert!(rjiter.array_step().unwrap().is_none());
+}
+
+#[test]
+fn known_str_retry_with_unterminated_string_in_first_read() {
+    let mut data = Vec::new();
+    data.extend_from_slice(b"\"hel");
+    data.push(0);
+    data.extend_from_slice(b"lo\"");
+    let mut reader = ChunkReader::new(&data, 0);
+    let mut buf = vec![0u8; 4096];
+    let mut rjiter = RJiter::new(&mut reader, &mut buf);
+
+    assert_eq!(rjiter.peek().unwrap(), Peek::String);
+    let s = rjiter.known_str().unwrap();
+    assert_eq!(s, "hello");
+}
