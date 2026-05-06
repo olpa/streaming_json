@@ -1,3 +1,8 @@
+## [1.3.2] - 2026-05-06
+
+- Fix `loop_until_success` failing on incomplete object start if the buffer was not updated
+
+
 ## [1.3.1] - 2025-11-20
 
 - Upgrade `embedded-io` dependency from 0.6 to 0.7
