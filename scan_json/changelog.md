@@ -1,3 +1,8 @@
+## [2.1.2] - 2026-05-08
+
+- Update `rjiter` dependency to bug-fixed 1.3.2
+
+
 ## [2.1.1] - 2025-11-20
 
 - Update `embedded-io` to 0.7 and `rjiter` to 1.3
